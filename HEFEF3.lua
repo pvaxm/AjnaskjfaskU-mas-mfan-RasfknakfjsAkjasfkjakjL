@@ -1,0 +1,7406 @@
+-- // Luraph Macros (v15 / v15.1)
+-- Fallbacks for running unobfuscated. Luraph removes this whole block when it compiles the script.
+-- The names mirror Luraph's own macro SDK. v15 dropped LPH_JIT, LPH_JIT_MAX, LPH_NO_VIRTUALIZE, LPH_NO_UPVALUES and
+-- LPH_ENCFUNC; their jobs moved to attributes: OPTIMIZE, VM(NONE), NO_UPVALUES and ENCRYPT.
+if not LPH_OBFUSCATED then
+	local function Attribute() end
+
+	LPH_ENCSTR = function(Value) return Value end
+	LPH_STRENC = function(Value) return Value end
+	LPH_ENCNUM = function(Value) return Value end
+	LPH_NUMENC = function(Value) return Value end
+	if buffer then
+		LPH_ENCBUF = function(Value) return buffer.fromstring(Value) end
+		LPH_BUFENC = function(Value) return buffer.fromstring(Value) end
+	end
+
+	LPH_CRASH = function() end
+	LPH_PRECHECK = function(Check) Check() end
+	LPH_REWRITE = function(Expression) return Expression end
+	LPH_ASSUME = function(Expression) return Expression end
+	LPH_OPAQUE = function(Value) return Value end
+	LPH_STACKALLOC = function(Size, Base)
+		Base = Base or 1
+		local Last = Base + Size - 1
+		local Allocation = {}
+		return setmetatable(Allocation, {
+			__len = function() return Size end,
+			__index = {
+				clear = function(From, To)
+					for Index = From or Base, To or Last do
+						Allocation[Index] = nil
+					end
+				end,
+				unpack = function(From, To)
+					return table.unpack(Allocation, From or Base, To or Last)
+				end,
+				pack = function(...)
+					local Values = table.pack(...)
+					for Index = 1, math.min(Values.n, Size) do
+						Allocation[Base + Index - 1] = Values[Index]
+					end
+				end,
+			},
+		})
+	end
+
+	-- // Attributes
+	LPH_ATTRIBUTES = Attribute
+	ENCRYPT, VM, PRESET, OPTIMIZE = Attribute, Attribute, Attribute, Attribute
+	NO_UPVALUES, ERROR_HANDLING, UNSAFE_ENVIRONMENT = Attribute, Attribute, Attribute
+	UNROLL, INLINE, TRANSFORM = Attribute, Attribute, Attribute
+
+	-- // Attribute Values
+	NONE, OPAL, ONYX = Attribute, Attribute, Attribute
+	FAST, BALANCED, SECURE = Attribute, Attribute, Attribute
+	EXTRACT, CONTROL_FLOW, REWRITE_NAMECALLS = Attribute, Attribute, Attribute
+	GLOBALS, CONSTANTS = Attribute, Attribute
+end
+
+-- Whole-script defaults: no line information in runtime errors (it costs speed and stack depth) and the fast VM preset.
+-- Every function in the feature code below the menu is additionally marked VM(NONE), so it runs at native speed.
+LPH_ATTRIBUTES(ERROR_HANDLING(false), PRESET(FAST))
+
+-- // Config
+local Aural = {
+	AcBypass = {
+		DebugMode = false,
+	},
+
+	Catching = {
+		Magnets = false,
+		ShowMagHitbox = false,
+		CustomizableRadius = 20,
+		CustomizableDelay = 0,
+		TweenSpeed = 0,
+
+		PullVector = false,
+		PullVectorMode = "Drag",
+		PullVectorSpeed = 30,
+		PullVectorRadius = 15,
+
+		DiveVector = false,
+		DiveVectorSpeed = 45,
+		DiveVectorRadius = 30,
+		DiveVectorDistance = 1.5,
+
+		MagEnhancer = false,
+		MagEnhancerMultiplier = 2,
+	},
+
+	Automatics = {
+		AutoQb = false,
+		AutoQbType = "Legit",
+
+		AutoCaptain = false,
+		AutoCatch = false,
+		AutoCatchRadius = 15,
+
+		AutoJump = false,
+		AutoJumpRadius = 15,
+		AutoJumpHeight = 10,
+
+		AutoSwat = false,
+		AutoSwatRadius = 15,
+
+		KickerAim = false,
+		KickerAimPower = 100,
+		KickerAimAccuracy = 100,
+
+		AutoRush = false,
+		AutoRushDelay = 0,
+		AutoRushPrediction = 100,
+		AutoRushAccuracy = 100,
+
+		AutoGuard = false,
+		AutoGuardRadius = 25,
+
+		AutoBlock = false,
+		AutoBlockRadius = 6,
+	},
+
+	Physics = {
+		ClickTackleAimbot = false,
+		ClickTackleAimbotRadius = 15,
+
+		QuickTp = false,
+		QuickTpSpeed = 12,
+
+		AntiBlock = false,
+		AntiJam = false,
+		NoJumpCooldown = false,
+
+		AntiOob = false,
+
+		BlockExtender = false,
+		BlockExtenderReach = 10,
+		BlockExtenderTransparency = 1,
+
+		AntiTackle = false,
+		AntiDown = false,
+
+		SwatReach = false,
+		SwatReachRadius = 15,
+		TackleReach = false,
+		TackleReachRadius = 15,
+	},
+
+	QbAimbot = {
+		Enabled = false,
+		TargetLock = false,
+		LockedTarget = nil,
+
+		AutoAngle = true,
+		AngleBased = false,
+		DesiredAngle = 30,
+		MaxAirTime = 20,
+		BeamMode = true,
+		AutoChooseThrowType = false,
+		Use95PowerMode = false,
+		FastestThrow = false,
+
+		ThrowProfile = "Dime",
+		ThrowAngle = 45,
+		BulletAngle = 25,
+		NormalPower = 94,
+		AutoPower = false,
+		HighestPowerMode = false,
+		CustomLead = 0,
+
+		VerticalLead = 2.75,
+		HorizontalLead = 3,
+		FieldMargin = 15,
+		AntiOob = true,
+		AntiOobInset = 3,
+
+		Fov = 500,
+		TargetPriority = "Closest To Mouse",
+
+		PredictionColor = Color3.fromRGB(194, 155, 165),
+
+		ReceiverEsp = false,
+		ShowRoutes = false,
+		ShowDistance = false,
+	},
+
+	Player = {
+		JumpPower = false,
+		Jp = 50,
+
+		AngleEnhancer = false,
+		AngleEnhancerValue = 56,
+
+		WalkSpeed = false,
+		WalkSpeedValue = 22,
+		FreezeDuringPrePlay = true,
+
+		CframeSpeed = false,
+		CfSpeed = 10,
+
+		Fly = false,
+		FlySpeed = 50,
+
+		BoostEnhancer = false,
+		BoostEnhancerSpeed = 23,
+
+		NoMoveRestrictions = false,
+
+		HandSize = 2,
+		ShowHandHitbox = false,
+	},
+
+	Visuals = {
+		NoTextures = false,
+		RemoveGloves = false,
+		ThrownBallBeam = true,
+		ThrownBallBeamColor = Color3.fromRGB(255, 95, 175),
+		ThrownBallBeamColor2 = Color3.fromRGB(105, 190, 255),
+	},
+
+	Gamepasses = {
+		UnlockAll = false,
+	},
+}
+
+-- // Services
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local GuiService = game:GetService("GuiService")
+local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- // Variables
+-- Autoexec can run before the local player exists. Only the player is waited for, not the whole game, so the
+-- bypass still loads ahead of the anti-cheat's first check.
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	LocalPlayer = Players.LocalPlayer
+end
+
+-- // Flags
+-- PlaceId reads 0 for a moment after an autoexec injection.
+while game.PlaceId == 0 do
+	task.wait()
+end
+local IsPractice = (game.PlaceId == 81310542478972)
+
+-- // AC Bypass
+do
+	local function RunBypass()
+		if IsPractice or not getgc or not hookfunction then
+			return
+		end
+
+		local Environment = getgenv()
+		local LoadedKey = "_x7q2m"
+		if rawget(Environment, LoadedKey) then
+			return
+		end
+		rawset(Environment, LoadedKey, true)
+
+		-- // Constants
+		local ModuleTag = "PlayerModule"
+		local ShuffleMarker = 90001
+		local TrapSlotIndex = 19
+		local LargeThreshold = 1000000
+		local UriLeadByte = 240
+
+		local Sequences = {
+			Primary = { 1750, 1750, 1655, 1761, 1888, 1767 },
+			Opening = { 1645, 1765, 1623, 1714, 1881, 1656 },
+			Closing = { 1650, 1749, 1853, 1741, 1761, 1856 },
+			Secondary = { 1767, 1676, 1854, 1689, 1775, 1776 },
+		}
+		local Allowed = { Sequences.Primary, Sequences.Opening, Sequences.Closing }
+
+		-- // Environment
+		local GetUpvalues = getupvalues
+		local GetConstants = getconstants
+		local SetUpvalue = setupvalue
+		local IsLClosure = islclosure
+		local GetRawMetatable = getrawmetatable
+		local DebugInfo = getrenv().debug.info
+		local EnvRawget = getrenv().rawget
+		local EnvRawset = getrenv().rawset
+
+		local ScriptContext = game:GetService("ScriptContext")
+		if cloneref then
+			ScriptContext = cloneref(ScriptContext)
+		end
+		local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+		local HeartbeatRemote = Remotes:WaitForChild("CharacterSoundEvent")
+
+		-- Passive listener, connected before the game's own handler exists when run from autoexec. It records the
+		-- server's state on the very first challenge, before this client has sent any reply at all.
+		local EarlyMessages, EarlyState = 0, nil
+		local EarlyListener = HeartbeatRemote.OnClientEvent:Connect(function(Key, State)
+			if type(Key) == "string" and string.byte(Key, 1) == UriLeadByte then
+				EarlyMessages = EarlyMessages + 1
+				if EarlyMessages == 1 then
+					EarlyState = State
+				end
+			end
+		end)
+
+		-- // State
+		local SecondaryRemote = nil
+		local ShufflePrimary = nil
+		local ShuffleSecondary = nil
+		local HandshakeFunction = nil
+		local UpdateFunction = nil
+		local ContentUri = nil
+		local LargeString = nil
+		local UpdateTable = nil
+		local SwingTable = nil
+		local AltTable = nil
+
+		local OriginalSub = nil
+		local OriginalPrimary = nil
+		local OriginalHandshake = nil
+		local OriginalUpdate = nil
+
+		local LargeTables = {}
+		local SmallTables = {}
+		local RemoteEvents = {}
+
+		local IsSetup = false
+		local HandshakeCount = 0
+		-- True only while this script is calling the game's shuffle functions.
+		local Shuffling = false
+		-- Mirrors the game's own alternation flag: a clean reply carries the challenge table every other round.
+		local Phase = true
+		local PhaseIndex = nil
+		local PhaseSynced = false
+		local ServerStateChanges = 0
+		local LastServerState = nil
+
+		-- Logging exists only in unobfuscated builds; Luraph removes the function and every call to it.
+		local Log = nil
+		if not LPH_OBFUSCATED then
+			Log = function(...)
+				if Aural.AcBypass.DebugMode then
+					pcall(print, ...)
+				end
+			end
+		end
+
+		local function Wrap(Function)
+			if newcclosure then
+				local Ok, Wrapped = pcall(newcclosure, Function)
+				if Ok and Wrapped then
+					return Wrapped
+				end
+			end
+			return Function
+		end
+
+		local function Fail(Code)
+			LocalPlayer:Kick(string.format("Failed to initialize (code %d). Try rejoining.", Code))
+			task.wait(1.5)
+		end
+
+		local function TamperKick(Code)
+			LocalPlayer:Kick(string.format("Something went wrong (code %d). Try rejoining.", Code))
+			task.wait(1.5)
+		end
+
+		-- // Scanners (non-virtualized)
+		local ShuffleCache = setmetatable({}, { __mode = "k" })
+
+		local function IsShuffle(Value)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			if type(Value) ~= "function" then
+				return false
+			end
+			local Cached = ShuffleCache[Value]
+			if Cached ~= nil then
+				return Cached
+			end
+
+			local Result = false
+			if GetConstants and (not IsLClosure or IsLClosure(Value)) then
+				local Ok, Constants = pcall(GetConstants, Value)
+				if Ok and type(Constants) == "table" then
+					for _, Constant in next, Constants do
+						if Constant == ShuffleMarker then
+							Result = true
+							break
+						end
+					end
+				end
+			end
+
+			ShuffleCache[Value] = Result
+			return Result
+		end
+
+		-- One pass over the garbage collector instead of four: every later search runs over this short list.
+		local function CollectModuleFunctions()
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local List, Count, Seen = {}, 0, {}
+			for _, Value in next, getgc() do
+				if type(Value) == "function" and not Seen[Value] and (not IsLClosure or IsLClosure(Value)) then
+					local Ok, Source = pcall(DebugInfo, Value, "s")
+					if Ok and type(Source) == "string" and string.find(Source, ModuleTag, 1, true) then
+						Seen[Value] = true
+						Count = Count + 1
+						List[Count] = Value
+					end
+				end
+			end
+			return List
+		end
+
+		local function IsOtherRemote(Value)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			if typeof(Value) ~= "Instance" or Value == HeartbeatRemote then
+				return false
+			end
+			local Ok, Class = pcall(function()
+				return Value.ClassName
+			end)
+			return Ok and Class == "RemoteEvent"
+		end
+
+		local function GetTrapSlot(Value)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local OkMeta, Meta = pcall(GetRawMetatable, Value)
+			if not OkMeta or type(Meta) ~= "table" then
+				return nil
+			end
+			local OkCall, Call = pcall(rawget, Meta, "__call")
+			if not OkCall or not IsShuffle(Call) then
+				return nil
+			end
+			local OkInner, Inner = pcall(rawget, Value, 1)
+			if not OkInner or type(Inner) ~= "table" then
+				return nil
+			end
+			local OkSlot, Slot = pcall(rawget, Inner, TrapSlotIndex)
+			if not OkSlot or type(Slot) ~= "number" then
+				return nil
+			end
+			return Slot
+		end
+
+		-- The challenge table and the two filler tables are told apart by their metatables: only the challenge table's
+		-- metatable carries numbered entries. Slot values cannot be used, because the server overwrites them.
+		local function GetTrapKind(Value)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local OkMeta, Meta = pcall(GetRawMetatable, Value)
+			if not OkMeta or type(Meta) ~= "table" then
+				return nil
+			end
+			local OkCall, Call = pcall(rawget, Meta, "__call")
+			if not OkCall or not IsShuffle(Call) then
+				return nil
+			end
+			local OkInner, Inner = pcall(rawget, Value, 1)
+			if not OkInner or type(Inner) ~= "table" then
+				return nil
+			end
+			return rawget(Meta, 1) ~= nil and "update" or "filler"
+		end
+
+		local function FindShuffles(Functions)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local List, Count = {}, 0
+			for Index = 1, #Functions do
+				local Value = Functions[Index]
+				if IsShuffle(Value) then
+					Count = Count + 1
+					List[Count] = Value
+				end
+			end
+			return List
+		end
+
+		local function FindHandshake(Functions)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			for Index = 1, #Functions do
+				local Value = Functions[Index]
+				local Ok, Upvalues = pcall(GetUpvalues, Value)
+				if Ok and type(Upvalues) == "table" then
+					local HasRemote, ShuffleCount = false, 0
+					for _, Upvalue in next, Upvalues do
+						if IsOtherRemote(Upvalue) then
+							HasRemote = true
+						elseif IsShuffle(Upvalue) then
+							ShuffleCount = ShuffleCount + 1
+						end
+					end
+					if HasRemote and ShuffleCount >= 2 then
+						return Value
+					end
+				end
+			end
+			return nil
+		end
+
+		local function FindUpdate(Functions)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			for Index = 1, #Functions do
+				local Value = Functions[Index]
+				if Value ~= HandshakeFunction then
+					local Ok, Upvalues = pcall(GetUpvalues, Value)
+					if Ok and type(Upvalues) == "table" then
+						local HasGet, HasSet, HasShuffle = false, false, false
+						for _, Upvalue in next, Upvalues do
+							if Upvalue == EnvRawget then
+								HasGet = true
+							elseif Upvalue == EnvRawset then
+								HasSet = true
+							elseif IsShuffle(Upvalue) then
+								HasShuffle = true
+							end
+						end
+						if HasGet and HasSet and not HasShuffle then
+							return Value
+						end
+					end
+				end
+			end
+			return nil
+		end
+
+		local function KillRunServiceRefs(Functions, DeadEvent)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			-- Only the freeze functions are touched: they hold the Heartbeat signal next to a loop count in the millions.
+			-- Roblox's own camera and control modules share the "PlayerModule" source name and must be left alone.
+			local Heartbeat = RunService.Heartbeat
+			local Killed = 0
+			for Index = 1, #Functions do
+				local Value = Functions[Index]
+				local Ok, Upvalues = pcall(GetUpvalues, Value)
+				if Ok and type(Upvalues) == "table" then
+					local SignalIndex, HasLoopCount = nil, false
+					for UpIndex, Upvalue in next, Upvalues do
+						if Upvalue == Heartbeat then
+							SignalIndex = UpIndex
+						elseif type(Upvalue) == "number" and Upvalue >= 2000000 then
+							HasLoopCount = true
+						end
+					end
+					if SignalIndex and HasLoopCount then
+						pcall(SetUpvalue, Value, SignalIndex, DeadEvent)
+						Killed = Killed + 1
+					end
+				end
+			end
+			return Killed
+		end
+
+		-- Fallback only: a full object scan, used when the handshake's own upvalues did not hold every table.
+		local function ScanTrapTables(WantLarge, Needed, Known)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local Found, Count = {}, 0
+			for _, Value in next, getgc(true) do
+				if type(Value) == "table" and not Known[Value] then
+					local Slot = GetTrapSlot(Value)
+					if Slot and Slot >= 1 and (Slot >= LargeThreshold) == WantLarge then
+						Count = Count + 1
+						Found[Count] = Value
+						if Count >= Needed then
+							break
+						end
+					end
+				end
+			end
+			return Found
+		end
+
+		local function GetMetaCall(List)
+			for _, Value in next, List do
+				local OkMeta, Meta = pcall(GetRawMetatable, Value)
+				if OkMeta and Meta then
+					local OkCall, Call = pcall(rawget, Meta, "__call")
+					if OkCall and type(Call) == "function" then
+						return Call
+					end
+				end
+			end
+			return nil
+		end
+
+		-- // Handshake
+		-- The clean verdict is "slot 13 copied over the slot chosen by challenge value 11". The game's shuffle refuses
+		-- silently when it dislikes its caller, which would send a reply with no verdict in it, so the copy is checked
+		-- and done by hand if it did not happen.
+		local function HasCleanMark(Inner)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local Clean = rawget(Inner, 13)
+			if Clean == nil then
+				return false
+			end
+			for Index = 2, 19 do
+				if Index ~= 13 and rawget(Inner, Index) == Clean then
+					return true
+				end
+			end
+			return false
+		end
+
+		local function WriteCleanMark(Inner)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			local Seed = rawget(Inner, 11)
+			if type(Seed) ~= "number" then
+				return false
+			end
+			local Slot = math.floor(((Seed * ShuffleMarker) ^ 0.25 + 485 - 21) / 90 - 10 + 0.5) + 1
+			if Slot ~= Slot or Slot < 2 or Slot > 19 then
+				return false
+			end
+			rawset(Inner, Slot, rawget(Inner, 13))
+			return true
+		end
+
+		local function FireHandshake()
+			task.wait()
+			HandshakeCount = HandshakeCount + 1
+
+			-- The game may already have answered some rounds before this script loaded, so the alternation is picked
+			-- up from the game's own flag once instead of always starting from the first round.
+			if not PhaseSynced then
+				PhaseSynced = true
+				if PhaseIndex then
+					local Ok, Upvalues = pcall(GetUpvalues, OriginalHandshake)
+					if Ok and type(Upvalues) == "table" and type(Upvalues[PhaseIndex]) == "boolean" then
+						Phase = Upvalues[PhaseIndex]
+					end
+				end
+			end
+			Phase = not Phase
+
+			local SecondaryTable = Phase and SwingTable or AltTable
+			local PrimaryTable = Phase and UpdateTable or SwingTable
+			local Primary, Opening, Closing, Secondary = Sequences.Primary, Sequences.Opening, Sequences.Closing, Sequences.Secondary
+			local Inner = rawget(UpdateTable, 1)
+			local Marked = true
+
+			-- Nothing between here and the end of the function yields, so no other script runs while Shuffling is set.
+			Shuffling = true
+
+			pcall(OriginalPrimary, LargeString, UpdateTable, Opening[1], Opening[2], Opening[3], LargeString, Opening[4], Opening[5], Opening[6])
+			if type(Inner) == "table" and not HasCleanMark(Inner) then
+				Marked = WriteCleanMark(Inner)
+			end
+
+			local OkSecondary, SecondaryReply = pcall(ShuffleSecondary, LargeString, SecondaryTable, Secondary[1], Secondary[2], Secondary[3], LargeString, Secondary[4], Secondary[5], Secondary[6])
+			local OkPrimary, PrimaryReply = pcall(OriginalPrimary, LargeString, PrimaryTable, Primary[1], Primary[2], Primary[3], LargeString, Primary[4], Primary[5], Primary[6])
+
+			SecondaryRemote.Name = HeartbeatRemote.Name
+			pcall(SecondaryRemote.FireServer, SecondaryRemote, ContentUri, OkSecondary and SecondaryReply or SecondaryTable, nil)
+			pcall(HeartbeatRemote.FireServer, HeartbeatRemote, ContentUri, OkPrimary and PrimaryReply or PrimaryTable, nil)
+			SecondaryRemote.Name = ""
+
+			pcall(OriginalPrimary, LargeString, UpdateTable, Closing[1], Closing[2], Closing[3], LargeString, Closing[4], Closing[5], Closing[6])
+
+			Shuffling = false
+
+			if not LPH_OBFUSCATED then
+				Log("Handshake #" .. HandshakeCount, Phase and "challenge table" or "filler table", Marked and "" or "CLEAN MARK MISSING")
+			end
+		end
+
+		-- // Discovery
+		-- The anti-cheat connects its handshake a few seconds after joining, so the scan is repeated until it exists
+		-- instead of kicking on the first miss.
+		local ModuleFunctions, Shuffles = nil, nil
+		for Attempt = 1, 100 do
+			ModuleFunctions = CollectModuleFunctions()
+			Shuffles = FindShuffles(ModuleFunctions)
+			if #Shuffles >= 2 then
+				HandshakeFunction = FindHandshake(ModuleFunctions)
+				if HandshakeFunction then
+					break
+				end
+			end
+			task.wait(0.2)
+		end
+		if #Shuffles < 2 then
+			return Fail(1)
+		end
+		if not HandshakeFunction then
+			return Fail(2)
+		end
+
+		if not LPH_OBFUSCATED then
+			Log("Module functions:", #ModuleFunctions, "shuffles:", #Shuffles)
+		end
+
+		do
+			local Ok, Constants = pcall(GetConstants, HandshakeFunction)
+			if Ok and type(Constants) == "table" then
+				for _, Value in next, Constants do
+					if type(Value) == "string" and #Value > 5 and string.byte(Value, 1) == UriLeadByte then
+						ContentUri = Value
+						break
+					end
+				end
+			end
+		end
+
+		local HandshakeUpvalues = {}
+		do
+			local Ok, Upvalues = pcall(GetUpvalues, HandshakeFunction)
+			if Ok and type(Upvalues) == "table" then
+				HandshakeUpvalues = Upvalues
+			end
+		end
+
+		local Known = {}
+		-- Walked in index order: the first filler table is the one the game sends to the real remote.
+		local UpdateIndex = nil
+		for Index = 1, 200 do
+			local Value = HandshakeUpvalues[Index]
+			local Type = typeof(Value)
+			if Type == "string" then
+				if #Value > LargeThreshold and not LargeString then
+					LargeString = Value
+				end
+			elseif Type == "Instance" then
+				if IsOtherRemote(Value) then
+					table.insert(RemoteEvents, Value)
+				end
+			elseif Type == "table" then
+				local Kind = GetTrapKind(Value)
+				if Kind then
+					Known[Value] = true
+					if Kind == "update" then
+						table.insert(LargeTables, Value)
+						UpdateIndex = UpdateIndex or Index
+					else
+						table.insert(SmallTables, Value)
+					end
+				end
+			end
+		end
+
+		-- The game's alternation flag is the boolean captured straight after the challenge table.
+		if UpdateIndex and type(HandshakeUpvalues[UpdateIndex + 1]) == "boolean" then
+			PhaseIndex = UpdateIndex + 1
+			Phase = HandshakeUpvalues[PhaseIndex]
+		end
+
+		if not LPH_OBFUSCATED then
+			Log("Upvalue scan:", #LargeTables, "large,", #SmallTables, "small")
+		end
+
+		if #SmallTables < 2 then
+			for _, Value in next, ScanTrapTables(false, 2 - #SmallTables, Known) do
+				Known[Value] = true
+				table.insert(SmallTables, Value)
+			end
+		end
+
+		if #LargeTables < 1 then
+			local InUpvalues = {}
+			for _, Value in next, HandshakeUpvalues do
+				if type(Value) == "table" then
+					InUpvalues[Value] = true
+				end
+			end
+			for _, Value in next, ScanTrapTables(true, math.huge, Known) do
+				if InUpvalues[Value] then
+					table.insert(LargeTables, Value)
+					break
+				end
+			end
+		end
+
+		local MetaCall = GetMetaCall(LargeTables) or GetMetaCall(SmallTables)
+		if MetaCall then
+			for _, Value in next, Shuffles do
+				if Value == MetaCall then
+					ShuffleSecondary = Value
+				else
+					ShufflePrimary = Value
+				end
+			end
+		end
+
+		if not ShufflePrimary or not ShuffleSecondary then
+			ShufflePrimary = ShufflePrimary or Shuffles[1]
+			ShuffleSecondary = ShuffleSecondary or Shuffles[2]
+
+			if MetaCall and ShufflePrimary == MetaCall then
+				ShufflePrimary, ShuffleSecondary = ShuffleSecondary, ShufflePrimary
+			end
+		end
+
+		pcall(function()
+			for _, Connection in next, getconnections(ScriptContext.Error) do
+				Connection:Disable()
+			end
+		end)
+
+		SecondaryRemote = RemoteEvents[1]
+		UpdateTable = LargeTables[1]
+		SwingTable = SmallTables[1]
+		AltTable = SmallTables[2]
+
+		if not ContentUri then return Fail(3) end
+		if not SecondaryRemote then return Fail(4) end
+		if not ShuffleSecondary or not ShufflePrimary then return Fail(5) end
+		if not UpdateTable or not SwingTable or not AltTable then return Fail(6) end
+		if not LargeString then return Fail(7) end
+
+		-- // Hooks
+		-- string.sub is called constantly by every script in the game, so this hook allocates nothing and is not
+		-- virtualized. It only answers while this script is inside a shuffle call; every other caller in the game gets
+		-- the real result. The old version answered every game script, which broke their string handling and returned
+		-- the exact value the anti-cheat's own tamper check looks for.
+		OriginalSub = hookfunction(getrenv().string.sub, Wrap(function(...)
+			LPH_ATTRIBUTES(VM(NONE))
+
+			if Shuffling then
+				local _, Start, Finish = ...
+				if Start == -3 and Finish == -3 then
+					return "i"
+				end
+			end
+			return OriginalSub(...)
+		end))
+
+		OriginalPrimary = hookfunction(ShufflePrimary, Wrap(function(...)
+			LPH_ATTRIBUTES(VM(OPAL), PRESET(FAST))
+
+			if select("#", ...) >= 9 then
+				local _, _, A, B, C, _, D, E, F = ...
+				for Index = 1, 3 do
+					local Sequence = Allowed[Index]
+					if A == Sequence[1] and B == Sequence[2] and C == Sequence[3] and D == Sequence[4] and E == Sequence[5] and F == Sequence[6] then
+						return OriginalPrimary(...)
+					end
+				end
+				return task.wait(9e9)
+			end
+			return OriginalPrimary(...)
+		end))
+
+		local Killed = KillRunServiceRefs(ModuleFunctions, Instance.new("BindableEvent").Event)
+		UpdateFunction = FindUpdate(ModuleFunctions)
+
+		if not LPH_OBFUSCATED then
+			Log("Killed", Killed, "RunService connections. Update function:", UpdateFunction ~= nil)
+		end
+
+		OriginalHandshake = hookfunction(HandshakeFunction, Wrap(function(Id, ...)
+			LPH_ATTRIBUTES(VM(OPAL), PRESET(FAST))
+
+			if not IsSetup then
+				return OriginalHandshake(Id, ...)
+			end
+			if Id ~= ContentUri then
+				return
+			end
+			-- Run on its own thread so the hook itself never yields.
+			task.spawn(FireHandshake)
+		end))
+
+		if UpdateFunction then
+			OriginalUpdate = hookfunction(UpdateFunction, Wrap(function(Id, BypassState, Values)
+				LPH_ATTRIBUTES(VM(OPAL), PRESET(FAST))
+
+				-- The server sends this state with every challenge, including before the first reply, so it is passed
+				-- through untouched the way a clean client receives it. Only changes are logged, with the raw value.
+				if IsSetup and Id == ContentUri and BypassState ~= LastServerState then
+					ServerStateChanges = ServerStateChanges + 1
+					LastServerState = BypassState
+					if not LPH_OBFUSCATED then
+						Log("Server state -> " .. typeof(BypassState) .. " " .. tostring(BypassState) .. " (change #" .. ServerStateChanges .. ", before handshake #" .. (HandshakeCount + 1) .. ")")
+					end
+				end
+				return OriginalUpdate(Id, BypassState, Values)
+			end))
+		end
+
+		-- // Integrity
+		local function CheckIntegrity()
+			if type(OriginalSub) ~= "function" then return 10 end
+			if type(OriginalPrimary) ~= "function" then return 11 end
+			if type(OriginalHandshake) ~= "function" then return 12 end
+			if UpdateFunction and type(OriginalUpdate) ~= "function" then return 13 end
+
+			local OkRemote, RemoteParent = pcall(function() return HeartbeatRemote.Parent end)
+			if not OkRemote or not RemoteParent then return 14 end
+
+			local OkSecondary, SecondaryParent = pcall(function() return SecondaryRemote.Parent end)
+			if not OkSecondary or not SecondaryParent then return 15 end
+
+			if type(UpdateTable) ~= "table" then return 16 end
+			local OkInner, Inner = pcall(rawget, UpdateTable, 1)
+			if not OkInner or type(Inner) ~= "table" then return 17 end
+
+			if type(SwingTable) ~= "table" then return 18 end
+			if type(AltTable) ~= "table" then return 19 end
+			if type(ContentUri) ~= "string" then return 20 end
+			if type(LargeString) ~= "string" then return 21 end
+			return nil
+		end
+
+		IsSetup = true
+
+		-- Checked every five seconds on its own thread instead of testing a timer on every frame.
+		task.spawn(function()
+			while IsSetup do
+				task.wait(5)
+				local Code = CheckIntegrity()
+				if Code then
+					IsSetup = false
+					TamperKick(Code)
+				end
+			end
+		end)
+
+		if not LPH_OBFUSCATED then
+			Log("Bypass loaded. Challenges answered by the game before the hook: " .. EarlyMessages)
+			if EarlyMessages > 0 then
+				Log("First server state ever received: " .. typeof(EarlyState) .. " " .. tostring(EarlyState))
+			end
+		end
+
+		task.delay(30, function()
+			EarlyListener:Disconnect()
+		end)
+	end
+
+	task.spawn(RunBypass)
+end
+
+task.wait()
+
+local Library = {
+	Flags = {},
+	Elements = {},
+	Painted = {},
+	Keybinds = {},
+	Connections = {},
+	FlagCount = {},
+	Hovered = {},
+	Popups = {},
+	Windows = {},
+	MemoryConfigs = {},
+	Folder = "Charm",
+	ToggleKey = Enum.KeyCode.RightShift,
+	Listening = nil,
+	Dragger = nil,
+}
+
+local Utility = {}
+local Icons = {}
+local Attachable = {}
+
+local Container = {}
+Container.__index = Container
+
+local WindowClass = {}
+WindowClass.__index = WindowClass
+
+local CategoryClass = {}
+CategoryClass.__index = CategoryClass
+
+local TabClass = {}
+TabClass.__index = TabClass
+
+-- // Config
+local Theme = {
+	Window = Color3.fromRGB(11, 11, 13),
+	Content = Color3.fromRGB(3, 3, 4),
+	Section = Color3.fromRGB(10, 10, 11),
+	Border = Color3.fromRGB(26, 26, 28),
+	Outline = Color3.fromRGB(22, 22, 25),
+	Field = Color3.fromRGB(1, 1, 1),
+	FieldBorder = Color3.fromRGB(34, 34, 36),
+	FieldHover = Color3.fromRGB(54, 54, 57),
+	FieldActive = Color3.fromRGB(82, 82, 86),
+	Cover = Color3.fromRGB(6, 6, 7),
+	Accent = Color3.fromRGB(96, 124, 131),
+	Line = Color3.fromRGB(106, 112, 114),
+	Header = Color3.fromRGB(115, 121, 123),
+	Bright = Color3.fromRGB(196, 214, 219),
+	Key = Color3.fromRGB(120, 170, 178),
+	Text = Color3.fromRGB(224, 224, 224),
+	Soft = Color3.fromRGB(164, 164, 166),
+	Muted = Color3.fromRGB(116, 116, 118),
+	Dim = Color3.fromRGB(80, 80, 82),
+	Tab = Color3.fromRGB(90, 90, 92),
+	TabHover = Color3.fromRGB(142, 142, 144),
+	Icon = Color3.fromRGB(70, 70, 72),
+	IconHover = Color3.fromRGB(156, 156, 158),
+	Footer = Color3.fromRGB(112, 112, 114),
+	Check = Color3.fromRGB(205, 205, 205),
+	White = Color3.fromRGB(255, 255, 255),
+	Black = Color3.fromRGB(0, 0, 0),
+	Card = Color3.fromRGB(17, 17, 17),
+	CardButton = Color3.fromRGB(27, 27, 27),
+	CardHover = Color3.fromRGB(38, 38, 38),
+	Pill = Color3.fromRGB(54, 64, 66),
+}
+
+local Fonts = {
+	Bold = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Bold),
+	Logo = Font.new("rbxasset://fonts/families/IndieFlower.json", Enum.FontWeight.Regular),
+	Hud = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.Bold),
+	HudRegular = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.Regular),
+	HudHeavy = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.ExtraBold),
+}
+
+local Tweens = {
+	Instant = TweenInfo.new(0),
+	Fast = TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+	Smooth = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+	Slow = TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+	Pop = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+}
+
+local KeyNames = {
+	LeftShift = "lshift",
+	RightShift = "rshift",
+	LeftControl = "lctrl",
+	RightControl = "rctrl",
+	LeftAlt = "lalt",
+	RightAlt = "ralt",
+	Return = "enter",
+	Backquote = "`",
+	MouseButton1 = "mb1",
+	MouseButton2 = "mb2",
+	MouseButton3 = "mb3",
+	Zero = "0",
+	One = "1",
+	Two = "2",
+	Three = "3",
+	Four = "4",
+	Five = "5",
+	Six = "6",
+	Seven = "7",
+	Eight = "8",
+	Nine = "9",
+}
+
+-- // Utilities
+function Utility.Create(ClassName, Properties)
+	local Object = Instance.new(ClassName)
+	local Parent = Properties and Properties.Parent
+	if Properties then
+		for Property, Value in Properties do
+			if Property ~= "Parent" then
+				Object[Property] = Value
+			end
+		end
+	end
+	if Parent then
+		Object.Parent = Parent
+	end
+	return Object
+end
+
+function Utility.Merge(Base, Extra)
+	local Result = table.clone(Base)
+	if Extra then
+		for Key, Value in Extra do
+			Result[Key] = Value
+		end
+	end
+	return Result
+end
+
+function Utility.Corner(Parent, Radius)
+	return Utility.Create("UICorner", {
+		CornerRadius = typeof(Radius) == "UDim" and Radius or UDim.new(0, Radius),
+		Parent = Parent,
+	})
+end
+
+function Utility.Stroke(Parent, Color, Thickness, Transparency)
+	return Utility.Create("UIStroke", {
+		Color = Color,
+		Thickness = Thickness or 1,
+		Transparency = Transparency or 0,
+		Parent = Parent,
+	})
+end
+
+function Utility.Padding(Parent, Top, Right, Bottom, Left)
+	return Utility.Create("UIPadding", {
+		PaddingTop = UDim.new(0, Top),
+		PaddingRight = UDim.new(0, Right),
+		PaddingBottom = UDim.new(0, Bottom),
+		PaddingLeft = UDim.new(0, Left),
+		Parent = Parent,
+	})
+end
+
+function Utility.List(Parent, Properties)
+	return Utility.Create("UIListLayout", Utility.Merge({
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = Parent,
+	}, Properties))
+end
+
+function Utility.Label(Properties)
+	return Utility.Create("TextLabel", Utility.Merge({
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		FontFace = Fonts.Bold,
+		TextSize = 14,
+		TextColor3 = Theme.Text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Text = "",
+	}, Properties))
+end
+
+function Utility.Track(Object)
+	Object.MouseEnter:Connect(function()
+		Library.Hovered[Object] = true
+	end)
+	Object.MouseLeave:Connect(function()
+		Library.Hovered[Object] = nil
+	end)
+	return Object
+end
+
+function Utility.Button(Properties)
+	return Utility.Track(Utility.Create("ImageButton", Utility.Merge({
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Image = "",
+	}, Properties)))
+end
+
+function Utility.Tween(Object, Info, Goal)
+	local Tween = TweenService:Create(Object, Info, Goal)
+	Tween:Play()
+	return Tween
+end
+
+function Utility.Connect(Signal, Callback)
+	local Connection = Signal:Connect(Callback)
+	table.insert(Library.Connections, Connection)
+	return Connection
+end
+
+function Utility.Paint(Object, Property, Key)
+	Object[Property] = Theme[Key]
+	table.insert(Library.Painted, { Object = Object, Property = Property, Key = Key })
+	return Object
+end
+
+function Utility.Derive(Accent)
+	Theme.Accent = Accent
+	Theme.Line = Accent:Lerp(Color3.fromRGB(108, 108, 108), 0.74)
+	Theme.Header = Theme.Line:Lerp(Theme.White, 0.06)
+	Theme.Bright = Accent:Lerp(Color3.fromRGB(236, 250, 255), 0.7)
+	Theme.Key = Accent:Lerp(Color3.fromRGB(160, 228, 238), 0.45)
+end
+
+function Utility.Rgb(Color)
+	return string.format("rgb(%d,%d,%d)", math.round(Color.R * 255), math.round(Color.G * 255), math.round(Color.B * 255))
+end
+
+function Utility.Escape(Text)
+	return (string.gsub(tostring(Text), "[&<>\"']", {
+		["&"] = "&amp;",
+		["<"] = "&lt;",
+		[">"] = "&gt;",
+		['"'] = "&quot;",
+		["'"] = "&apos;",
+	}))
+end
+
+function Utility.Compose(Name, Value)
+	if Value == nil or Value == "" then
+		return Utility.Escape(Name)
+	end
+	return string.format(
+		'%s <font color="%s">|</font> <font color="%s">%s</font>',
+		Utility.Escape(Name),
+		Utility.Rgb(Theme.Text),
+		Utility.Rgb(Theme.Muted),
+		Utility.Escape(Value)
+	)
+end
+
+function Utility.Inside(Object, Point)
+	local Position, Size = Object.AbsolutePosition, Object.AbsoluteSize
+	return Point.X >= Position.X and Point.X <= Position.X + Size.X and Point.Y >= Position.Y and Point.Y <= Position.Y + Size.Y
+end
+
+function Utility.Shown(Object)
+	local Current = Object
+	while Current and Current:IsA("GuiObject") do
+		if not Current.Visible then
+			return false
+		end
+		Current = Current.Parent
+	end
+	return true
+end
+
+-- Returns the pointer in the same space as AbsolutePosition, whose origin sits below the top bar inset.
+-- GetMouseLocation is measured from the very top of the screen, so the inset is removed; touch positions already match.
+function Utility.Point(Input)
+	if Input and Input.UserInputType == Enum.UserInputType.Touch then
+		return Vector2.new(Input.Position.X, Input.Position.Y)
+	end
+	return UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
+end
+
+function Utility.Free(Point)
+	for Object in Library.Hovered do
+		if Object.Parent and Utility.Shown(Object) and Utility.Inside(Object, Point) then
+			return false
+		end
+		Library.Hovered[Object] = nil
+	end
+	for Index, Entry in Library.Popups do
+		if Utility.Inside(Entry.Holder, Point) then
+			return false
+		end
+	end
+	return true
+end
+
+function Utility.Drag(Handles, Target, Events)
+	local Dragging, Moved, StartPoint, StartPosition, Goal = false, false, nil, nil, nil
+	for Index, Handle in typeof(Handles) == "table" and Handles or { Handles } do
+		Handle.InputBegan:Connect(function(Input)
+			if Dragging then
+				return
+			end
+			if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then
+				return
+			end
+			local Point = Utility.Point(Input)
+			if not Utility.Free(Point) then
+				return
+			end
+			Dragging, Moved = true, false
+			StartPoint = Point
+			StartPosition = Goal or Target.Position
+		end)
+	end
+	Utility.Connect(UserInputService.InputChanged, function(Input)
+		if not Dragging then
+			return
+		end
+		if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local Delta = Utility.Point(Input) - StartPoint
+		if not Moved then
+			if Delta.Magnitude < 3 then
+				return
+			end
+			Moved = true
+			if Events and Events.Began then
+				Events.Began()
+			end
+		end
+		Goal = UDim2.new(StartPosition.X.Scale, StartPosition.X.Offset + Delta.X, StartPosition.Y.Scale, StartPosition.Y.Offset + Delta.Y)
+	end)
+	Utility.Connect(UserInputService.InputEnded, function(Input)
+		if not Dragging then
+			return
+		end
+		if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		Dragging = false
+		if Moved and Events and Events.Ended then
+			Events.Ended()
+		end
+	end)
+	Utility.Connect(RunService.RenderStepped, function(Step)
+		if not Goal then
+			return
+		end
+		local Next = Target.Position:Lerp(Goal, 1 - math.exp(-Step * 24))
+		if math.abs(Next.X.Offset - Goal.X.Offset) < 0.3 and math.abs(Next.Y.Offset - Goal.Y.Offset) < 0.3 then
+			Target.Position = Goal
+			if not Dragging then
+				Goal = nil
+			end
+		else
+			Target.Position = Next
+		end
+	end)
+end
+
+function Utility.Accessories(Row, Height)
+	local Right = Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = Height and UDim2.new(1, 0, 0, Height / 2) or UDim2.fromScale(1, 0.5),
+		Size = UDim2.fromOffset(0, 16),
+		AutomaticSize = Enum.AutomaticSize.X,
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Parent = Row,
+	})
+	Utility.List(Right, {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 7),
+	})
+	return Right
+end
+
+function Utility.Header(Parent, Name, Y)
+	local Header = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(1, Y),
+		Size = UDim2.new(1, -2, 0, 16),
+		ZIndex = 3,
+		Parent = Parent,
+	})
+	Utility.Padding(Header, 0, 0, 0, 8)
+	Utility.List(Header, {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 5),
+	})
+	Utility.Paint(Utility.Create("Frame", {
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(7, 2),
+		LayoutOrder = 1,
+		Parent = Header,
+	}), "BackgroundColor3", "Line")
+	local Title = Utility.Paint(Utility.Label({
+		Text = Name,
+		TextSize = 13,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 16),
+		LayoutOrder = 2,
+		Parent = Header,
+	}), "TextColor3", "Header")
+	local Line = Utility.Paint(Utility.Create("Frame", {
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(0, 2),
+		LayoutOrder = 3,
+		Parent = Header,
+	}), "BackgroundColor3", "Line")
+	Utility.Create("UIFlexItem", { FlexMode = Enum.UIFlexMode.Fill, Parent = Line })
+	return Header, Title
+end
+
+function Utility.Glyph(Parent, Text, Size, Properties)
+	local Glyph = Utility.Paint(Utility.Label(Utility.Merge({
+		Text = Text,
+		FontFace = Fonts.Logo,
+		TextSize = Size,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = Parent,
+	}, Properties)), "TextColor3", "Bright")
+	local Glow = Utility.Paint(Utility.Create("UIStroke", {
+		Thickness = 2.5,
+		Transparency = 0.82,
+		Parent = Glyph,
+	}), "Color", "Bright")
+	return Glyph, Glow
+end
+
+function Utility.Snap(Value, Minimum, Step)
+	local Snapped = math.round((Value - Minimum) / Step) * Step + Minimum
+	return tonumber(string.format("%.6f", Snapped))
+end
+
+function Utility.Decimals(Step)
+	if Step >= 1 then
+		return 0
+	end
+	local Text = tostring(Step)
+	local Dot = string.find(Text, ".", 1, true)
+	return Dot and #Text - Dot or 0
+end
+
+function Utility.KeyName(Value)
+	if typeof(Value) ~= "EnumItem" then
+		return "none"
+	end
+	if KeyNames[Value.Name] then
+		return KeyNames[Value.Name]
+	end
+	local Name = Value.Name
+	if string.sub(Name, 1, 6) == "Button" and #Name > 6 then
+		Name = string.sub(Name, 7)
+	end
+	return string.lower(Name)
+end
+
+function Utility.Relayout(Column)
+	if Column.Pending then
+		return
+	end
+	Column.Pending = true
+	task.defer(function()
+		Column.Pending = false
+		local Sections = Column.Sections
+		local Used = 0
+		local Bottom = false
+		for Index, Section in Sections do
+			Section.Height = Section.Fixed or Section:Natural()
+			Used += Section.Height + 9
+			Bottom = Bottom or Section.Bottom
+		end
+		Used += math.max(#Sections - 1, 0) * 4
+		local Spare = Column.Height - Used
+		local Last = Sections[#Sections]
+		if Last and not Last.Fixed and not Last.Auto then
+			Last.Height = math.max(Last.Height + Spare, 40)
+			Column.Spacer.Visible = false
+		else
+			Column.Spacer.Visible = Bottom and Spare > 4
+			Column.Spacer.Size = UDim2.new(1, 0, 0, math.max(Spare - 4, 0))
+		end
+		for Index, Section in Sections do
+			Section.Holder.Size = UDim2.new(1, 0, 0, Section.Height + 9)
+		end
+	end)
+end
+
+function Utility.Column(Page, Side, Height)
+	local Frame = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = Side == 2 and UDim2.new(0.5, 6.5, 0, 6) or UDim2.fromOffset(15, 6),
+		Size = UDim2.new(0.5, -21.5, 0, Height),
+		Parent = Page,
+	})
+	Utility.List(Frame, { Padding = UDim.new(0, 4) })
+	local Spacer = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		LayoutOrder = 100000,
+		Visible = false,
+		Parent = Frame,
+	})
+	return { Frame = Frame, Sections = {}, Height = Height, Spacer = Spacer }
+end
+
+Utility.Derive(Theme.Accent)
+
+-- // Functions
+function Icons.Holder(Parent, Width, Height, Properties)
+	return Utility.Create("Frame", Utility.Merge({
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Width, Height),
+		Parent = Parent,
+	}, Properties))
+end
+
+function Icons.Bar(Parent, Color, Width, Height, X, Y, Rotation)
+	return Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(X, Y),
+		Size = UDim2.fromOffset(Width, Height),
+		Rotation = Rotation or 0,
+		BackgroundColor3 = Color,
+		BorderSizePixel = 0,
+		Parent = Parent,
+	})
+end
+
+function Icons.Recolor(Holder, Color, Info)
+	for Index, Object in Holder:GetDescendants() do
+		if Object.Name ~= "Fixed" then
+			if Object:IsA("UIStroke") then
+				Utility.Tween(Object, Info or Tweens.Fast, { Color = Color })
+			elseif Object:IsA("Frame") and Object.BackgroundTransparency < 1 then
+				Utility.Tween(Object, Info or Tweens.Fast, { BackgroundColor3 = Color })
+			end
+		end
+	end
+end
+
+function Icons.Gear(Parent, Size, Color, Properties)
+	local Holder = Icons.Holder(Parent, Size, Size, Properties)
+	local Ring = Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(Size * 0.46, Size * 0.46),
+		BackgroundTransparency = 1,
+		Parent = Holder,
+	})
+	Utility.Corner(Ring, UDim.new(1, 0))
+	Utility.Stroke(Ring, Color, math.max(1.5, Size * 0.17))
+	for Index = 0, 7 do
+		local Angle = math.rad(Index * 45)
+		Icons.Bar(Holder, Color, Size * 0.2, Size * 0.24, Size / 2 + math.sin(Angle) * Size * 0.39, Size / 2 - math.cos(Angle) * Size * 0.39, Index * 45)
+	end
+	return Holder
+end
+
+function Icons.Check(Parent, Color)
+	local Holder = Icons.Holder(Parent, 14, 14, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+	})
+	local Pop = Utility.Create("UIScale", { Parent = Holder })
+	local Short = Icons.Bar(Holder, Color, 4.4, 1.6, 4.9, 8.3, 45)
+	local Long = Icons.Bar(Holder, Color, 8, 1.6, 8.3, 6.9, -48)
+	return Pop, { Short, Long }
+end
+
+function Icons.List(Parent, Color, Properties)
+	local Holder = Icons.Holder(Parent, 9, 7, Properties)
+	for Index = 0, 2 do
+		Utility.Create("Frame", {
+			BorderSizePixel = 0,
+			BackgroundColor3 = Color,
+			Position = UDim2.fromOffset(0, Index * 3),
+			Size = UDim2.fromOffset(9, 1),
+			Parent = Holder,
+		})
+	end
+	return Holder
+end
+
+function Icons.Search(Parent, Size, Color, Properties)
+	local Holder = Icons.Holder(Parent, Size, Size, Properties)
+	local Lens = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(1, 1),
+		Size = UDim2.fromOffset(Size * 0.55, Size * 0.55),
+		Parent = Holder,
+	})
+	Utility.Corner(Lens, UDim.new(1, 0))
+	Utility.Stroke(Lens, Color, 1.5)
+	Icons.Bar(Holder, Color, Size * 0.4, 1.8, Size * 0.74, Size * 0.74, 45)
+	return Holder
+end
+
+function Icons.File(Parent, Color, Properties)
+	local Holder = Icons.Holder(Parent, 9, 11, Properties)
+	local Page = Utility.Create("Frame", {
+		BackgroundColor3 = Color,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		Parent = Holder,
+	})
+	Utility.Corner(Page, 2)
+	for Index = 0, 2 do
+		Utility.Create("Frame", {
+			Name = "Fixed",
+			BackgroundColor3 = Theme.Field,
+			BorderSizePixel = 0,
+			Position = UDim2.fromOffset(2, 3 + Index * 2),
+			Size = UDim2.fromOffset(Index == 2 and 3 or 5, 1),
+			Parent = Page,
+		})
+	end
+	return Holder
+end
+
+function Icons.Chevron(Parent, Color, Properties)
+	local Holder = Icons.Holder(Parent, 9, 6, Properties)
+	Icons.Bar(Holder, Color, 5.2, 1.5, 2.8, 3, 45)
+	Icons.Bar(Holder, Color, 5.2, 1.5, 6.2, 3, -45)
+	return Holder
+end
+
+function Icons.Brush(Parent, Size, Color, Properties)
+	local Holder = Icons.Holder(Parent, Size, Size, Properties)
+	local Handle = Icons.Bar(Holder, Color, Size * 0.3, Size * 0.74, Size * 0.6, Size * 0.4, 45)
+	Utility.Corner(Handle, 2)
+	Icons.Bar(Holder, Color, Size * 0.24, Size * 0.24, Size * 0.2, Size * 0.8, 45)
+	return Holder
+end
+
+function Icons.Keyboard(Parent, Color, Properties)
+	local Holder = Icons.Holder(Parent, 14, 10, Properties)
+	local Body = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(1, 1),
+		Size = UDim2.fromOffset(12, 8),
+		Parent = Holder,
+	})
+	Utility.Corner(Body, 2)
+	Utility.Stroke(Body, Color, 1)
+	for Index = 0, 3 do
+		Utility.Create("Frame", {
+			BorderSizePixel = 0,
+			BackgroundColor3 = Color,
+			Position = UDim2.fromOffset(2 + Index * 2.5, 2),
+			Size = UDim2.fromOffset(1.5, 1.5),
+			Parent = Body,
+		})
+	end
+	Utility.Create("Frame", {
+		BorderSizePixel = 0,
+		BackgroundColor3 = Color,
+		Position = UDim2.fromOffset(3, 5),
+		Size = UDim2.fromOffset(6, 1),
+		Parent = Body,
+	})
+	return Holder
+end
+
+function Library:Flag(Explicit, Name)
+	if Explicit then
+		return Explicit
+	end
+	local Count = self.FlagCount[Name]
+	if Count == nil then
+		self.FlagCount[Name] = 0
+		return Name
+	end
+	Count += 1
+	self.FlagCount[Name] = Count
+	return Name .. "_" .. Count
+end
+
+function Library:Screen()
+	if self.Gui then
+		return self.Gui
+	end
+	local Gui = Utility.Create("ScreenGui", {
+		Name = "Charm",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 100,
+	})
+	local Mounted = pcall(function()
+		local Existing = CoreGui:FindFirstChild("Charm")
+		if Existing then
+			Existing:Destroy()
+		end
+		Gui.Parent = CoreGui
+	end)
+	if not Mounted or Gui.Parent ~= CoreGui then
+		local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+		local Existing = PlayerGui:FindFirstChild("Charm")
+		if Existing then
+			Existing:Destroy()
+		end
+		Gui.Parent = PlayerGui
+	end
+	self.Gui = Gui
+	self:Listen()
+	return Gui
+end
+
+function Library:Listen()
+	Utility.Connect(UserInputService.InputBegan, function(Input)
+		local Kind = Input.UserInputType
+		if Kind == Enum.UserInputType.MouseButton1 or Kind == Enum.UserInputType.Touch then
+			self:Outside(Input)
+		end
+		if self.Listening then
+			self.Listening:Capture(Input)
+			return
+		end
+		if UserInputService:GetFocusedTextBox() then
+			return
+		end
+		if self.ToggleKey and Input.KeyCode == self.ToggleKey then
+			for Index, Window in self.Windows do
+				Window:Show()
+			end
+		end
+		for Index, Bind in self.Keybinds do
+			if Bind:Matches(Input) then
+				Bind:Press(true)
+			end
+		end
+	end)
+	Utility.Connect(UserInputService.InputChanged, function(Input)
+		if self.Dragger and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+			self.Dragger(Input)
+		end
+	end)
+	Utility.Connect(UserInputService.InputEnded, function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+			self.Dragger = nil
+		end
+		for Index, Bind in self.Keybinds do
+			if Bind:Matches(Input) then
+				Bind:Press(false)
+			end
+		end
+	end)
+end
+
+function Library:Outside(Input)
+	if #self.Popups == 0 then
+		return
+	end
+	local Point = Utility.Point(Input)
+	local Keep = nil
+	for Index = #self.Popups, 1, -1 do
+		local Entry = self.Popups[Index]
+		if Utility.Inside(Entry.Holder, Point) or (Entry.Owner and Utility.Inside(Entry.Owner, Point)) then
+			Keep = Entry
+			break
+		end
+	end
+	self:Collapse(Keep)
+end
+
+function Library:Push(Entry, Parent)
+	self:Collapse(Parent)
+	table.insert(self.Popups, Entry)
+	Entry.Holder.ZIndex = 10 + #self.Popups
+end
+
+function Library:Collapse(Keep)
+	for Index = #self.Popups, 1, -1 do
+		local Entry = self.Popups[Index]
+		if Entry == Keep then
+			break
+		end
+		table.remove(self.Popups, Index)
+		Entry.Close()
+	end
+end
+
+function Library:Dismiss(Entry)
+	local Found = table.find(self.Popups, Entry)
+	if not Found then
+		return
+	end
+	for Index = #self.Popups, Found, -1 do
+		local Current = table.remove(self.Popups, Index)
+		Current.Close()
+	end
+end
+
+function Library:UpdateAccent(Color)
+	Utility.Derive(Color)
+	for Index, Entry in self.Painted do
+		if Entry.Object.Parent then
+			Entry.Object[Entry.Property] = Theme[Entry.Key]
+		end
+	end
+	self:RefreshHotkeys()
+end
+
+function Library:Popup(Window, Name, Width)
+	local Popup = setmetatable({
+		Window = Window,
+		Name = Name,
+		Width = Width or 214,
+		Rows = {},
+		Count = 0,
+		Open = false,
+	}, Container)
+	local Holder = Utility.Create("CanvasGroup", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Popup.Width, 40),
+		GroupTransparency = 1,
+		Visible = false,
+		Parent = Window.PopupLayer,
+	})
+	local Box = Utility.Create("Frame", {
+		BackgroundColor3 = Theme.Section,
+		Position = UDim2.fromOffset(1, 8),
+		Size = UDim2.new(1, -2, 1, -9),
+		Parent = Holder,
+	})
+	Utility.Corner(Box, 4)
+	Utility.Stroke(Box, Theme.Border, 1)
+	Utility.Header(Holder, Name, 8)
+	Popup.Content = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(13, 9),
+		Size = UDim2.new(1, -26, 1, -17),
+		Parent = Box,
+	})
+	Utility.List(Popup.Content)
+	Popup.Holder = Holder
+	Popup.Entry = {
+		Holder = Holder,
+		Close = function()
+			Popup:Hide()
+		end,
+	}
+	Popup:Fit()
+	return Popup
+end
+
+function Container:Row(Height, Name)
+	self.Count += 1
+	local Frame = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, Height),
+		LayoutOrder = self.Count,
+		Parent = self.Content,
+	})
+	local Record = { Frame = Frame, Name = string.lower(Name or "") }
+	table.insert(self.Rows, Record)
+	if self.Tab then
+		table.insert(self.Tab.Rows, Record)
+	end
+	self:Changed()
+	return Frame
+end
+
+function Container:Changed()
+	if self.Column then
+		Utility.Relayout(self.Column)
+	elseif self.Holder then
+		self:Fit()
+	end
+end
+
+function Container:Natural()
+	local Total = 17
+	for Index, Record in self.Rows do
+		if Record.Frame.Visible then
+			Total += Record.Frame.Size.Y.Offset
+		end
+	end
+	return Total
+end
+
+function Container:Fit()
+	self.Holder.Size = UDim2.fromOffset(self.Width, self:Natural() + 9)
+end
+
+function Container:Show(Anchor, Parent, Placement)
+	local Window = self.Window
+	local Scale = Window.Scale.Scale
+	local Origin = Window.Main.AbsolutePosition
+	local Position = (Anchor.AbsolutePosition - Origin) / Scale
+	local Size = Anchor.AbsoluteSize / Scale
+	self:Fit()
+	local Height = self.Holder.Size.Y.Offset
+	local X, Y
+	if Placement == "Above" then
+		X, Y = Position.X - 4, Position.Y - Height - 8
+	else
+		X, Y = Position.X + Size.X + 10, Position.Y - 12
+		if Origin.X + (X + self.Width) * Scale > Library.Gui.AbsoluteSize.X - 8 then
+			X = Position.X - self.Width - 10
+		end
+	end
+	self.Entry.Owner = Anchor
+	Library:Push(self.Entry, Parent)
+	self.Open = true
+	self.Holder.Visible = true
+	self.Holder.Position = UDim2.fromOffset(X, Y + 6)
+	Utility.Tween(self.Holder, Tweens.Smooth, { Position = UDim2.fromOffset(X, Y), GroupTransparency = 0 })
+	if self.Icon then
+		Icons.Recolor(self.Icon, Theme.IconHover)
+	end
+end
+
+function Container:Hide()
+	if not self.Open then
+		return
+	end
+	self.Open = false
+	if self.Icon then
+		Icons.Recolor(self.Icon, Theme.Icon)
+	end
+	local Tween = Utility.Tween(self.Holder, Tweens.Fast, { GroupTransparency = 1 })
+	Tween.Completed:Once(function()
+		if not self.Open then
+			self.Holder.Visible = false
+		end
+	end)
+end
+
+function Container:Flip(Anchor, Parent, Placement)
+	if self.Open then
+		Library:Dismiss(self.Entry)
+	else
+		self:Show(Anchor, Parent, Placement)
+	end
+end
+
+function Attachable.Mix(Element)
+	for Name, Method in Attachable do
+		if Name ~= "Mix" then
+			Element[Name] = Method
+		end
+	end
+end
+
+function Attachable:Gear()
+	if self.Popup then
+		return self.Popup
+	end
+	local Button = Utility.Button({
+		Size = UDim2.fromOffset(13, 13),
+		LayoutOrder = 9,
+		Parent = self.Right,
+	})
+	local Icon = Icons.Gear(Button, 11, Theme.Icon, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+	})
+	local Popup = Library:Popup(self.Container.Window, self.Name, 214)
+	Popup.Icon = Icon
+	self.Popup = Popup
+	Button.MouseEnter:Connect(function()
+		Icons.Recolor(Icon, Theme.IconHover)
+	end)
+	Button.MouseLeave:Connect(function()
+		if not Popup.Open then
+			Icons.Recolor(Icon, Theme.Icon)
+		end
+	end)
+	Button.MouseButton1Click:Connect(function()
+		Popup:Flip(Button, self.Container.Entry)
+	end)
+	return Popup
+end
+
+function Attachable:ColorPicker(Options)
+	Options = Options or {}
+	Options.Name = Options.Name or (self.Name .. " color")
+	return Library:Picker(self.Container, self.Right, Options)
+end
+
+function Attachable:Keybind(Options)
+	Options = Options or {}
+	local Popup = self:Gear()
+	Options.Name = Options.Name or "keybind"
+	Options.Flag = Options.Flag or (self.Flag .. " key")
+	Options.Target = self
+	self.Bind = Popup:Keybind(Options)
+	return self.Bind
+end
+
+function Attachable:Slider(Options)
+	Options = Options or {}
+	Options.Label = false
+	Options.Name = Options.Name or self.Name
+	Options.Owner = self
+	return self.Container:Slider(Options)
+end
+
+function Container:Toggle(Options)
+	Options = Options or {}
+	local Toggle = {
+		Kind = "Toggle",
+		Container = self,
+		Name = Options.Name or "toggle",
+		Value = Options.Default == true,
+		Callback = Options.Callback or function() end,
+	}
+	Toggle.Flag = Library:Flag(Options.Flag, Toggle.Name)
+	local Row = self:Row(21, Toggle.Name)
+	local Click = Utility.Button({ Size = UDim2.fromScale(1, 1), Parent = Row })
+	local Box = Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromScale(0, 0.5),
+		Size = UDim2.fromOffset(14, 14),
+		BackgroundColor3 = Theme.Field,
+		Parent = Click,
+	})
+	Utility.Corner(Box, 4)
+	Toggle.Stroke = Utility.Stroke(Box, Theme.FieldBorder, 1)
+	local Pop, Arms = Icons.Check(Box, Theme.Check)
+	Toggle.Pop, Toggle.Arms = Pop, Arms
+	Toggle.Label = Utility.Label({
+		Text = Utility.Escape(Toggle.Name),
+		RichText = true,
+		Position = UDim2.fromOffset(21, 0),
+		Size = UDim2.new(1, -21, 1, 0),
+		TextColor3 = Theme.Dim,
+		Parent = Click,
+	})
+	Toggle.Right = Utility.Accessories(Row)
+	Toggle.Row = Row
+	Attachable.Mix(Toggle)
+
+	function Toggle:Relabel()
+		self.Label.Text = Utility.Compose(self.Name, self.Suffix)
+	end
+
+	function Toggle:Render(Instant)
+		local Info = Instant and Tweens.Instant or Tweens.Fast
+		Utility.Tween(self.Label, Info, { TextColor3 = self.Value and Theme.Text or Theme.Dim })
+		Utility.Tween(self.Stroke, Info, { Color = self.Value and Theme.FieldActive or Theme.FieldBorder })
+		for Index, Arm in self.Arms do
+			Utility.Tween(Arm, Info, { BackgroundTransparency = self.Value and 0 or 1 })
+		end
+		Utility.Tween(self.Pop, Instant and Tweens.Instant or Tweens.Pop, { Scale = self.Value and 1 or 0.5 })
+	end
+
+	function Toggle:Update(Value, Silent)
+		self.Value = Value == true
+		Library.Flags[self.Flag] = self.Value
+		self:Render()
+		Library:RefreshHotkeys()
+		if not Silent then
+			task.spawn(self.Callback, self.Value)
+		end
+	end
+
+	function Toggle:GetValue()
+		return self.Value
+	end
+
+	function Toggle:Encode()
+		return self.Value
+	end
+
+	function Toggle:Load(Value)
+		self:Update(Value == true)
+	end
+
+	Click.MouseEnter:Connect(function()
+		if not Toggle.Value then
+			Utility.Tween(Toggle.Label, Tweens.Fast, { TextColor3 = Theme.Muted })
+		end
+	end)
+	Click.MouseLeave:Connect(function()
+		Toggle:Render()
+	end)
+	Click.MouseButton1Click:Connect(function()
+		Toggle:Update(not Toggle.Value)
+	end)
+
+	for Index, Arm in Arms do
+		Arm.BackgroundTransparency = Toggle.Value and 0 or 1
+	end
+	Pop.Scale = Toggle.Value and 1 or 0.5
+	Toggle.Label.TextColor3 = Toggle.Value and Theme.Text or Theme.Dim
+	Toggle.Stroke.Color = Toggle.Value and Theme.FieldActive or Theme.FieldBorder
+	Library.Flags[Toggle.Flag] = Toggle.Value
+	Library.Elements[Toggle.Flag] = Toggle
+	return Toggle
+end
+
+function Container:Slider(Options)
+	Options = Options or {}
+	local Slider = {
+		Kind = "Slider",
+		Container = self,
+		Name = Options.Name or "slider",
+		Min = Options.Min or 0,
+		Max = Options.Max or 100,
+		Step = Options.Step or 1,
+		Suffix = Options.Suffix or "",
+		Format = Options.Format,
+		Owner = Options.Owner,
+		Callback = Options.Callback or function() end,
+	}
+	Slider.Value = math.clamp(Options.Default or Slider.Min, Slider.Min, Slider.Max)
+	Slider.Flag = Library:Flag(Options.Flag, Slider.Name)
+	local Labelled = Options.Label ~= false
+	local Top = Labelled and 20 or 0
+	local Row = self:Row(Top + 19, Slider.Name)
+	Slider.Row = Row
+	if Labelled then
+		Slider.Label = Utility.Label({
+			RichText = true,
+			Size = UDim2.new(1, -30, 0, 20),
+			TextColor3 = Theme.Dim,
+			Parent = Row,
+		})
+		Slider.Right = Utility.Accessories(Row, 20)
+		Attachable.Mix(Slider)
+	end
+	local Bar = Utility.Button({
+		Position = UDim2.fromOffset(0, Top),
+		Size = UDim2.new(1, 0, 0, 15),
+		BackgroundColor3 = Theme.Field,
+		BackgroundTransparency = 0,
+		Parent = Row,
+	})
+	Utility.Corner(Bar, UDim.new(1, 0))
+	local BarStroke = Utility.Stroke(Bar, Theme.FieldBorder, 1)
+	Slider.Fill = Utility.Paint(Utility.Create("Frame", {
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(0, 1),
+		Parent = Bar,
+	}), "BackgroundColor3", "Accent")
+	Utility.Corner(Slider.Fill, UDim.new(1, 0))
+	Slider.Shown = Utility.Create("NumberValue", { Value = Slider.Value })
+
+	function Slider:Display(Value)
+		local Snapped = Utility.Snap(Value, self.Min, self.Step)
+		if self.Format then
+			return self.Format(Snapped)
+		end
+		return string.format("%." .. Utility.Decimals(self.Step) .. "f", Snapped) .. self.Suffix
+	end
+
+	function Slider:Refresh()
+		local Text = self:Display(self.Shown.Value)
+		if self.Label then
+			self.Label.Text = Utility.Compose(self.Name, Text)
+		end
+		if self.Owner then
+			self.Owner.Suffix = Text
+			self.Owner:Relabel()
+		end
+	end
+
+	function Slider:Update(Value, Silent, Instant)
+		Value = math.clamp(Utility.Snap(tonumber(Value) or self.Min, self.Min, self.Step), self.Min, self.Max)
+		local Changed = Value ~= self.Value
+		self.Value = Value
+		Library.Flags[self.Flag] = Value
+		local Percent = (Value - self.Min) / math.max(self.Max - self.Min, 1e-9)
+		Utility.Tween(self.Fill, Instant and Tweens.Instant or Tweens.Fast, { Size = UDim2.fromScale(Percent, 1) })
+		if Instant then
+			self.Shown.Value = Value
+		end
+		Utility.Tween(self.Shown, Instant and Tweens.Instant or Tweens.Smooth, { Value = Value })
+		if Changed and not Silent then
+			task.spawn(self.Callback, Value)
+		end
+	end
+
+	function Slider:GetValue()
+		return self.Value
+	end
+
+	function Slider:Encode()
+		return self.Value
+	end
+
+	function Slider:Load(Value)
+		self:Update(Value)
+	end
+
+	local function Track(Input)
+		local Point = Utility.Point(Input)
+		local Percent = math.clamp((Point.X - Bar.AbsolutePosition.X) / math.max(Bar.AbsoluteSize.X, 1), 0, 1)
+		Slider:Update(Slider.Min + (Slider.Max - Slider.Min) * Percent)
+	end
+
+	Bar.InputBegan:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+			Library.Dragger = Track
+			Track(Input)
+		end
+	end)
+	Bar.MouseEnter:Connect(function()
+		Utility.Tween(BarStroke, Tweens.Fast, { Color = Theme.FieldHover })
+	end)
+	Bar.MouseLeave:Connect(function()
+		Utility.Tween(BarStroke, Tweens.Fast, { Color = Theme.FieldBorder })
+	end)
+	Slider.Shown.Changed:Connect(function()
+		Slider:Refresh()
+	end)
+
+	Slider.Fill.Size = UDim2.fromScale((Slider.Value - Slider.Min) / math.max(Slider.Max - Slider.Min, 1e-9), 1)
+	Slider:Refresh()
+	Library.Flags[Slider.Flag] = Slider.Value
+	Library.Elements[Slider.Flag] = Slider
+	return Slider
+end
+
+function Container:Dropdown(Options)
+	Options = Options or {}
+	local Dropdown = {
+		Kind = "Dropdown",
+		Container = self,
+		Name = Options.Name or "dropdown",
+		Options = Options.Options or {},
+		Multi = Options.Multi == true,
+		Callback = Options.Callback or function() end,
+		Items = {},
+		Open = false,
+	}
+	Dropdown.Flag = Library:Flag(Options.Flag, Dropdown.Name)
+	if Dropdown.Multi then
+		Dropdown.Value = {}
+		for Index, Item in Options.Default or {} do
+			table.insert(Dropdown.Value, Item)
+		end
+	else
+		Dropdown.Value = Options.Default or Dropdown.Options[1]
+	end
+	local Labelled = Options.Label ~= false
+	local Top = Labelled and 20 or 0
+	local Row = self:Row(Top + 26, Dropdown.Name)
+	if Labelled then
+		Dropdown.Label = Utility.Label({
+			Text = Dropdown.Name,
+			Size = UDim2.new(1, -30, 0, 20),
+			TextColor3 = Theme.Dim,
+			Parent = Row,
+		})
+		Dropdown.Right = Utility.Accessories(Row, 20)
+		Attachable.Mix(Dropdown)
+	end
+	local Box = Utility.Button({
+		Position = UDim2.fromOffset(0, Top + 2),
+		Size = UDim2.new(1, 0, 0, 20),
+		BackgroundColor3 = Theme.Field,
+		BackgroundTransparency = 0,
+		Parent = Row,
+	})
+	Utility.Corner(Box, 3)
+	local Stroke = Utility.Stroke(Box, Theme.FieldBorder, 1)
+	Dropdown.Text = Utility.Label({
+		Position = UDim2.fromOffset(6, 0),
+		Size = UDim2.new(1, -26, 1, 0),
+		TextColor3 = Theme.Soft,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = Box,
+	})
+	Icons.List(Box, Theme.Muted, {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -7, 0.5, 0),
+	})
+
+	local Holder = Utility.Create("CanvasGroup", {
+		BackgroundTransparency = 1,
+		GroupTransparency = 1,
+		Size = UDim2.fromOffset(100, 0),
+		Visible = false,
+		Parent = self.Window.PopupLayer,
+	})
+	local Inner = Utility.Create("Frame", {
+		BackgroundColor3 = Theme.Field,
+		Position = UDim2.fromOffset(1, 1),
+		Size = UDim2.new(1, -2, 1, -2),
+		Parent = Holder,
+	})
+	Utility.Corner(Inner, 3)
+	Utility.Stroke(Inner, Theme.FieldBorder, 1)
+	local Scroll = Utility.Paint(Utility.Create("ScrollingFrame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 2,
+		ScrollBarImageTransparency = 0.3,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		Parent = Inner,
+	}), "ScrollBarImageColor3", "Accent")
+	Utility.List(Scroll)
+	Utility.Padding(Scroll, 2, 0, 2, 0)
+	Dropdown.Entry = {
+		Holder = Holder,
+		Owner = Box,
+		Close = function()
+			Dropdown:Hide()
+		end,
+	}
+
+	function Dropdown:Selected(Item)
+		if self.Multi then
+			return table.find(self.Value, Item) ~= nil
+		end
+		return self.Value == Item
+	end
+
+	function Dropdown:Display()
+		if self.Multi then
+			return #self.Value > 0 and table.concat(self.Value, ", ") or "none"
+		end
+		return self.Value ~= nil and tostring(self.Value) or "none"
+	end
+
+	function Dropdown:Paint()
+		for Item, Text in self.Items do
+			Utility.Tween(Text, Tweens.Fast, { TextColor3 = self:Selected(Item) and Theme.Text or Theme.Dim })
+		end
+		self.Text.Text = self:Display()
+	end
+
+	function Dropdown:Build()
+		for Index, Child in Scroll:GetChildren() do
+			if Child:IsA("ImageButton") then
+				Child:Destroy()
+			end
+		end
+		self.Items = {}
+		for Index, Item in self.Options do
+			local Button = Utility.Button({
+				Size = UDim2.new(1, 0, 0, 20),
+				LayoutOrder = Index,
+				Parent = Scroll,
+			})
+			local Text = Utility.Label({
+				Text = tostring(Item),
+				Position = UDim2.fromOffset(7, 0),
+				Size = UDim2.new(1, -14, 1, 0),
+				TextColor3 = Theme.Dim,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				Parent = Button,
+			})
+			Button.MouseEnter:Connect(function()
+				if not self:Selected(Item) then
+					Utility.Tween(Text, Tweens.Fast, { TextColor3 = Theme.TabHover })
+				end
+			end)
+			Button.MouseLeave:Connect(function()
+				Utility.Tween(Text, Tweens.Fast, { TextColor3 = self:Selected(Item) and Theme.Text or Theme.Dim })
+			end)
+			Button.MouseButton1Click:Connect(function()
+				self:Pick(Item)
+			end)
+			self.Items[Item] = Text
+		end
+		self:Paint()
+	end
+
+	function Dropdown:Pick(Item)
+		if self.Multi then
+			local Next = table.clone(self.Value)
+			local Found = table.find(Next, Item)
+			if Found then
+				table.remove(Next, Found)
+			else
+				table.insert(Next, Item)
+			end
+			local Ordered = {}
+			for Index, Option in self.Options do
+				if table.find(Next, Option) then
+					table.insert(Ordered, Option)
+				end
+			end
+			self:Update(Ordered)
+		else
+			self:Update(Item)
+			Library:Dismiss(self.Entry)
+		end
+	end
+
+	function Dropdown:Update(Value, Silent)
+		if self.Multi then
+			self.Value = typeof(Value) == "table" and Value or { Value }
+		else
+			self.Value = Value
+		end
+		Library.Flags[self.Flag] = self.Value
+		self:Paint()
+		if not Silent then
+			task.spawn(self.Callback, self.Value)
+		end
+	end
+
+	function Dropdown:Refresh(Items, Keep)
+		self.Options = Items
+		if not Keep then
+			if self.Multi then
+				local Kept = {}
+				for Index, Item in self.Value do
+					if table.find(Items, Item) then
+						table.insert(Kept, Item)
+					end
+				end
+				self.Value = Kept
+			elseif not table.find(Items, self.Value) then
+				self.Value = Items[1]
+			end
+			Library.Flags[self.Flag] = self.Value
+		end
+		self:Build()
+	end
+
+	function Dropdown:Show()
+		local Window = self.Container.Window
+		local Scale = Window.Scale.Scale
+		local Position = (Box.AbsolutePosition - Window.Main.AbsolutePosition) / Scale
+		local Width = Box.AbsoluteSize.X / Scale
+		local Height = math.min(math.max(#self.Options, 1), 8) * 20 + 6
+		Library:Push(self.Entry, self.Container.Entry)
+		self.Open = true
+		Holder.Visible = true
+		Holder.Position = UDim2.fromOffset(Position.X - 1, Position.Y + 22)
+		Holder.Size = UDim2.fromOffset(Width + 2, 0)
+		Utility.Tween(Holder, Tweens.Smooth, { Size = UDim2.fromOffset(Width + 2, Height), GroupTransparency = 0 })
+		Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldActive })
+	end
+
+	function Dropdown:Hide()
+		self.Open = false
+		Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldBorder })
+		local Tween = Utility.Tween(Holder, Tweens.Fast, { GroupTransparency = 1, Size = UDim2.fromOffset(Holder.Size.X.Offset, 0) })
+		Tween.Completed:Once(function()
+			if not self.Open then
+				Holder.Visible = false
+			end
+		end)
+	end
+
+	function Dropdown:GetValue()
+		return self.Value
+	end
+
+	function Dropdown:Encode()
+		return self.Value
+	end
+
+	function Dropdown:Load(Value)
+		self:Update(Value)
+	end
+
+	Box.MouseEnter:Connect(function()
+		if not Dropdown.Open then
+			Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldHover })
+		end
+	end)
+	Box.MouseLeave:Connect(function()
+		if not Dropdown.Open then
+			Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldBorder })
+		end
+	end)
+	Box.MouseButton1Click:Connect(function()
+		if Dropdown.Open then
+			Library:Dismiss(Dropdown.Entry)
+		else
+			Dropdown:Show()
+		end
+	end)
+
+	Dropdown:Build()
+	Library.Flags[Dropdown.Flag] = Dropdown.Value
+	Library.Elements[Dropdown.Flag] = Dropdown
+	return Dropdown
+end
+
+function Library:Picker(Owner, Parent, Options)
+	local Picker = {
+		Kind = "Color",
+		Container = Owner,
+		Name = Options.Name or "color",
+		Value = Options.Default or Color3.fromRGB(176, 120, 255),
+		Callback = Options.Callback or function() end,
+	}
+	Picker.Flag = self:Flag(Options.Flag, Picker.Name)
+	Picker.Hue, Picker.Sat, Picker.Val = Picker.Value:ToHSV()
+	local Swatch = Utility.Button({
+		Size = UDim2.fromOffset(27, 13),
+		BackgroundColor3 = Picker.Value,
+		BackgroundTransparency = 0,
+		LayoutOrder = 5,
+		Parent = Parent,
+	})
+	Utility.Corner(Swatch, 3)
+	Utility.Stroke(Swatch, Theme.Black, 1, 0.4)
+	Picker.Swatch = Swatch
+
+	function Picker:Build()
+		local Popup = Library:Popup(Owner.Window, self.Name, 196)
+		self.Popup = Popup
+		local FieldRow = Popup:Row(128, "")
+		local Field = Utility.Button({
+			Size = UDim2.new(1, 0, 0, 120),
+			BackgroundColor3 = Color3.fromHSV(self.Hue, 1, 1),
+			BackgroundTransparency = 0,
+			Parent = FieldRow,
+		})
+		Utility.Corner(Field, 3)
+		local White = Utility.Create("Frame", {
+			BorderSizePixel = 0,
+			BackgroundColor3 = Theme.White,
+			Size = UDim2.fromScale(1, 1),
+			Parent = Field,
+		})
+		Utility.Corner(White, 3)
+		Utility.Create("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = White })
+		local Black = Utility.Create("Frame", {
+			BorderSizePixel = 0,
+			BackgroundColor3 = Theme.Black,
+			Size = UDim2.fromScale(1, 1),
+			Parent = Field,
+		})
+		Utility.Corner(Black, 3)
+		Utility.Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = Black })
+		local Cursor = Utility.Create("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.fromOffset(8, 8),
+			BackgroundTransparency = 1,
+			ZIndex = 3,
+			Parent = Field,
+		})
+		Utility.Corner(Cursor, UDim.new(1, 0))
+		Utility.Stroke(Cursor, Theme.White, 1.5)
+
+		local HueRow = Popup:Row(18, "")
+		local Hue = Utility.Button({
+			Size = UDim2.new(1, 0, 0, 10),
+			BackgroundColor3 = Theme.White,
+			BackgroundTransparency = 0,
+			Parent = HueRow,
+		})
+		Utility.Corner(Hue, UDim.new(1, 0))
+		local Keypoints = {}
+		for Index = 0, 6 do
+			table.insert(Keypoints, ColorSequenceKeypoint.new(Index / 6, Color3.fromHSV(Index / 6, 1, 1)))
+		end
+		Utility.Create("UIGradient", { Color = ColorSequence.new(Keypoints), Parent = Hue })
+		local HueCursor = Utility.Create("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.fromOffset(4, 14),
+			BackgroundColor3 = Theme.White,
+			BorderSizePixel = 0,
+			ZIndex = 3,
+			Parent = Hue,
+		})
+		Utility.Corner(HueCursor, 2)
+		Utility.Stroke(HueCursor, Theme.Black, 1, 0.5)
+
+		local HexRow = Popup:Row(26, "")
+		local HexBox = Utility.Create("Frame", {
+			BackgroundColor3 = Theme.Field,
+			Size = UDim2.new(1, 0, 0, 20),
+			Parent = HexRow,
+		})
+		Utility.Corner(HexBox, 3)
+		local HexStroke = Utility.Stroke(HexBox, Theme.FieldBorder, 1)
+		local Preview = Utility.Create("Frame", {
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -5, 0.5, 0),
+			Size = UDim2.fromOffset(22, 10),
+			BackgroundColor3 = self.Value,
+			Parent = HexBox,
+		})
+		Utility.Corner(Preview, 2)
+		local HexInput = Utility.Track(Utility.Create("TextBox", {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(7, 0),
+			Size = UDim2.new(1, -40, 1, 0),
+			FontFace = Fonts.Bold,
+			TextSize = 14,
+			TextColor3 = Theme.Soft,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ClearTextOnFocus = false,
+			Text = "#" .. self.Value:ToHex(),
+			Parent = HexBox,
+		}))
+
+		function self:Paint()
+			Field.BackgroundColor3 = Color3.fromHSV(self.Hue, 1, 1)
+			Cursor.Position = UDim2.fromScale(self.Sat, 1 - self.Val)
+			HueCursor.Position = UDim2.fromScale(self.Hue, 0.5)
+			Preview.BackgroundColor3 = self.Value
+			if not HexInput:IsFocused() then
+				HexInput.Text = "#" .. string.lower(self.Value:ToHex())
+			end
+		end
+
+		local function DragField(Input)
+			local Point = Utility.Point(Input)
+			self.Sat = math.clamp((Point.X - Field.AbsolutePosition.X) / math.max(Field.AbsoluteSize.X, 1), 0, 1)
+			self.Val = 1 - math.clamp((Point.Y - Field.AbsolutePosition.Y) / math.max(Field.AbsoluteSize.Y, 1), 0, 1)
+			self:Update(Color3.fromHSV(self.Hue, self.Sat, self.Val), false, true)
+		end
+
+		local function DragHue(Input)
+			local Point = Utility.Point(Input)
+			self.Hue = math.clamp((Point.X - Hue.AbsolutePosition.X) / math.max(Hue.AbsoluteSize.X, 1), 0, 0.999)
+			self:Update(Color3.fromHSV(self.Hue, self.Sat, self.Val), false, true)
+		end
+
+		Field.InputBegan:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+				Library.Dragger = DragField
+				DragField(Input)
+			end
+		end)
+		Hue.InputBegan:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+				Library.Dragger = DragHue
+				DragHue(Input)
+			end
+		end)
+		HexInput.Focused:Connect(function()
+			Utility.Tween(HexStroke, Tweens.Fast, { Color = Theme.FieldActive })
+		end)
+		HexInput.FocusLost:Connect(function()
+			Utility.Tween(HexStroke, Tweens.Fast, { Color = Theme.FieldBorder })
+			local Success, Color = pcall(Color3.fromHex, (string.gsub(HexInput.Text, "#", "")))
+			if Success and Color then
+				self:Update(Color)
+			else
+				self:Paint()
+			end
+		end)
+		self:Paint()
+	end
+
+	function Picker:Update(Color, Silent, KeepHue)
+		self.Value = Color
+		if not KeepHue then
+			local H, S, V = Color:ToHSV()
+			if S > 0 then
+				self.Hue = H
+			end
+			self.Sat, self.Val = S, V
+		end
+		Swatch.BackgroundColor3 = Color
+		Library.Flags[self.Flag] = Color
+		if self.Paint then
+			self:Paint()
+		end
+		if not Silent then
+			task.spawn(self.Callback, Color)
+		end
+	end
+
+	function Picker:GetValue()
+		return self.Value
+	end
+
+	function Picker:Encode()
+		return self.Value:ToHex()
+	end
+
+	function Picker:Load(Value)
+		local Success, Color = pcall(Color3.fromHex, Value)
+		if Success then
+			self:Update(Color)
+		end
+	end
+
+	Swatch.MouseButton1Click:Connect(function()
+		if not Picker.Popup then
+			Picker:Build()
+		end
+		Picker.Popup:Flip(Swatch, Owner.Entry)
+	end)
+
+	self.Flags[Picker.Flag] = Picker.Value
+	self.Elements[Picker.Flag] = Picker
+	return Picker
+end
+
+function Container:ColorPicker(Options)
+	Options = Options or {}
+	local Row = self:Row(21, Options.Name or "color")
+	Utility.Label({
+		Text = Options.Name or "color",
+		Size = UDim2.new(1, -40, 1, 0),
+		TextColor3 = Theme.Muted,
+		Parent = Row,
+	})
+	return Library:Picker(self, Utility.Accessories(Row), Options)
+end
+
+function Container:Keybind(Options)
+	Options = Options or {}
+	local Bind = {
+		Kind = "Keybind",
+		Container = self,
+		Name = Options.Name or "keybind",
+		Value = Options.Default,
+		Mode = Options.Mode or "Toggle",
+		Target = Options.Target,
+		Callback = Options.Callback,
+		Changed = Options.Changed,
+		Modes = Options.Modes ~= false and Options.Target ~= nil,
+	}
+	Bind.Flag = Library:Flag(Options.Flag, Bind.Name)
+	local Row = self:Row(21, Bind.Name)
+	Utility.Label({
+		Text = Bind.Name,
+		Size = UDim2.new(1, -90, 1, 0),
+		TextColor3 = Theme.Muted,
+		Parent = Row,
+	})
+	local Right = Utility.Accessories(Row)
+	Bind.ModeLabel = Utility.Label({
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 16),
+		TextColor3 = Theme.Dim,
+		TextSize = 13,
+		LayoutOrder = 1,
+		Visible = Bind.Modes,
+		Parent = Right,
+	})
+	Bind.Box = Utility.Button({
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 17),
+		BackgroundColor3 = Theme.Field,
+		BackgroundTransparency = 0,
+		LayoutOrder = 2,
+		Parent = Right,
+	})
+	Utility.Padding(Bind.Box, 0, 6, 0, 6)
+	Bind.KeyText = Utility.Label({
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 17),
+		TextSize = 13,
+		TextColor3 = Theme.Soft,
+		Parent = Bind.Box,
+	})
+	Utility.Corner(Bind.Box, 3)
+	Bind.Stroke = Utility.Stroke(Bind.Box, Theme.FieldBorder, 1)
+
+	function Bind:Paint()
+		self.KeyText.Text = Library.Listening == self and "[...]" or "[" .. Utility.KeyName(self.Value) .. "]"
+		self.ModeLabel.Text = string.lower(self.Mode)
+	end
+
+	function Bind:Listen()
+		if Library.Listening and Library.Listening ~= self then
+			Library.Listening:Stop()
+		end
+		Library.Listening = self
+		Utility.Tween(self.Stroke, Tweens.Fast, { Color = Theme.Accent })
+		self:Paint()
+	end
+
+	function Bind:Stop(Value, Clear)
+		if Library.Listening == self then
+			Library.Listening = nil
+		end
+		Utility.Tween(self.Stroke, Tweens.Fast, { Color = Theme.FieldBorder })
+		if Value ~= nil or Clear then
+			self:Update(Value)
+		else
+			self:Paint()
+		end
+	end
+
+	function Bind:Capture(Input)
+		local Kind = Input.UserInputType
+		if Kind == Enum.UserInputType.Keyboard then
+			if Input.KeyCode == Enum.KeyCode.Escape then
+				self:Stop()
+			elseif Input.KeyCode == Enum.KeyCode.Backspace or Input.KeyCode == Enum.KeyCode.Delete then
+				self:Stop(nil, true)
+			else
+				self:Stop(Input.KeyCode)
+			end
+		elseif Kind == Enum.UserInputType.MouseButton2 or Kind == Enum.UserInputType.MouseButton3 then
+			self:Stop(Kind)
+		elseif string.find(Kind.Name, "Gamepad", 1, true) and Input.KeyCode ~= Enum.KeyCode.Unknown then
+			self:Stop(Input.KeyCode)
+		elseif Kind == Enum.UserInputType.MouseButton1 or Kind == Enum.UserInputType.Touch then
+			self:Stop()
+		end
+	end
+
+	function Bind:Update(Value)
+		self.Value = Value
+		Library.Flags[self.Flag] = Value
+		self:Paint()
+		Library:RefreshHotkeys()
+		if self.Changed then
+			task.spawn(self.Changed, Value)
+		end
+	end
+
+	function Bind:Matches(Input)
+		local Value = self.Value
+		if typeof(Value) ~= "EnumItem" then
+			return false
+		end
+		if Value.EnumType == Enum.KeyCode then
+			return Input.KeyCode == Value
+		end
+		return Input.UserInputType == Value
+	end
+
+	function Bind:Press(Down)
+		if Down and UserInputService:GetFocusedTextBox() then
+			return
+		end
+		if self.Target then
+			if self.Mode == "Toggle" and Down then
+				self.Target:Update(not self.Target.Value)
+			elseif self.Mode == "Hold" then
+				self.Target:Update(Down)
+			end
+		end
+		if Down and self.Callback then
+			task.spawn(self.Callback, self.Value)
+		end
+	end
+
+	function Bind:Cycle()
+		local Modes = { "Toggle", "Hold", "Always" }
+		self.Mode = Modes[(table.find(Modes, self.Mode) or 1) % 3 + 1]
+		if self.Mode == "Always" and self.Target then
+			self.Target:Update(true)
+		end
+		self:Paint()
+		Library:RefreshHotkeys()
+	end
+
+	function Bind:GetValue()
+		return self.Value
+	end
+
+	function Bind:Encode()
+		local Value = self.Value
+		return {
+			Key = typeof(Value) == "EnumItem" and Value.Name or nil,
+			Type = typeof(Value) == "EnumItem" and tostring(Value.EnumType) or nil,
+			Mode = self.Mode,
+		}
+	end
+
+	function Bind:Load(Data)
+		if typeof(Data) ~= "table" then
+			return
+		end
+		self.Mode = Data.Mode or self.Mode
+		local Value = nil
+		if Data.Key and Data.Type == "UserInputType" then
+			Value = Enum.UserInputType[Data.Key]
+		elseif Data.Key then
+			Value = Enum.KeyCode[Data.Key]
+		end
+		self:Update(Value)
+	end
+
+	Bind.Box.MouseEnter:Connect(function()
+		if Library.Listening ~= Bind then
+			Utility.Tween(Bind.Stroke, Tweens.Fast, { Color = Theme.FieldHover })
+		end
+	end)
+	Bind.Box.MouseLeave:Connect(function()
+		if Library.Listening ~= Bind then
+			Utility.Tween(Bind.Stroke, Tweens.Fast, { Color = Theme.FieldBorder })
+		end
+	end)
+	Bind.Box.MouseButton1Click:Connect(function()
+		Bind:Listen()
+	end)
+	Bind.Box.MouseButton2Click:Connect(function()
+		if Bind.Modes then
+			Bind:Cycle()
+		end
+	end)
+
+	Bind:Paint()
+	table.insert(Library.Keybinds, Bind)
+	Library.Flags[Bind.Flag] = Bind.Value
+	Library.Elements[Bind.Flag] = Bind
+	Library:RefreshHotkeys()
+	return Bind
+end
+
+function Container:Button(Options)
+	Options = Options or {}
+	local Element = {
+		Kind = "Button",
+		Name = Options.Name or "button",
+		Callback = Options.Callback or function() end,
+		Confirm = Options.Confirm == true,
+	}
+	local Row = self:Row(26, Element.Name)
+	local Box = Utility.Button({
+		Size = UDim2.new(1, 0, 0, 20),
+		BackgroundColor3 = Theme.Field,
+		BackgroundTransparency = 0,
+		Parent = Row,
+	})
+	Utility.Corner(Box, 3)
+	local Stroke = Utility.Stroke(Box, Theme.FieldBorder, 1)
+	local Text = Utility.Label({
+		Text = Element.Name,
+		Position = UDim2.fromOffset(6, 0),
+		Size = UDim2.new(1, -26, 1, 0),
+		TextColor3 = Theme.Muted,
+		Parent = Box,
+	})
+	local Icon = Icons.Chevron(Box, Theme.Muted, {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -7, 0.5, 0),
+	})
+	local Armed = false
+
+	Box.MouseEnter:Connect(function()
+		Utility.Tween(Text, Tweens.Fast, { TextColor3 = Theme.Text })
+		Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldHover })
+		Icons.Recolor(Icon, Theme.Soft)
+	end)
+	Box.MouseLeave:Connect(function()
+		Utility.Tween(Text, Tweens.Fast, { TextColor3 = Theme.Muted })
+		Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldBorder })
+		Icons.Recolor(Icon, Theme.Muted)
+	end)
+	Box.MouseButton1Click:Connect(function()
+		if Element.Confirm and not Armed then
+			Armed = true
+			Text.Text = "click again to confirm"
+			task.delay(2.5, function()
+				if Armed then
+					Armed = false
+					Text.Text = Element.Name
+				end
+			end)
+			return
+		end
+		Armed = false
+		Text.Text = Element.Name
+		Stroke.Color = Theme.Accent
+		Utility.Tween(Stroke, Tweens.Slow, { Color = Theme.FieldHover })
+		task.spawn(Element.Callback)
+	end)
+
+	function Element:Rename(Name)
+		self.Name = Name
+		Text.Text = Name
+	end
+
+	return Element
+end
+
+function Container:Textbox(Options)
+	Options = Options or {}
+	local Element = {
+		Kind = "Textbox",
+		Name = Options.Name or "textbox",
+		Value = Options.Default or "",
+		Callback = Options.Callback or function() end,
+		Changed = Options.Changed,
+	}
+	if Options.Flag ~= false then
+		Element.Flag = Library:Flag(Options.Flag, Element.Name)
+	end
+	local Labelled = Options.Label == true
+	local Top = Labelled and 20 or 0
+	local Height = Options.Height or 22
+	local Row = self:Row(Top + Height + (Options.Gap or 6), Element.Name)
+	if Labelled then
+		Utility.Label({
+			Text = Element.Name,
+			Size = UDim2.new(1, 0, 0, 20),
+			TextColor3 = Theme.Dim,
+			Parent = Row,
+		})
+	end
+	local Box = Utility.Create("Frame", {
+		Position = UDim2.fromOffset(0, Top),
+		Size = UDim2.new(1, 0, 0, Height),
+		BackgroundColor3 = Theme.Field,
+		Parent = Row,
+	})
+	Utility.Corner(Box, 3)
+	local Stroke = Utility.Stroke(Box, Theme.FieldBorder, 1)
+	local Left = 7
+	if Options.Icon == "Search" then
+		Icons.Search(Box, 12, Theme.Muted, {
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 8, 0.5, 0),
+		})
+		Left = 26
+	end
+	local Input = Utility.Track(Utility.Create("TextBox", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(Left, 0),
+		Size = UDim2.new(1, -Left - 6, 1, 0),
+		FontFace = Fonts.Bold,
+		TextSize = 14,
+		TextColor3 = Theme.Soft,
+		PlaceholderText = Options.Placeholder or "",
+		PlaceholderColor3 = Theme.Muted,
+		Text = Element.Value,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ClearTextOnFocus = false,
+		Parent = Box,
+	}))
+	Element.Input = Input
+
+	function Element:Update(Text, Silent)
+		self.Value = tostring(Text)
+		Input.Text = self.Value
+		if self.Flag then
+			Library.Flags[self.Flag] = self.Value
+		end
+		if not Silent then
+			task.spawn(self.Callback, self.Value, false)
+		end
+	end
+
+	function Element:GetValue()
+		return self.Value
+	end
+
+	function Element:Encode()
+		return self.Value
+	end
+
+	function Element:Load(Value)
+		self:Update(Value)
+	end
+
+	Input.Focused:Connect(function()
+		Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldActive })
+	end)
+	Input.FocusLost:Connect(function(Enter)
+		Utility.Tween(Stroke, Tweens.Fast, { Color = Theme.FieldBorder })
+		Element.Value = Input.Text
+		if Element.Flag then
+			Library.Flags[Element.Flag] = Element.Value
+		end
+		task.spawn(Element.Callback, Element.Value, Enter)
+	end)
+	Input:GetPropertyChangedSignal("Text"):Connect(function()
+		if Element.Changed then
+			Element.Changed(Input.Text)
+		end
+	end)
+
+	if Element.Flag then
+		Library.Flags[Element.Flag] = Element.Value
+		Library.Elements[Element.Flag] = Element
+	end
+	return Element
+end
+
+function Container:List(Options)
+	Options = Options or {}
+	local List = {
+		Kind = "List",
+		Container = self,
+		Name = Options.Name or "list",
+		Items = Options.Items or {},
+		Value = Options.Default,
+		Icon = Options.Icon,
+		Callback = Options.Callback or function() end,
+		Entries = {},
+		Query = "",
+	}
+	List.Flag = Library:Flag(Options.Flag, List.Name)
+	if Options.Search ~= false then
+		List.Search = self:Textbox({
+			Name = List.Name .. " search",
+			Placeholder = "search",
+			Icon = "Search",
+			Height = 24,
+			Gap = 14,
+			Flag = false,
+			Changed = function(Text)
+				List.Query = string.lower(Text)
+				List:Filter()
+			end,
+		})
+	end
+	local Row = self:Row(0, List.Name)
+	Utility.List(Row)
+	List.Row = Row
+	for Index, Record in self.Rows do
+		if Record.Frame == Row then
+			List.Record = Record
+		end
+	end
+
+	function List:Paint(Instant)
+		local Info = Instant and Tweens.Instant or Tweens.Fast
+		for Index, Entry in self.Entries do
+			local Selected = Entry.Item == self.Value
+			Utility.Tween(Entry.Text, Info, { TextColor3 = Selected and Theme.Text or Theme.Muted })
+			Utility.Tween(Entry.Stroke, Info, { Color = Selected and Theme.FieldActive or Theme.FieldBorder })
+			if Entry.Icon then
+				Icons.Recolor(Entry.Icon, Selected and Theme.Soft or Theme.Muted, Info)
+			end
+		end
+	end
+
+	function List:Filter()
+		local Count = 0
+		for Index, Entry in self.Entries do
+			local Match = self.Query == "" or string.find(string.lower(tostring(Entry.Item)), self.Query, 1, true) ~= nil
+			Entry.Frame.Visible = Match
+			if Match then
+				Count += 1
+			end
+		end
+		Row.Size = UDim2.new(1, 0, 0, Count * 38)
+		self.Container:Changed()
+	end
+
+	function List:Build()
+		for Index, Entry in self.Entries do
+			Entry.Frame:Destroy()
+		end
+		self.Entries = {}
+		local Names = {}
+		for Index, Item in self.Items do
+			local Frame = Utility.Create("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 38),
+				LayoutOrder = Index,
+				Parent = Row,
+			})
+			local Box = Utility.Button({
+				Size = UDim2.new(1, 0, 0, 24),
+				BackgroundColor3 = Theme.Field,
+				BackgroundTransparency = 0,
+				Parent = Frame,
+			})
+			Utility.Corner(Box, 3)
+			local Entry = { Item = Item, Frame = Frame, Box = Box }
+			Entry.Stroke = Utility.Stroke(Box, Theme.FieldBorder, 1)
+			local Left = 8
+			if self.Icon == "File" then
+				Entry.Icon = Icons.File(Box, Theme.Muted, {
+					AnchorPoint = Vector2.new(0, 0.5),
+					Position = UDim2.new(0, 9, 0.5, 0),
+				})
+				Left = 27
+			end
+			Entry.Text = Utility.Label({
+				Text = tostring(Item),
+				Position = UDim2.fromOffset(Left, 0),
+				Size = UDim2.new(1, -Left - 8, 1, 0),
+				TextColor3 = Theme.Muted,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				Parent = Box,
+			})
+			Box.MouseEnter:Connect(function()
+				if Entry.Item ~= self.Value then
+					Utility.Tween(Entry.Stroke, Tweens.Fast, { Color = Theme.FieldHover })
+					Utility.Tween(Entry.Text, Tweens.Fast, { TextColor3 = Theme.Soft })
+				end
+			end)
+			Box.MouseLeave:Connect(function()
+				self:Paint()
+			end)
+			Box.MouseButton1Click:Connect(function()
+				self:Update(Item)
+			end)
+			table.insert(self.Entries, Entry)
+			table.insert(Names, string.lower(tostring(Item)))
+		end
+		if self.Record then
+			self.Record.Name = string.lower(self.Name) .. " " .. table.concat(Names, " ")
+		end
+		self:Filter()
+		self:Paint(true)
+	end
+
+	function List:Refresh(Items)
+		self.Items = Items
+		if self.Value ~= nil and not table.find(Items, self.Value) then
+			self.Value = nil
+			Library.Flags[self.Flag] = nil
+		end
+		self:Build()
+	end
+
+	function List:Update(Item, Silent)
+		self.Value = Item
+		Library.Flags[self.Flag] = Item
+		self:Paint()
+		if not Silent then
+			task.spawn(self.Callback, Item)
+		end
+	end
+
+	function List:GetValue()
+		return self.Value
+	end
+
+	function List:Encode()
+		return self.Value
+	end
+
+	function List:Load(Value)
+		self:Update(Value)
+	end
+
+	List:Build()
+	Library.Flags[List.Flag] = List.Value
+	Library.Elements[List.Flag] = List
+	return List
+end
+
+function Container:Info(Options)
+	Options = Options or {}
+	local Element = { Kind = "Info", Name = Options.Name or "info", Value = Options.Value or "" }
+	local Row = self:Row(21, Element.Name)
+	Utility.Label({
+		Text = Element.Name,
+		Size = UDim2.fromScale(1, 1),
+		TextColor3 = Theme.Muted,
+		Parent = Row,
+	})
+	Element.Text = Utility.Label({
+		Text = tostring(Element.Value),
+		Size = UDim2.fromScale(1, 1),
+		TextColor3 = Theme.Muted,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = Row,
+	})
+
+	function Element:Update(Value)
+		self.Value = Value
+		self.Text.Text = tostring(Value)
+	end
+
+	return Element
+end
+
+function Container:Label(Options)
+	Options = typeof(Options) == "string" and { Name = Options } or Options or {}
+	local Element = { Kind = "Label", Container = self, Name = Options.Name or "label" }
+	Element.Flag = Element.Name
+	local Row = self:Row(21, Element.Name)
+	Element.Label = Utility.Label({
+		Text = Element.Name,
+		Size = UDim2.new(1, -40, 1, 0),
+		TextColor3 = Options.Color or Theme.Dim,
+		Parent = Row,
+	})
+	Element.Right = Utility.Accessories(Row)
+	Attachable.Mix(Element)
+
+	function Element:Update(Text)
+		self.Name = Text
+		self.Label.Text = Text
+	end
+
+	return Element
+end
+
+function Library:Window(Options)
+	Options = Options or {}
+	local Gui = self:Screen()
+	local Width, Height = Options.Width or 716, Options.Height or 560
+	local Window = setmetatable({
+		Categories = {},
+		Tabs = {},
+		Width = Width,
+		Height = Height,
+		Open = true,
+		Dragging = false,
+		ScaleValue = Options.Scale or 1,
+		Glyph = Options.Glyph or "c",
+	}, WindowClass)
+
+	local Main = Utility.Create("Frame", {
+		Name = "Main",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = Options.Position or UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(Width, Height),
+		BackgroundColor3 = Theme.Window,
+		BackgroundTransparency = 0.04,
+		ZIndex = 5,
+		Parent = Gui,
+	})
+	Utility.Corner(Main, 6)
+	Utility.Stroke(Main, Theme.Outline, 1)
+	Window.Main = Main
+	Window.Scale = Utility.Create("UIScale", { Scale = Window.ScaleValue, Parent = Main })
+
+	local Sidebar = Utility.Create("Frame", {
+		Name = "Sidebar",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 124, 1, 0),
+		Parent = Main,
+	})
+	if Options.Logo then
+		Utility.Create("ImageLabel", {
+			BackgroundTransparency = 1,
+			Image = Options.Logo,
+			Position = UDim2.fromOffset(20, 21),
+			Size = UDim2.fromOffset(38, 42),
+			ScaleType = Enum.ScaleType.Fit,
+			Parent = Sidebar,
+		})
+	else
+		Utility.Glyph(Sidebar, Window.Glyph, 46, {
+			Position = UDim2.fromOffset(16, 15),
+			Size = UDim2.fromOffset(44, 52),
+		})
+	end
+	Utility.Label({
+		Text = Options.Title or "charm",
+		Position = UDim2.fromOffset(67, 22),
+		Size = UDim2.fromOffset(54, 20),
+		TextSize = 17,
+		TextColor3 = Theme.White,
+		Parent = Sidebar,
+	})
+	Utility.Paint(Utility.Label({
+		Text = Options.Subtitle or "live",
+		Position = UDim2.fromOffset(67, 42),
+		Size = UDim2.fromOffset(54, 20),
+		TextSize = 17,
+		Parent = Sidebar,
+	}), "TextColor3", "Bright")
+
+	Window.CategoryList = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 94),
+		Size = UDim2.new(1, 0, 1, -160),
+		Parent = Sidebar,
+	})
+	Utility.List(Window.CategoryList)
+	Window:Footer(Sidebar)
+
+	local Content = Utility.Create("Frame", {
+		Name = "Content",
+		BackgroundColor3 = Theme.Content,
+		Position = UDim2.fromOffset(124, 0),
+		Size = UDim2.new(1, -124, 1, 0),
+		Parent = Main,
+	})
+	Utility.Corner(Content, 6)
+	Utility.Create("Frame", {
+		BackgroundColor3 = Theme.Content,
+		BorderSizePixel = 0,
+		Size = UDim2.new(0, 8, 1, 0),
+		Parent = Content,
+	})
+	Window.Pages = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Parent = Content,
+	})
+
+	Window.PopupLayer = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 40,
+		Parent = Main,
+	})
+
+	Window.Cover = Utility.Create("Frame", {
+		BackgroundColor3 = Theme.Cover,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 60,
+		Visible = false,
+		Parent = Main,
+	})
+	Utility.Corner(Window.Cover, 6)
+	Window.CoverGlyph, Window.CoverGlow = Utility.Glyph(Window.Cover, Window.Glyph, 44, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(60, 60),
+	})
+
+	Utility.Drag({ Main, Sidebar, Content }, Main, {
+		Began = function()
+			Window.Dragging = true
+			Library:Collapse()
+			Window:Conceal()
+		end,
+		Ended = function()
+			Window.Dragging = false
+			if Window.Open then
+				Window:Reveal()
+			end
+		end,
+	})
+
+	table.insert(self.Windows, Window)
+	Window:Show(true)
+	return Window
+end
+
+function WindowClass:Footer(Sidebar)
+	local Footer = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 1, -33),
+		Size = UDim2.new(1, 0, 0, 16),
+		Parent = Sidebar,
+	})
+	Utility.List(Footer, {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 7),
+	})
+	local Center = { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) }
+	local SearchButton = self:FooterButton(Footer, 1, function(Button)
+		return Icons.Search(Button, 13, Theme.Footer, Center)
+	end)
+	local BrushButton = self:FooterButton(Footer, 2, function(Button)
+		return Icons.Brush(Button, 13, Theme.Footer, Center)
+	end)
+	local GearButton = self:FooterButton(Footer, 3, function(Button)
+		return Icons.Gear(Button, 13, Theme.Footer, Center)
+	end)
+
+	local SearchBox = Utility.Create("Frame", {
+		BackgroundColor3 = Theme.Field,
+		Position = UDim2.new(0, 14, 1, -62),
+		Size = UDim2.new(1, -28, 0, 22),
+		Visible = false,
+		Parent = Sidebar,
+	})
+	Utility.Corner(SearchBox, 3)
+	local SearchStroke = Utility.Stroke(SearchBox, Theme.FieldBorder, 1)
+	local SearchInput = Utility.Track(Utility.Create("TextBox", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(7, 0),
+		Size = UDim2.new(1, -14, 1, 0),
+		FontFace = Fonts.Bold,
+		TextSize = 14,
+		TextColor3 = Theme.Soft,
+		PlaceholderText = "search",
+		PlaceholderColor3 = Theme.Muted,
+		Text = "",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		Parent = SearchBox,
+	}))
+	SearchInput.Focused:Connect(function()
+		Utility.Tween(SearchStroke, Tweens.Fast, { Color = Theme.FieldActive })
+	end)
+	SearchInput.FocusLost:Connect(function()
+		Utility.Tween(SearchStroke, Tweens.Fast, { Color = Theme.FieldBorder })
+	end)
+	SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+		self:Filter(SearchInput.Text)
+	end)
+
+	SearchButton.MouseButton1Click:Connect(function()
+		SearchBox.Visible = not SearchBox.Visible
+		if SearchBox.Visible then
+			SearchInput:CaptureFocus()
+		else
+			SearchInput.Text = ""
+		end
+	end)
+	BrushButton.MouseButton1Click:Connect(function()
+		self:ThemeMenu():Flip(BrushButton, nil, "Above")
+	end)
+	GearButton.MouseButton1Click:Connect(function()
+		if self.Home then
+			self:Select(self.Home)
+		else
+			self:MenuPopup():Flip(GearButton, nil, "Above")
+		end
+	end)
+end
+
+function WindowClass:FooterButton(Parent, Order, Draw)
+	local Button = Utility.Button({
+		Size = UDim2.fromOffset(14, 14),
+		LayoutOrder = Order,
+		Parent = Parent,
+	})
+	local Icon = Draw(Button)
+	Button.MouseEnter:Connect(function()
+		Icons.Recolor(Icon, Theme.Text)
+	end)
+	Button.MouseLeave:Connect(function()
+		Icons.Recolor(Icon, Theme.Footer)
+	end)
+	return Button, Icon
+end
+
+function WindowClass:ThemeMenu()
+	if self.ThemePopup then
+		return self.ThemePopup
+	end
+	local Popup = Library:Popup(self, "theme", 204)
+	Popup:ColorPicker({
+		Name = "accent",
+		Default = Theme.Accent,
+		Callback = function(Color)
+			Library:UpdateAccent(Color)
+		end,
+	})
+	Popup:Slider({
+		Name = "ui scale",
+		Min = 60,
+		Max = 140,
+		Default = math.round(self.ScaleValue * 100),
+		Suffix = "%",
+		Callback = function(Value)
+			self:Rescale(Value / 100)
+		end,
+	})
+	self.ThemePopup = Popup
+	return Popup
+end
+
+function WindowClass:MenuPopup()
+	if self.Menu then
+		return self.Menu
+	end
+	local Popup = Library:Popup(self, "menu", 204)
+	Popup:Keybind({
+		Name = "menu key",
+		Default = Library.ToggleKey,
+		Changed = function(Key)
+			Library.ToggleKey = Key
+		end,
+	})
+	Popup:Toggle({
+		Name = "hotkeys list",
+		Default = Library.HotkeyList ~= nil and Library.HotkeyList.Holder.Visible,
+		Callback = function(Value)
+			if Library.HotkeyList then
+				Library.HotkeyList.Holder.Visible = Value
+			end
+		end,
+	})
+	Popup:Toggle({
+		Name = "target hud",
+		Default = Library.Hud ~= nil and Library.Hud.Card.Visible,
+		Callback = function(Value)
+			if Library.Hud then
+				Library.Hud:Show(Value)
+			end
+		end,
+	})
+	Popup:Button({
+		Name = "unload",
+		Confirm = true,
+		Callback = function()
+			Library:Unload()
+		end,
+	})
+	self.Menu = Popup
+	return Popup
+end
+
+function WindowClass:Rescale(Value)
+	self.ScaleValue = Value
+	Library:Collapse()
+	Utility.Tween(self.Scale, Tweens.Smooth, { Scale = Value })
+end
+
+function WindowClass:Conceal(Instant, Callback)
+	self.Cover.Visible = true
+	local Info = Instant and Tweens.Instant or Tweens.Fast
+	if Instant then
+		self.Cover.BackgroundTransparency = 0
+		self.CoverGlyph.TextTransparency = 0
+		self.CoverGlow.Transparency = 0.82
+	end
+	Utility.Tween(self.Cover, Info, { BackgroundTransparency = 0 })
+	Utility.Tween(self.CoverGlow, Info, { Transparency = 0.82 })
+	local Tween = Utility.Tween(self.CoverGlyph, Info, { TextTransparency = 0 })
+	if Callback then
+		Tween.Completed:Once(function(Playback)
+			if Playback == Enum.PlaybackState.Completed then
+				Callback()
+			end
+		end)
+	end
+end
+
+function WindowClass:Reveal()
+	Utility.Tween(self.Cover, Tweens.Slow, { BackgroundTransparency = 1 })
+	Utility.Tween(self.CoverGlow, Tweens.Slow, { Transparency = 1 })
+	local Tween = Utility.Tween(self.CoverGlyph, Tweens.Slow, { TextTransparency = 1 })
+	Tween.Completed:Once(function(Playback)
+		if Playback == Enum.PlaybackState.Completed then
+			self.Cover.Visible = false
+		end
+	end)
+end
+
+function WindowClass:Show(State)
+	if State == nil then
+		State = not self.Open
+	end
+	self.Open = State
+	Library:Collapse()
+	if State then
+		self.Main.Visible = true
+		self:Conceal(true)
+		self.Scale.Scale = self.ScaleValue * 0.96
+		Utility.Tween(self.Scale, Tweens.Slow, { Scale = self.ScaleValue })
+		task.delay(0.22, function()
+			if self.Open and not self.Dragging then
+				self:Reveal()
+			end
+		end)
+	else
+		self:Conceal(false, function()
+			if not self.Open then
+				self.Main.Visible = false
+			end
+		end)
+	end
+end
+
+function WindowClass:Filter(Query)
+	Query = string.lower(Query or "")
+	for Index, Tab in self.Tabs do
+		local Found = false
+		for Order, Record in Tab.Rows do
+			local Match = Query == "" or string.find(Record.Name, Query, 1, true) ~= nil
+			Record.Frame.Visible = Match
+			Found = Found or (Match and Query ~= "")
+		end
+		Tab.Found = Found
+		Tab:Paint()
+		Utility.Relayout(Tab.Left)
+		Utility.Relayout(Tab.Right)
+	end
+end
+
+function WindowClass:Category(Name)
+	local Category = setmetatable({ Window = self, Tabs = {}, Name = Name }, CategoryClass)
+	local Holder = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 37),
+		LayoutOrder = #self.Categories + 1,
+		Parent = self.CategoryList,
+	})
+	Utility.Paint(Utility.Label({
+		Text = Name,
+		Position = UDim2.fromOffset(18, 0),
+		Size = UDim2.new(1, -36, 0, 17),
+		Parent = Holder,
+	}), "TextColor3", "Header")
+	Utility.Paint(Utility.Create("Frame", {
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(18, 18),
+		Size = UDim2.fromOffset(87, 2),
+		Parent = Holder,
+	}), "BackgroundColor3", "Line")
+	Category.List = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 25),
+		Size = UDim2.new(1, 0, 1, -37),
+		Parent = Holder,
+	})
+	Utility.List(Category.List)
+	Category.Holder = Holder
+	table.insert(self.Categories, Category)
+	return Category
+end
+
+function CategoryClass:Tab(Name)
+	return self.Window:Tab(self, Name)
+end
+
+function WindowClass:Tab(Category, Name)
+	local Tab = setmetatable({
+		Window = self,
+		Category = Category,
+		Name = Name,
+		Sections = {},
+		Rows = {},
+		Token = 0,
+		Found = false,
+	}, TabClass)
+	local Button = Utility.Button({
+		Size = UDim2.new(1, 0, 0, 19),
+		LayoutOrder = #Category.Tabs + 1,
+		Parent = Category.List,
+	})
+	Tab.Bar = Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 18, 0.5, 0),
+		Size = UDim2.fromOffset(2, 0),
+		BackgroundColor3 = Theme.Text,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Parent = Button,
+	})
+	Tab.Label = Utility.Label({
+		Text = Name,
+		Position = UDim2.fromOffset(18, 0),
+		Size = UDim2.new(1, -24, 1, 0),
+		TextColor3 = Theme.Tab,
+		Parent = Button,
+	})
+	Tab.Button = Button
+	Button.MouseEnter:Connect(function()
+		if self.Active ~= Tab then
+			Utility.Tween(Tab.Label, Tweens.Fast, { TextColor3 = Theme.TabHover })
+		end
+	end)
+	Button.MouseLeave:Connect(function()
+		Tab:Paint()
+	end)
+	Button.MouseButton1Click:Connect(function()
+		self:Select(Tab)
+	end)
+
+	Tab.Page = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Visible = false,
+		Parent = self.Pages,
+	})
+	Tab.Left = Utility.Column(Tab.Page, 1, self.Height - 16)
+	Tab.Right = Utility.Column(Tab.Page, 2, self.Height - 16)
+
+	table.insert(Category.Tabs, Tab)
+	table.insert(self.Tabs, Tab)
+	Category.Holder.Size = UDim2.new(1, 0, 0, 37 + #Category.Tabs * 19)
+	if not self.Active then
+		self:Select(Tab, true)
+	end
+	return Tab
+end
+
+function WindowClass:Select(Tab, Instant)
+	if self.Active == Tab then
+		return
+	end
+	local Previous = self.Active
+	self.Active = Tab
+	Library:Collapse()
+	if Previous then
+		Previous:Paint()
+		Previous:Fade(false)
+	end
+	Tab:Paint(Instant)
+	Tab:Fade(true, Instant)
+end
+
+function TabClass:Paint(Instant)
+	local Active = self.Window.Active == self
+	local Info = Instant and Tweens.Instant or Tweens.Smooth
+	local Color = Active and Theme.Text or (self.Found and Theme.Bright or Theme.Tab)
+	Utility.Tween(self.Label, Info, { TextColor3 = Color, Position = UDim2.fromOffset(Active and 24 or 18, 0) })
+	Utility.Tween(self.Bar, Info, { BackgroundTransparency = Active and 0 or 1, Size = UDim2.fromOffset(2, Active and 13 or 0) })
+end
+
+function TabClass:Fade(State, Instant)
+	self.Token += 1
+	local Token = self.Token
+	if State then
+		self.Page.Visible = true
+		for Index, Section in self.Sections do
+			if Instant then
+				Section.Holder.GroupTransparency = 0
+			else
+				Section.Holder.GroupTransparency = 1
+				task.delay(0.06 + (Index - 1) * 0.045, function()
+					if self.Token == Token then
+						Utility.Tween(Section.Holder, Tweens.Slow, { GroupTransparency = 0 })
+					end
+				end)
+			end
+		end
+	else
+		for Index, Section in self.Sections do
+			Utility.Tween(Section.Holder, Tweens.Fast, { GroupTransparency = 1 })
+		end
+		task.delay(0.15, function()
+			if self.Token == Token then
+				self.Page.Visible = false
+			end
+		end)
+	end
+end
+
+function TabClass:Section(Options)
+	Options = Options or {}
+	local Right = Options.Side == 2 or Options.Side == "Right"
+	local Column = Right and self.Right or self.Left
+	local Section = setmetatable({
+		Tab = self,
+		Window = self.Window,
+		Column = Column,
+		Name = Options.Name or "section",
+		Fixed = typeof(Options.Size) == "number" and Options.Size or nil,
+		Auto = Options.Size == "Auto",
+		Bottom = Options.Bottom == true,
+		Rows = {},
+		Count = 0,
+		Height = 40,
+	}, Container)
+	local Order = (#Column.Sections + 1) * 2
+	local Holder = Utility.Create("CanvasGroup", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 49),
+		LayoutOrder = Order,
+		Parent = Column.Frame,
+	})
+	local Box = Utility.Create("Frame", {
+		BackgroundColor3 = Theme.Section,
+		Position = UDim2.fromOffset(1, 8),
+		Size = UDim2.new(1, -2, 1, -9),
+		Parent = Holder,
+	})
+	Utility.Corner(Box, 4)
+	Utility.Stroke(Box, Theme.Border, 1)
+	Utility.Header(Holder, Section.Name, 8)
+	local Content = Utility.Paint(Utility.Create("ScrollingFrame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 2,
+		ScrollBarImageTransparency = 0.4,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ElasticBehavior = Enum.ElasticBehavior.Never,
+		Parent = Box,
+	}), "ScrollBarImageColor3", "Accent")
+	Utility.Padding(Content, 9, 13, 8, 13)
+	Utility.List(Content)
+	Section.Holder = Holder
+	Section.Box = Box
+	Section.Content = Content
+	if Section.Bottom then
+		Column.Spacer.LayoutOrder = Order - 1
+	end
+	table.insert(Column.Sections, Section)
+	table.insert(self.Sections, Section)
+	Utility.Relayout(Column)
+	return Section
+end
+
+function Library:Hotkeys(Options)
+	if self.HotkeyList then
+		return self.HotkeyList
+	end
+	Options = Options or {}
+	local Gui = self:Screen()
+	local Holder = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = Options.Position or UDim2.new(0, 20, 0.5, -11),
+		Size = UDim2.fromOffset(160, 23),
+		ZIndex = 10,
+		Parent = Gui,
+	})
+	local Header = Utility.Create("Frame", {
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 23),
+		BackgroundColor3 = Color3.fromRGB(12, 12, 14),
+		BackgroundTransparency = 0.04,
+		Parent = Holder,
+	})
+	Utility.Corner(Header, 5)
+	Utility.Stroke(Header, Color3.fromRGB(36, 36, 40), 1)
+	Utility.Padding(Header, 0, 9, 0, 8)
+	Utility.List(Header, {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 7),
+	})
+	Icons.Keyboard(Header, Theme.Muted, { LayoutOrder = 1 })
+	Utility.Create("Frame", {
+		BorderSizePixel = 0,
+		BackgroundColor3 = Color3.fromRGB(70, 70, 74),
+		Size = UDim2.fromOffset(1, 12),
+		LayoutOrder = 2,
+		Parent = Header,
+	})
+	Utility.Label({
+		Text = "hotkeys",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 23),
+		TextSize = 15,
+		TextColor3 = Theme.White,
+		LayoutOrder = 3,
+		Parent = Header,
+	})
+	local Entries = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 30),
+		Size = UDim2.fromOffset(160, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = Holder,
+	})
+	Utility.List(Entries, { Padding = UDim.new(0, 7) })
+	Utility.Drag(Header, Holder)
+	self.HotkeyList = { Holder = Holder, Entries = Entries, Pills = {}, Pending = false }
+	self:RefreshHotkeys()
+	return self.HotkeyList
+end
+
+function Library:RefreshHotkeys()
+	local List = self.HotkeyList
+	if not List or List.Pending then
+		return
+	end
+	List.Pending = true
+	task.defer(function()
+		List.Pending = false
+		for Index, Pill in List.Pills do
+			Pill:Destroy()
+		end
+		List.Pills = {}
+		for Index, Bind in self.Keybinds do
+			local Target = Bind.Target
+			if Target and typeof(Bind.Value) == "EnumItem" and (Target.Value or Bind.Mode == "Always") then
+				local Pill = Utility.Create("Frame", {
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.fromOffset(0, 19),
+					BackgroundColor3 = Theme.Pill,
+					BackgroundTransparency = 0.3,
+					LayoutOrder = Index,
+					Parent = List.Entries,
+				})
+				Utility.Corner(Pill, 4)
+				Utility.Padding(Pill, 0, 6, 0, 4)
+				Utility.Label({
+					RichText = true,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.fromOffset(0, 19),
+					TextColor3 = Color3.fromRGB(206, 212, 214),
+					Text = string.format('<font color="%s">[%s]</font>%s', Utility.Rgb(Theme.Key), Utility.Escape(Utility.KeyName(Bind.Value)), Utility.Escape(Target.Name)),
+					Parent = Pill,
+				})
+				table.insert(List.Pills, Pill)
+			end
+		end
+	end)
+end
+
+function Library:TargetHud(Options)
+	if self.Hud then
+		return self.Hud
+	end
+	Options = Options or {}
+	local Gui = self:Screen()
+	local Hud = {}
+	local Card = Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(0, 1),
+		Position = Options.Position or UDim2.new(0, 152, 1, -164),
+		Size = UDim2.fromOffset(377, 163),
+		BackgroundColor3 = Theme.Card,
+		Visible = Options.Visible ~= false,
+		ZIndex = 2,
+		Parent = Gui,
+	})
+	Utility.Corner(Card, 10)
+	Utility.Stroke(Card, Theme.White, 1, 0.92)
+	Hud.Card = Card
+	Hud.Avatar = Utility.Create("ImageLabel", {
+		Position = UDim2.fromOffset(15, 15),
+		Size = UDim2.fromOffset(81, 81),
+		BackgroundColor3 = Color3.fromRGB(29, 29, 29),
+		Image = "",
+		ScaleType = Enum.ScaleType.Crop,
+		Parent = Card,
+	})
+	Utility.Corner(Hud.Avatar, 8)
+	Hud.Name = Utility.Label({
+		Text = "No Target",
+		FontFace = Fonts.Hud,
+		TextSize = 20,
+		TextColor3 = Theme.White,
+		Position = UDim2.fromOffset(113, 17),
+		Size = UDim2.new(1, -200, 0, 22),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = Card,
+	})
+	Hud.User = Utility.Label({
+		Text = "@N/A",
+		FontFace = Fonts.HudRegular,
+		TextSize = 15,
+		TextColor3 = Color3.fromRGB(122, 122, 122),
+		Position = UDim2.fromOffset(113, 40),
+		Size = UDim2.new(1, -130, 0, 16),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = Card,
+	})
+	local Status = Utility.Create("Frame", {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -17, 0, 19),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 18),
+		BackgroundTransparency = 1,
+		Parent = Card,
+	})
+	Utility.List(Status, {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 5),
+	})
+	Hud.Dot = Utility.Create("Frame", {
+		Size = UDim2.fromOffset(5, 5),
+		BackgroundColor3 = Color3.fromRGB(140, 140, 140),
+		BorderSizePixel = 0,
+		LayoutOrder = 1,
+		Parent = Status,
+	})
+	Utility.Corner(Hud.Dot, UDim.new(1, 0))
+	Hud.Status = Utility.Label({
+		Text = "WAIT",
+		FontFace = Fonts.Hud,
+		TextSize = 14,
+		TextColor3 = Color3.fromRGB(150, 150, 150),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 18),
+		LayoutOrder = 2,
+		Parent = Status,
+	})
+	local Bar = Utility.Create("Frame", {
+		Position = UDim2.fromOffset(113, 68),
+		Size = UDim2.new(1, -130, 0, 5),
+		BackgroundColor3 = Color3.fromRGB(34, 34, 34),
+		BorderSizePixel = 0,
+		Parent = Card,
+	})
+	Utility.Corner(Bar, UDim.new(1, 0))
+	Hud.Fill = Utility.Paint(Utility.Create("Frame", {
+		Size = UDim2.fromScale(0, 1),
+		BorderSizePixel = 0,
+		Parent = Bar,
+	}), "BackgroundColor3", "Accent")
+	Utility.Corner(Hud.Fill, UDim.new(1, 0))
+	Hud.Weapon = Utility.Label({
+		Text = "Weapon: None",
+		FontFace = Fonts.HudRegular,
+		TextSize = 14,
+		TextColor3 = Color3.fromRGB(160, 160, 160),
+		Position = UDim2.fromOffset(113, 89),
+		Size = UDim2.new(0.5, -50, 0, 16),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = Card,
+	})
+	Hud.Distance = Utility.Label({
+		Text = "Dist: 0m",
+		FontFace = Fonts.HudRegular,
+		TextSize = 14,
+		TextColor3 = Color3.fromRGB(160, 160, 160),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -24, 0, 89),
+		Size = UDim2.fromOffset(150, 16),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = Card,
+	})
+	local Buttons = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 118),
+		Size = UDim2.new(1, -24, 0, 33),
+		Parent = Card,
+	})
+	Utility.List(Buttons, { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5) })
+	local Definitions = Options.Buttons or {}
+	local Total = math.max(#Definitions, 1)
+	for Index, Definition in Definitions do
+		local Button = Utility.Button({
+			Size = UDim2.new(1 / Total, -5 * (Total - 1) / Total, 1, 0),
+			BackgroundColor3 = Theme.CardButton,
+			BackgroundTransparency = 0,
+			LayoutOrder = Index,
+			Parent = Buttons,
+		})
+		Utility.Corner(Button, 7)
+		Utility.Label({
+			Text = string.upper(Definition.Name or "button"),
+			FontFace = Fonts.HudHeavy,
+			TextSize = 14,
+			TextColor3 = Color3.fromRGB(232, 232, 232),
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Size = UDim2.fromScale(1, 1),
+			Parent = Button,
+		})
+		Button.MouseEnter:Connect(function()
+			Utility.Tween(Button, Tweens.Fast, { BackgroundColor3 = Theme.CardHover })
+		end)
+		Button.MouseLeave:Connect(function()
+			Utility.Tween(Button, Tweens.Fast, { BackgroundColor3 = Theme.CardButton })
+		end)
+		Button.MouseButton1Click:Connect(function()
+			if Definition.Callback then
+				task.spawn(Definition.Callback)
+			end
+		end)
+	end
+
+	function Hud:Update(Data)
+		Data = Data or {}
+		if Data.Name then
+			self.Name.Text = Data.Name
+		end
+		if Data.User then
+			self.User.Text = "@" .. Data.User
+		end
+		if Data.Weapon then
+			self.Weapon.Text = "Weapon: " .. Data.Weapon
+		end
+		if Data.Distance then
+			self.Distance.Text = "Dist: " .. math.round(Data.Distance) .. "m"
+		end
+		if Data.Status then
+			self.Status.Text = string.upper(Data.Status)
+		end
+		if Data.Health then
+			Utility.Tween(self.Fill, Tweens.Smooth, { Size = UDim2.fromScale(math.clamp(Data.Health, 0, 1), 1) })
+		end
+		if Data.Image then
+			self.Avatar.Image = Data.Image
+		elseif Data.UserId then
+			task.spawn(function()
+				local Success, Image = pcall(Players.GetUserThumbnailAsync, Players, Data.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+				if Success then
+					self.Avatar.Image = Image
+				end
+			end)
+		elseif Data.Clear then
+			self.Avatar.Image = ""
+		end
+	end
+
+	function Hud:Show(State)
+		self.Card.Visible = State
+	end
+
+	Utility.Drag(Card, Card)
+	self.Hud = Hud
+	return Hud
+end
+
+function Library:Encode()
+	local Data = {}
+	for Flag, Element in self.Elements do
+		if Element.Encode then
+			Data[Flag] = Element:Encode()
+		end
+	end
+	return Data
+end
+
+function Library:ConfigPath(Name)
+	return self.Folder .. "/" .. Name .. ".json"
+end
+
+function Library:SaveConfig(Name)
+	if not Name or Name == "" then
+		return false
+	end
+	local Payload = HttpService:JSONEncode({
+		Creator = LocalPlayer.Name,
+		Updated = os.date("%m/%d/%y"),
+		Flags = self:Encode(),
+	})
+	if writefile then
+		if isfolder and makefolder and not isfolder(self.Folder) then
+			makefolder(self.Folder)
+		end
+		writefile(self:ConfigPath(Name), Payload)
+	else
+		self.MemoryConfigs[Name] = Payload
+	end
+	return true
+end
+
+function Library:ReadConfig(Name)
+	local Payload = self.MemoryConfigs[Name]
+	if readfile and isfile and isfile(self:ConfigPath(Name)) then
+		Payload = readfile(self:ConfigPath(Name))
+	end
+	if not Payload then
+		return nil
+	end
+	local Success, Data = pcall(HttpService.JSONDecode, HttpService, Payload)
+	return Success and Data or nil
+end
+
+function Library:LoadConfig(Name)
+	local Data = self:ReadConfig(Name)
+	if not Data then
+		return false
+	end
+	for Flag, Value in Data.Flags or {} do
+		local Element = self.Elements[Flag]
+		if Element and Element.Load then
+			pcall(Element.Load, Element, Value)
+		end
+	end
+	return true
+end
+
+function Library:DeleteConfig(Name)
+	if delfile and isfile and isfile(self:ConfigPath(Name)) then
+		delfile(self:ConfigPath(Name))
+	end
+	self.MemoryConfigs[Name] = nil
+end
+
+function Library:GetConfigs()
+	local Names = {}
+	if listfiles and isfolder and isfolder(self.Folder) then
+		for Index, Path in listfiles(self.Folder) do
+			local Name = string.match(Path, "([^/\\]+)%.json$")
+			if Name then
+				table.insert(Names, Name)
+			end
+		end
+	end
+	for Name in self.MemoryConfigs do
+		if not table.find(Names, Name) then
+			table.insert(Names, Name)
+		end
+	end
+	table.sort(Names)
+	return Names
+end
+
+function Library:Unload()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+	self.Connections = {}
+	self.Keybinds = {}
+	self.Popups = {}
+	self.Windows = {}
+	self.Listening = nil
+	self.Dragger = nil
+	self.HotkeyList = nil
+	self.Hud = nil
+	if self.Gui then
+		self.Gui:Destroy()
+		self.Gui = nil
+	end
+end
+
+-- // Menu
+local Window = Library:Window({ Title = "aural", Subtitle = "ff3", Glyph = "a" })
+Library:Hotkeys()
+
+local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local function PlayerNames()
+	local Names = {}
+	for Index, Player in Players:GetPlayers() do
+		table.insert(Names, Player.Name)
+	end
+	table.sort(Names)
+	return Names
+end
+
+local ThrowProfiles = { "Dime", "Dive", "Mag", "Dot", "Bullet", "Fade" }
+local CurrentThrowIndex = table.find(ThrowProfiles, Aural.QbAimbot.ThrowProfile) or 1
+
+local CatchingCategory = Window:Category("catching")
+local OffenseCategory = Window:Category("offense")
+local DefenseCategory = Window:Category("defense")
+local MovementCategory = Window:Category("movement")
+local MiscCategory = Window:Category("misc.")
+
+-- // Catching
+do
+	local Page = CatchingCategory:Tab("magnets")
+
+	local Magnets = Page:Section({ Name = "magnets" })
+	Magnets:Toggle({ Name = "magnets", Default = Aural.Catching.Magnets, Callback = function(V) Aural.Catching.Magnets = V end }):Keybind({})
+	Magnets:Toggle({ Name = "show magnet hitbox", Default = Aural.Catching.ShowMagHitbox, Callback = function(V) Aural.Catching.ShowMagHitbox = V end })
+	Magnets:Slider({ Name = "magnet radius", Min = 0, Max = 25, Default = Aural.Catching.CustomizableRadius, Callback = function(V) Aural.Catching.CustomizableRadius = V end })
+	Magnets:Slider({ Name = "magnet delay", Min = 0, Max = 5, Default = Aural.Catching.CustomizableDelay, Step = 0.1, Callback = function(V) Aural.Catching.CustomizableDelay = V end })
+	Magnets:Slider({ Name = "tween speed", Min = 0, Max = 20, Default = Aural.Catching.TweenSpeed, Callback = function(V) Aural.Catching.TweenSpeed = V end })
+	Magnets:Toggle({ Name = "pull vector", Default = Aural.Catching.PullVector, Callback = function(V) Aural.Catching.PullVector = V end }):Keybind({})
+	Magnets:Dropdown({ Name = "pull vector mode", Options = { "Drag", "Instant" }, Default = Aural.Catching.PullVectorMode, Callback = function(V) Aural.Catching.PullVectorMode = V end })
+	Magnets:Slider({ Name = "pull vector speed", Min = 0, Max = 100, Default = Aural.Catching.PullVectorSpeed, Callback = function(V) Aural.Catching.PullVectorSpeed = V end })
+	Magnets:Slider({ Name = "pull vector radius", Min = 0, Max = 35, Default = Aural.Catching.PullVectorRadius, Callback = function(V) Aural.Catching.PullVectorRadius = V end })
+	Magnets:Toggle({ Name = "dive vector", Default = Aural.Catching.DiveVector, Callback = function(V) Aural.Catching.DiveVector = V end }):Keybind({})
+	Magnets:Slider({ Name = "dive vector speed", Min = 20, Max = 80, Default = Aural.Catching.DiveVectorSpeed, Callback = function(V) Aural.Catching.DiveVectorSpeed = V end })
+	Magnets:Slider({ Name = "dive vector radius", Min = 0, Max = 100, Default = Aural.Catching.DiveVectorRadius, Callback = function(V) Aural.Catching.DiveVectorRadius = V end })
+	Magnets:Slider({ Name = "dive vector distance", Min = 1, Max = 3, Default = Aural.Catching.DiveVectorDistance, Step = 0.1, Suffix = "x", Callback = function(V) Aural.Catching.DiveVectorDistance = V end })
+
+	local Enhance = Page:Section({ Name = "enhancements", Side = 2 })
+	Enhance:Toggle({ Name = "magnet enhancer", Default = Aural.Catching.MagEnhancer, Callback = function(V) Aural.Catching.MagEnhancer = V end })
+	Enhance:Slider({ Name = "enhancer multiplier", Min = 1, Max = 5, Default = Aural.Catching.MagEnhancerMultiplier, Callback = function(V) Aural.Catching.MagEnhancerMultiplier = V end })
+
+	if IsMobile then
+		Magnets:Button({ Name = "toggle magnets", Callback = function() Aural.Catching.Magnets = not Aural.Catching.Magnets end })
+		Magnets:Button({ Name = "toggle pull vector", Callback = function() Aural.Catching.PullVector = not Aural.Catching.PullVector end })
+		Magnets:Button({ Name = "toggle dive vector", Callback = function() Aural.Catching.DiveVector = not Aural.Catching.DiveVector end })
+	end
+end
+
+-- // Automatics
+do
+	local Page = CatchingCategory:Tab("automatics")
+
+	local Main = Page:Section({ Name = "main" })
+	Main:Toggle({ Name = "auto qb", Default = Aural.Automatics.AutoQb, Callback = function(V) Aural.Automatics.AutoQb = V end }):Keybind({})
+	Main:Dropdown({ Name = "auto qb type", Options = { "Legit", "Rage", "Precise" }, Default = Aural.Automatics.AutoQbType, Callback = function(V) Aural.Automatics.AutoQbType = V end })
+	Main:Toggle({ Name = "auto captain", Default = Aural.Automatics.AutoCaptain, Callback = function(V) Aural.Automatics.AutoCaptain = V end })
+	Main:Toggle({ Name = "auto catch", Default = Aural.Automatics.AutoCatch, Callback = function(V) Aural.Automatics.AutoCatch = V end }):Keybind({})
+	Main:Slider({ Name = "catch radius", Min = 0, Max = 100, Default = Aural.Automatics.AutoCatchRadius, Callback = function(V) Aural.Automatics.AutoCatchRadius = V end })
+	Main:Toggle({ Name = "auto jump", Default = Aural.Automatics.AutoJump, Callback = function(V) Aural.Automatics.AutoJump = V end }):Keybind({})
+	Main:Slider({ Name = "auto jump radius", Min = 0, Max = 50, Default = Aural.Automatics.AutoJumpRadius, Callback = function(V) Aural.Automatics.AutoJumpRadius = V end })
+	Main:Slider({ Name = "auto jump height", Min = 0, Max = 30, Default = Aural.Automatics.AutoJumpHeight, Callback = function(V) Aural.Automatics.AutoJumpHeight = V end })
+	Main:Toggle({ Name = "auto guard", Default = Aural.Automatics.AutoGuard, Callback = function(V) Aural.Automatics.AutoGuard = V end }):Keybind({ Default = Enum.KeyCode.G })
+	Main:Slider({ Name = "guard radius", Min = 0, Max = 50, Default = Aural.Automatics.AutoGuardRadius, Callback = function(V) Aural.Automatics.AutoGuardRadius = V end })
+	Main:Toggle({ Name = "auto block", Default = Aural.Automatics.AutoBlock, Callback = function(V) Aural.Automatics.AutoBlock = V end }):Keybind({})
+	Main:Slider({ Name = "block radius", Min = 2, Max = 20, Default = Aural.Automatics.AutoBlockRadius, Callback = function(V) Aural.Automatics.AutoBlockRadius = V end })
+
+	local Swat = Page:Section({ Name = "swat & kick", Side = 2 })
+	Swat:Toggle({ Name = "auto swat", Default = Aural.Automatics.AutoSwat, Callback = function(V) Aural.Automatics.AutoSwat = V end }):Keybind({})
+	Swat:Slider({ Name = "swat radius", Min = 0, Max = 100, Default = Aural.Automatics.AutoSwatRadius, Callback = function(V) Aural.Automatics.AutoSwatRadius = V end })
+	Swat:Toggle({ Name = "auto kick", Default = Aural.Automatics.KickerAim, Callback = function(V) Aural.Automatics.KickerAim = V end })
+	Swat:Slider({ Name = "kick power", Min = 0, Max = 100, Default = Aural.Automatics.KickerAimPower, Suffix = "%", Callback = function(V) Aural.Automatics.KickerAimPower = V end })
+	Swat:Slider({ Name = "kick accuracy", Min = 0, Max = 100, Default = Aural.Automatics.KickerAimAccuracy, Suffix = "%", Callback = function(V) Aural.Automatics.KickerAimAccuracy = V end })
+
+	local Rush = Page:Section({ Name = "rush", Side = 2 })
+	Rush:Toggle({ Name = "auto rush", Default = Aural.Automatics.AutoRush, Callback = function(V) Aural.Automatics.AutoRush = V end }):Keybind({})
+	Rush:Slider({ Name = "rush delay", Min = 0, Max = 10, Default = Aural.Automatics.AutoRushDelay, Step = 0.1, Callback = function(V) Aural.Automatics.AutoRushDelay = V end })
+	Rush:Slider({ Name = "rush prediction", Min = 0, Max = 200, Default = Aural.Automatics.AutoRushPrediction, Suffix = "%", Callback = function(V) Aural.Automatics.AutoRushPrediction = V end })
+	Rush:Slider({ Name = "rush accuracy", Min = 0, Max = 100, Default = Aural.Automatics.AutoRushAccuracy, Suffix = "%", Callback = function(V) Aural.Automatics.AutoRushAccuracy = V end })
+
+	if IsMobile then
+		Main:Button({ Name = "toggle auto qb", Callback = function() Aural.Automatics.AutoQb = not Aural.Automatics.AutoQb end })
+		Main:Button({ Name = "toggle auto catch", Callback = function() Aural.Automatics.AutoCatch = not Aural.Automatics.AutoCatch end })
+		Main:Button({ Name = "toggle auto jump", Callback = function() Aural.Automatics.AutoJump = not Aural.Automatics.AutoJump end })
+		Main:Button({ Name = "toggle auto guard", Callback = function() Aural.Automatics.AutoGuard = not Aural.Automatics.AutoGuard end })
+		Main:Button({ Name = "toggle auto block", Callback = function() Aural.Automatics.AutoBlock = not Aural.Automatics.AutoBlock end })
+		Swat:Button({ Name = "toggle auto swat", Callback = function() Aural.Automatics.AutoSwat = not Aural.Automatics.AutoSwat end })
+		Rush:Button({ Name = "toggle auto rush", Callback = function() Aural.Automatics.AutoRush = not Aural.Automatics.AutoRush end })
+	end
+end
+
+-- // QB Aimbot
+do
+	local Page = OffenseCategory:Tab("qb aimbot")
+
+	local ThrowProfileDropdown
+
+	local Throw = Page:Section({ Name = "throw config" })
+	Throw:Toggle({ Name = "qb aimbot", Default = Aural.QbAimbot.Enabled, Callback = function(V)
+		Aural.QbAimbot.Enabled = V
+		Aural.QbAimbot.TargetLock = false
+		Aural.QbAimbot.LockedTarget = nil
+	end }):Keybind({})
+	Throw:Toggle({ Name = "auto angle", Default = Aural.QbAimbot.AutoAngle, Callback = function(V) Aural.QbAimbot.AutoAngle = V end })
+	Throw:Toggle({ Name = "auto power", Default = Aural.QbAimbot.AutoPower, Callback = function(V) Aural.QbAimbot.AutoPower = V end })
+	Throw:Toggle({ Name = "angle based", Default = Aural.QbAimbot.AngleBased, Callback = function(V) Aural.QbAimbot.AngleBased = V end })
+	Throw:Slider({ Name = "desired angle", Min = 5, Max = 90, Default = Aural.QbAimbot.DesiredAngle, Callback = function(V) Aural.QbAimbot.DesiredAngle = V end })
+	Throw:Slider({ Name = "max air time", Min = 1, Max = 20, Default = Aural.QbAimbot.MaxAirTime, Callback = function(V) Aural.QbAimbot.MaxAirTime = V end })
+	Throw:Toggle({ Name = "auto choose throw type", Default = Aural.QbAimbot.AutoChooseThrowType, Callback = function(V) Aural.QbAimbot.AutoChooseThrowType = V end })
+	ThrowProfileDropdown = Throw:Dropdown({ Name = "throw profile", Options = ThrowProfiles, Default = Aural.QbAimbot.ThrowProfile, Callback = function(V)
+		Aural.QbAimbot.ThrowProfile = V
+		CurrentThrowIndex = table.find(ThrowProfiles, V) or 1
+	end })
+	Throw:Toggle({ Name = "trajectory beam", Default = Aural.QbAimbot.BeamMode, Callback = function(V) Aural.QbAimbot.BeamMode = V end })
+	Throw:Toggle({ Name = "fastest throw", Default = Aural.QbAimbot.FastestThrow, Callback = function(V) Aural.QbAimbot.FastestThrow = V end })
+	Throw:Dropdown({ Name = "power mode", Options = { "Normal", "Highest Power", "95 Power" }, Default = "Normal", Callback = function(V)
+		Aural.QbAimbot.HighestPowerMode = (V == "Highest Power")
+		Aural.QbAimbot.Use95PowerMode = (V == "95 Power")
+	end })
+	Throw:Slider({ Name = "normal power", Min = 0, Max = 95, Default = Aural.QbAimbot.NormalPower, Callback = function(V) Aural.QbAimbot.NormalPower = V end })
+
+	local Target = Page:Section({ Name = "targeting", Side = 2 })
+	Target:Slider({ Name = "fov", Min = 0, Max = 1000, Default = Aural.QbAimbot.Fov, Callback = function(V) Aural.QbAimbot.Fov = V end })
+	Target:Dropdown({ Name = "target priority", Options = { "Closest To Mouse", "Most Open", "Furthest Downfield" }, Default = Aural.QbAimbot.TargetPriority, Callback = function(V)
+		Aural.QbAimbot.TargetPriority = V
+		Aural.QbAimbot.LockedTarget = nil
+	end })
+	Target:Slider({ Name = "throw angle", Min = 0, Max = 85, Default = Aural.QbAimbot.ThrowAngle, Callback = function(V) Aural.QbAimbot.ThrowAngle = V end })
+	Target:Slider({ Name = "bullet angle", Min = 0, Max = 40, Default = Aural.QbAimbot.BulletAngle, Callback = function(V) Aural.QbAimbot.BulletAngle = V end })
+
+	local Lead = Page:Section({ Name = "lead & field", Side = 2 })
+	Lead:Slider({ Name = "vertical lead", Min = 0, Max = 15, Default = Aural.QbAimbot.VerticalLead, Step = 0.25, Callback = function(V) Aural.QbAimbot.VerticalLead = V end })
+	Lead:Slider({ Name = "lead in front", Min = 0, Max = 10, Default = Aural.QbAimbot.HorizontalLead, Step = 0.5, Suffix = " studs", Callback = function(V) Aural.QbAimbot.HorizontalLead = V end })
+	Lead:Toggle({ Name = "anti oob", Default = Aural.QbAimbot.AntiOob, Callback = function(V) Aural.QbAimbot.AntiOob = V end })
+	Lead:Slider({ Name = "anti oob inset", Min = 0, Max = 15, Default = Aural.QbAimbot.AntiOobInset, Callback = function(V) Aural.QbAimbot.AntiOobInset = V end })
+	Lead:Slider({ Name = "field margin", Min = 0, Max = 30, Default = Aural.QbAimbot.FieldMargin, Callback = function(V) Aural.QbAimbot.FieldMargin = V end })
+	Lead:Slider({ Name = "custom lead", Min = 0, Max = 100, Default = Aural.QbAimbot.CustomLead, Callback = function(V) Aural.QbAimbot.CustomLead = V end })
+	Lead:ColorPicker({ Name = "prediction color", Default = Aural.QbAimbot.PredictionColor, Callback = function(V) Aural.QbAimbot.PredictionColor = V end })
+
+	local Extras = Page:Section({ Name = "extras", Side = 2 })
+	Extras:Toggle({ Name = "receiver esp", Default = Aural.QbAimbot.ReceiverEsp, Callback = function(V) Aural.QbAimbot.ReceiverEsp = V end })
+	Extras:Toggle({ Name = "show routes", Default = Aural.QbAimbot.ShowRoutes, Callback = function(V) Aural.QbAimbot.ShowRoutes = V end })
+	Extras:Toggle({ Name = "show distance", Default = Aural.QbAimbot.ShowDistance, Callback = function(V) Aural.QbAimbot.ShowDistance = V end })
+
+	local function AdjustAngle(Delta)
+		local Key = Aural.QbAimbot.AngleBased and "DesiredAngle" or "ThrowAngle"
+		Aural.QbAimbot[Key] = math.clamp(Aural.QbAimbot[Key] + Delta, 5, 85)
+	end
+
+	-- // QB Aimbot Keybinds (Q = target lock, Z = cycle throw type, R = angle increase, F = angle decrease)
+	if not IsMobile then
+		UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+			if GameProcessed then return end
+			if not Aural.QbAimbot.Enabled then return end
+
+			if Input.KeyCode == Enum.KeyCode.Q then
+				Aural.QbAimbot.TargetLock = not Aural.QbAimbot.TargetLock
+				if not Aural.QbAimbot.TargetLock then
+					Aural.QbAimbot.LockedTarget = nil
+				end
+			elseif Input.KeyCode == Enum.KeyCode.Z then
+				CurrentThrowIndex = (CurrentThrowIndex % #ThrowProfiles) + 1
+				Aural.QbAimbot.ThrowProfile = ThrowProfiles[CurrentThrowIndex]
+				if ThrowProfileDropdown then
+					ThrowProfileDropdown:Update(ThrowProfiles[CurrentThrowIndex])
+				end
+			elseif Input.KeyCode == Enum.KeyCode.R then
+				AdjustAngle(5)
+			elseif Input.KeyCode == Enum.KeyCode.F then
+				AdjustAngle(-5)
+			end
+		end)
+	else
+		Throw:Button({ Name = "toggle target lock [Q]", Callback = function()
+			Aural.QbAimbot.TargetLock = not Aural.QbAimbot.TargetLock
+			if not Aural.QbAimbot.TargetLock then
+				Aural.QbAimbot.LockedTarget = nil
+			end
+		end })
+		Throw:Button({ Name = "cycle throw type [Z]", Callback = function()
+			CurrentThrowIndex = (CurrentThrowIndex % #ThrowProfiles) + 1
+			Aural.QbAimbot.ThrowProfile = ThrowProfiles[CurrentThrowIndex]
+			if ThrowProfileDropdown then
+				ThrowProfileDropdown:Update(ThrowProfiles[CurrentThrowIndex])
+			end
+		end })
+		Throw:Button({ Name = "angle increase [R]", Callback = function()
+			AdjustAngle(5)
+		end })
+		Throw:Button({ Name = "angle decrease [F]", Callback = function()
+			AdjustAngle(-5)
+		end })
+	end
+end
+
+-- // Physics & Defense
+do
+	local Page = DefenseCategory:Tab("physics")
+
+	local Combat = Page:Section({ Name = "combat" })
+	Combat:Toggle({ Name = "click tackle teleport", Default = Aural.Physics.ClickTackleAimbot, Callback = function(V) Aural.Physics.ClickTackleAimbot = V end }):Keybind({})
+	Combat:Slider({ Name = "tackle radius", Min = 0, Max = 15, Default = Aural.Physics.ClickTackleAimbotRadius, Callback = function(V) Aural.Physics.ClickTackleAimbotRadius = V end })
+	Combat:Toggle({ Name = "quick teleport [F]", Default = Aural.Physics.QuickTp, Callback = function(V) Aural.Physics.QuickTp = V end }):Keybind({})
+	Combat:Slider({ Name = "quick teleport distance", Min = 0, Max = 50, Default = Aural.Physics.QuickTpSpeed, Callback = function(V) Aural.Physics.QuickTpSpeed = V end })
+	Combat:Toggle({ Name = "anti block", Default = Aural.Physics.AntiBlock, Callback = function(V) Aural.Physics.AntiBlock = V end })
+	Combat:Toggle({ Name = "anti jam", Default = Aural.Physics.AntiJam, Callback = function(V) Aural.Physics.AntiJam = V end })
+	Combat:Toggle({ Name = "no jump cooldown", Default = Aural.Physics.NoJumpCooldown, Callback = function(V) Aural.Physics.NoJumpCooldown = V end })
+
+	local Defense = Page:Section({ Name = "defense" })
+	Defense:Toggle({ Name = "anti tackle", Default = Aural.Physics.AntiTackle, Callback = function(V) Aural.Physics.AntiTackle = V end }):Keybind({})
+	Defense:Toggle({ Name = "anti down", Default = Aural.Physics.AntiDown, Callback = function(V) Aural.Physics.AntiDown = V end })
+	Defense:Toggle({ Name = "tackle reach", Default = Aural.Physics.TackleReach, Callback = function(V) Aural.Physics.TackleReach = V end })
+	Defense:Slider({ Name = "tackle reach radius", Min = 0, Max = 50, Default = Aural.Physics.TackleReachRadius, Callback = function(V) Aural.Physics.TackleReachRadius = V end })
+	Defense:Toggle({ Name = "swat reach", Default = Aural.Physics.SwatReach, Callback = function(V) Aural.Physics.SwatReach = V end })
+	Defense:Slider({ Name = "swat reach radius", Min = 0, Max = 50, Default = Aural.Physics.SwatReachRadius, Callback = function(V) Aural.Physics.SwatReachRadius = V end })
+
+	local Extended = Page:Section({ Name = "extended", Side = 2 })
+	Extended:Toggle({ Name = "anti oob", Default = Aural.Physics.AntiOob, Callback = function(V) Aural.Physics.AntiOob = V end })
+	Extended:Toggle({ Name = "block extender", Default = Aural.Physics.BlockExtender, Callback = function(V) Aural.Physics.BlockExtender = V end }):Keybind({})
+	Extended:Slider({ Name = "block extender reach", Min = 0, Max = 50, Default = Aural.Physics.BlockExtenderReach, Callback = function(V) Aural.Physics.BlockExtenderReach = V end })
+	Extended:Slider({ Name = "block extender transparency", Min = 0, Max = 1, Default = Aural.Physics.BlockExtenderTransparency, Step = 0.1, Callback = function(V) Aural.Physics.BlockExtenderTransparency = V end })
+	Extended:Toggle({ Name = "reset on catch", Default = Aural.Physics.ResetOnCatch, Callback = function(V) Aural.Physics.ResetOnCatch = V end })
+	Extended:Slider({ Name = "reset on catch duration", Min = 0, Max = 5, Default = Aural.Physics.ResetOnCatchDuration, Step = 0.1, Callback = function(V) Aural.Physics.ResetOnCatchDuration = V end })
+
+	if IsMobile then
+		Combat:Button({ Name = "toggle tackle aimbot", Callback = function() Aural.Physics.ClickTackleAimbot = not Aural.Physics.ClickTackleAimbot end })
+		Combat:Button({ Name = "toggle quick teleport", Callback = function() Aural.Physics.QuickTp = not Aural.Physics.QuickTp end })
+		Defense:Button({ Name = "toggle anti tackle", Callback = function() Aural.Physics.AntiTackle = not Aural.Physics.AntiTackle end })
+		Extended:Button({ Name = "toggle block extender", Callback = function() Aural.Physics.BlockExtender = not Aural.Physics.BlockExtender end })
+	end
+end
+
+-- // Player & Movement
+do
+	local Page = MovementCategory:Tab("player")
+
+	local Movement = Page:Section({ Name = "movement" })
+	Movement:Toggle({ Name = "walkspeed", Default = Aural.Player.WalkSpeed, Callback = function(V) Aural.Player.WalkSpeed = V end }):Keybind({})
+	Movement:Slider({ Name = "walkspeed value", Min = 16, Max = 23, Default = Aural.Player.WalkSpeedValue, Step = 0.5, Callback = function(V) Aural.Player.WalkSpeedValue = V end })
+	Movement:Toggle({ Name = "freeze during pre-play", Default = Aural.Player.FreezeDuringPrePlay, Callback = function(V) Aural.Player.FreezeDuringPrePlay = V end })
+	Movement:Toggle({ Name = "jump power", Default = Aural.Player.JumpPower, Callback = function(V) Aural.Player.JumpPower = V end }):Keybind({})
+	Movement:Slider({ Name = "jump power value", Min = 50, Max = 60, Default = Aural.Player.Jp, Callback = function(V) Aural.Player.Jp = V end })
+	Movement:Toggle({ Name = "angle enhancer", Default = Aural.Player.AngleEnhancer, Callback = function(V) Aural.Player.AngleEnhancer = V end })
+	Movement:Slider({ Name = "angle enhancer value", Min = 50, Max = 70, Default = Aural.Player.AngleEnhancerValue, Callback = function(V) Aural.Player.AngleEnhancerValue = V end })
+	Movement:Toggle({ Name = "cframe speed", Default = Aural.Player.CframeSpeed, Callback = function(V) Aural.Player.CframeSpeed = V end }):Keybind({})
+	Movement:Slider({ Name = "cframe speed value", Min = 0, Max = 100, Default = Aural.Player.CfSpeed, Callback = function(V) Aural.Player.CfSpeed = V end })
+	Movement:Toggle({ Name = "fly", Default = Aural.Player.Fly, Callback = function(V) Aural.Player.Fly = V end }):Keybind({})
+	Movement:Slider({ Name = "fly speed", Min = 0, Max = 200, Default = Aural.Player.FlySpeed, Callback = function(V) Aural.Player.FlySpeed = V end })
+
+	local Enhance = Page:Section({ Name = "enhancements", Side = 2 })
+	Enhance:Toggle({ Name = "boost enhancer", Default = Aural.Player.BoostEnhancer, Callback = function(V) Aural.Player.BoostEnhancer = V end }):Keybind({})
+	Enhance:Slider({ Name = "boost enhancer speed", Min = 16, Max = 23, Default = Aural.Player.BoostEnhancerSpeed, Step = 0.5, Callback = function(V) Aural.Player.BoostEnhancerSpeed = V end })
+	Enhance:Toggle({ Name = "no move restrictions", Default = Aural.Player.NoMoveRestrictions, Callback = function(V) Aural.Player.NoMoveRestrictions = V end })
+	Enhance:Slider({ Name = "hand size", Min = 2, Max = 15, Default = Aural.Player.HandSize, Callback = function(V) Aural.Player.HandSize = V end })
+	Enhance:Toggle({ Name = "show hand hitbox", Default = Aural.Player.ShowHandHitbox, Callback = function(V) Aural.Player.ShowHandHitbox = V end })
+
+	local Gamepass = Page:Section({ Name = "gamepasses", Side = 2 })
+	Gamepass:Toggle({ Name = "unlock all gamepasses", Default = Aural.Gamepasses.UnlockAll, Callback = function(V) Aural.Gamepasses.UnlockAll = V end })
+
+	if IsMobile then
+		Movement:Button({ Name = "toggle walkspeed", Callback = function() Aural.Player.WalkSpeed = not Aural.Player.WalkSpeed end })
+		Movement:Button({ Name = "toggle jump power", Callback = function() Aural.Player.JumpPower = not Aural.Player.JumpPower end })
+		Movement:Button({ Name = "toggle cframe speed", Callback = function() Aural.Player.CframeSpeed = not Aural.Player.CframeSpeed end })
+		Movement:Button({ Name = "toggle fly", Callback = function() Aural.Player.Fly = not Aural.Player.Fly end })
+		Enhance:Button({ Name = "toggle boost enhancer", Callback = function() Aural.Player.BoostEnhancer = not Aural.Player.BoostEnhancer end })
+	end
+end
+
+-- // Visuals
+do
+	local Page = MovementCategory:Tab("visuals")
+
+	local World = Page:Section({ Name = "world" })
+	World:Toggle({ Name = "no textures", Default = Aural.Visuals.NoTextures, Callback = function(V) Aural.Visuals.NoTextures = V end })
+	World:Toggle({ Name = "remove gloves", Default = Aural.Visuals.RemoveGloves, Callback = function(V) Aural.Visuals.RemoveGloves = V end })
+
+	local Ball = Page:Section({ Name = "thrown ball", Side = 2 })
+	Ball:Toggle({ Name = "football trajectory", Default = Aural.Visuals.ThrownBallBeam, Callback = function(V) Aural.Visuals.ThrownBallBeam = V end })
+	Ball:ColorPicker({ Name = "trajectory start color", Default = Aural.Visuals.ThrownBallBeamColor, Callback = function(V) Aural.Visuals.ThrownBallBeamColor = V end })
+	Ball:ColorPicker({ Name = "trajectory end color", Default = Aural.Visuals.ThrownBallBeamColor2, Callback = function(V) Aural.Visuals.ThrownBallBeamColor2 = V end })
+end
+
+-- // Players
+do
+	local Page = MiscCategory:Tab("players")
+
+	local Info = Page:Section({ Name = "player info", Side = 2 })
+	local Display = Info:Info({ Name = "display", Value = "-" })
+	local Identifier = Info:Info({ Name = "user id", Value = "-" })
+	local Age = Info:Info({ Name = "account age", Value = "-" })
+	local TeamInfo = Info:Info({ Name = "team", Value = "-" })
+
+	local Roster = Page:Section({ Name = "player list" })
+	local PlayerList = Roster:List({
+		Name = "players",
+		Items = PlayerNames(),
+		Callback = function(Name)
+			local Player = Players:FindFirstChild(Name)
+			if Player then
+				Display:Update(Player.DisplayName)
+				Identifier:Update(Player.UserId)
+				Age:Update(Player.AccountAge .. " days")
+				TeamInfo:Update(Player.Team and Player.Team.Name or "none")
+			end
+		end,
+	})
+	Utility.Connect(Players.PlayerAdded, function()
+		PlayerList:Refresh(PlayerNames())
+	end)
+	Utility.Connect(Players.PlayerRemoving, function()
+		task.defer(function()
+			PlayerList:Refresh(PlayerNames())
+		end)
+	end)
+end
+
+-- // Configs
+do
+	local Page = MiscCategory:Tab("configs")
+
+	local Configs = Page:Section({ Name = "config list" })
+	local Info = Page:Section({ Name = "config info", Side = 2 })
+	local Creator = Info:Info({ Name = "creator:", Value = "@" .. LocalPlayer.Name })
+	local Updated = Info:Info({ Name = "last updated:", Value = "--/--/--" })
+	local NameBox = Info:Textbox({ Name = "config name", Placeholder = "config name", Flag = false })
+	local ConfigList
+	ConfigList = Configs:List({
+		Name = "configs",
+		Icon = "File",
+		Items = Library:GetConfigs(),
+		Flag = "config list",
+		Callback = function(Name)
+			local Data = Library:ReadConfig(Name)
+			Creator:Update("@" .. (Data and Data.Creator or LocalPlayer.Name))
+			Updated:Update(Data and Data.Updated or "--/--/--")
+		end,
+	})
+	Info:Button({
+		Name = "create config",
+		Callback = function()
+			local Name = NameBox:GetValue()
+			if Library:SaveConfig(Name) then
+				ConfigList:Refresh(Library:GetConfigs())
+				ConfigList:Update(Name)
+			end
+		end,
+	})
+	Info:Button({
+		Name = "delete config",
+		Confirm = true,
+		Callback = function()
+			if ConfigList:GetValue() then
+				Library:DeleteConfig(ConfigList:GetValue())
+				ConfigList:Refresh(Library:GetConfigs())
+			end
+		end,
+	})
+	Info:Button({
+		Name = "update config",
+		Callback = function()
+			if ConfigList:GetValue() then
+				Library:SaveConfig(ConfigList:GetValue())
+				Updated:Update(os.date("%m/%d/%y"))
+			end
+		end,
+	})
+	Info:Button({
+		Name = "load config",
+		Callback = function()
+			if ConfigList:GetValue() then
+				Library:LoadConfig(ConfigList:GetValue())
+			end
+		end,
+	})
+end
+
+-- // Settings
+do
+	local Page = MiscCategory:Tab("settings")
+	Window.Home = Page
+
+	local Menu = Page:Section({ Name = "menu" })
+	Menu:Keybind({
+		Name = "menu key",
+		Default = Library.ToggleKey,
+		Changed = function(Key)
+			Library.ToggleKey = Key
+		end,
+	})
+	Menu:Toggle({
+		Name = "hotkeys list",
+		Default = true,
+		Callback = function(Value)
+			if Library.HotkeyList then
+				Library.HotkeyList.Holder.Visible = Value
+			end
+		end,
+	})
+	Menu:Slider({
+		Name = "ui scale",
+		Min = 60,
+		Max = 140,
+		Default = 100,
+		Suffix = "%",
+		Flag = "menu scale",
+		Callback = function(Value)
+			Window:Rescale(Value / 100)
+		end,
+	})
+	Menu:ColorPicker({
+		Name = "accent",
+		Default = Theme.Accent,
+		Flag = "menu accent",
+		Callback = function(Color)
+			Library:UpdateAccent(Color)
+		end,
+	})
+	Menu:Button({
+		Name = "unload",
+		Confirm = true,
+		Callback = function()
+			Library:Unload()
+		end,
+	})
+
+	local AC = Page:Section({ Name = "anti-cheat", Side = 2 })
+	AC:Toggle({ Name = "debug mode", Default = Aural.AcBypass.DebugMode, Callback = function(V) Aural.AcBypass.DebugMode = V end })
+
+	local About = Page:Section({ Name = "about", Side = 2 })
+	About:Info({ Name = "build", Value = "ff3" })
+	About:Info({ Name = "user", Value = "@" .. LocalPlayer.Name })
+	About:Info({ Name = "place", Value = game.PlaceId })
+end
+
+-- // Football Magnets
+do
+	local MagnetHitbox = nil
+	local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+
+	LocalPlayer.CharacterAdded:Connect(function(Char)
+		LPH_ATTRIBUTES(VM(NONE))
+		Character = Char
+	end)
+
+	local function GetClosestFootball()
+		LPH_ATTRIBUTES(VM(NONE))
+		local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+		if not HumanoidRootPart then
+			return nil
+		end
+
+		local ClosestFootball = nil
+		local ClosestDistance = math.huge
+
+		for Index, Object in next, workspace:GetChildren() do
+			if Object.Name == "Football" and Object:IsA("BasePart") then
+				local Distance = (Object.Position - HumanoidRootPart.Position).Magnitude
+
+				if Distance < ClosestDistance then
+					ClosestFootball = Object
+					ClosestDistance = Distance
+				end
+			end
+		end
+
+		return ClosestFootball
+	end
+
+	local function GetMagnetRadius()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Radius = Aural.Catching.CustomizableRadius
+		if Aural.Catching.MagEnhancer then
+			Radius *= Aural.Catching.MagEnhancerMultiplier
+		end
+		return Radius
+	end
+
+	local function UpdateMagnetHitbox(Football, InRange)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Aural.Catching.ShowMagHitbox or not Football then
+			if MagnetHitbox then
+				MagnetHitbox:Destroy()
+				MagnetHitbox = nil
+			end
+			return
+		end
+		if not MagnetHitbox or not MagnetHitbox.Parent then
+			MagnetHitbox = Instance.new("Part")
+			MagnetHitbox.Name = HttpService:GenerateGUID(false)
+			MagnetHitbox.Shape = Enum.PartType.Ball
+			MagnetHitbox.Material = Enum.Material.ForceField
+			MagnetHitbox.Transparency = 0.7
+			MagnetHitbox.CastShadow = false
+			MagnetHitbox.Anchored = true
+			MagnetHitbox.CanCollide = false
+			MagnetHitbox.CanTouch = false
+			MagnetHitbox.CanQuery = false
+			MagnetHitbox.Parent = workspace
+		end
+		local Radius = GetMagnetRadius()
+		MagnetHitbox.Size = Vector3.new(Radius * 2, Radius * 2, Radius * 2)
+		MagnetHitbox.Position = Football.Position
+		MagnetHitbox.Color = InRange and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(0, 170, 255)
+	end
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Character or not Character.Parent then
+			Character = LocalPlayer.Character
+			if not Character then
+				UpdateMagnetHitbox(nil, false)
+				return
+			end
+		end
+
+		local Football = GetClosestFootball()
+		if not Football then
+			UpdateMagnetHitbox(nil, false)
+			return
+		end
+
+		local CatchLeft = Character:FindFirstChild(IsPractice and "CatchLeft" or "CatchL")
+		local CatchRight = Character:FindFirstChild(IsPractice and "CatchRight" or "CatchR")
+
+		local MagnetsEnabled = Aural.Catching.Magnets
+		local MagnetDistance = GetMagnetRadius()
+
+		local InRange = CatchRight and ((Football.Position - CatchRight.Position).Magnitude <= MagnetDistance) or false
+		UpdateMagnetHitbox(Football, InRange)
+
+		if not CatchLeft or not CatchRight or not MagnetsEnabled then
+			return
+		end
+
+		local Distance = (Football.Position - CatchRight.Position).Magnitude
+
+		if Distance <= MagnetDistance then
+			CatchLeft.Position = Football.Position
+			CatchRight.Position = Football.Position
+		end
+	end)
+
+	-- // Pull Vector
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while true do
+			local Time = task.wait()
+
+			if not Aural.Catching.PullVector then
+				continue
+			end
+
+			local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+			if not HumanoidRootPart then
+				continue
+			end
+
+			local ClosestFootball = GetClosestFootball()
+			if not ClosestFootball then
+				continue
+			end
+
+			local Offset = ClosestFootball.Position - HumanoidRootPart.Position
+			local Distance = Offset.Magnitude
+
+			if Distance > 0 and Distance <= Aural.Catching.PullVectorRadius then
+				local Step = Distance
+				if Aural.Catching.PullVectorMode ~= "Instant" then
+					Step = math.min(Aural.Catching.PullVectorSpeed * Time, Distance)
+				end
+				HumanoidRootPart.CFrame = HumanoidRootPart.CFrame + Offset.Unit * Step
+			end
+		end
+	end)
+
+	-- // Dive Vector
+	local function GetFlightFootball(Origin, Radius)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Closest, ClosestDist = nil, Radius
+		for Index, Football in next, workspace:GetChildren() do
+			if Football.Name == "Football" and Football:IsA("BasePart") then
+				local Configuration = Football:FindFirstChild("Configuration")
+				local Catchable = Configuration and Configuration:FindFirstChild("Catchable")
+				local InFlight = Football.AssemblyLinearVelocity.Magnitude > 5
+				if InFlight and not (Catchable and Catchable.Value == false) then
+					local Dist = (Football.Position - Origin).Magnitude
+					if Dist <= ClosestDist then
+						Closest = Football
+						ClosestDist = Dist
+					end
+				end
+			end
+		end
+		return Closest, ClosestDist
+	end
+
+	-- The replicated velocity is frozen at launch, and only Practice exposes a live one, so the vertical speed is measured from movement.
+	local BallTracks = setmetatable({}, { __mode = "k" })
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Now = os.clock()
+		for Index, Football in next, workspace:GetChildren() do
+			if Football.Name == "Football" and Football:IsA("BasePart") then
+				local Height = Football.Position.Y
+				local Track = BallTracks[Football]
+				if not Track then
+					BallTracks[Football] = { Clock = Now, Height = Height, Vertical = Football.AssemblyLinearVelocity.Y }
+				elseif Now - Track.Clock >= 0.1 and math.abs(Height - Track.Height) > 0.001 then
+					local Elapsed = Now - Track.Clock
+					Track.Vertical = (Height - Track.Height) / Elapsed - 14 * Elapsed
+					Track.Clock = Now
+					Track.Height = Height
+				end
+			end
+		end
+	end)
+
+	local function GetFootballVelocity(Football)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Live = Football:GetAttribute("v")
+		if typeof(Live) == "Vector3" then
+			return Live
+		end
+		local Launch = Football.AssemblyLinearVelocity
+		local Track = BallTracks[Football]
+		if not Track then
+			return Launch
+		end
+		return Vector3.new(Launch.X, Track.Vertical - 28 * (os.clock() - Track.Clock), Launch.Z)
+	end
+
+	local function GetDiveIntercept(Football, Origin, Speed)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Configuration = Football:FindFirstChild("Configuration")
+		local GravityValue = Configuration and Configuration:FindFirstChild("Gravity")
+		local Gravity = Vector3.new(0, GravityValue and GravityValue.Value or -28, 0)
+		local Position = Football.Position
+		local Velocity = GetFootballVelocity(Football)
+
+		local Target = Position
+		for Index = 1, 4 do
+			local Time = math.min((Target - Origin).Magnitude / Speed, 1.5)
+			Target = Position + Velocity * Time + Gravity * (0.5 * Time * Time)
+		end
+		return Vector3.new(Target.X, math.max(Target.Y, 4), Target.Z)
+	end
+
+	local DiveStart = nil
+	local DiveBoosted = false
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+		local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+		local Diving = Humanoid and HumanoidRootPart and Humanoid.PlatformStand and not Character:FindFirstChild("TackleScript")
+		if not Diving then
+			DiveStart = nil
+			DiveBoosted = false
+			return
+		end
+		DiveStart = DiveStart or os.clock()
+
+		if not Aural.Catching.DiveVector then
+			return
+		end
+
+		if not DiveBoosted and os.clock() - DiveStart >= 0.1 then
+			DiveBoosted = true
+			local Velocity = HumanoidRootPart.AssemblyLinearVelocity
+			local Multiplier = Aural.Catching.DiveVectorDistance
+			HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(Velocity.X * Multiplier, Velocity.Y, Velocity.Z * Multiplier)
+		end
+
+		local Hand = Character:FindFirstChild(IsPractice and "CatchRight" or "CatchR") or Character:FindFirstChild("Right Arm") or HumanoidRootPart
+		local Football = GetFlightFootball(Hand.Position, Aural.Catching.DiveVectorRadius)
+		if not Football then
+			return
+		end
+
+		local Speed = Aural.Catching.DiveVectorSpeed
+		local Offset = GetDiveIntercept(Football, Hand.Position, Speed) - Hand.Position
+		if Offset.Magnitude > 0.5 then
+			HumanoidRootPart.AssemblyLinearVelocity = Offset.Unit * Speed
+		end
+	end)
+
+	-- // Auto Catch, Auto Swat & Auto Jump
+	local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	local ActionRemote = Remotes and Remotes:FindFirstChild("CharacterSoundEvent")
+	local Flags = ReplicatedStorage:FindFirstChild("GameState")
+	local LastAction = 0
+
+	local function GetFlag(Name)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Flag = Flags and Flags:FindFirstChild(Name)
+		return Flag and Flag.Value
+	end
+
+	-- // Swat Reach
+	local SwatReachUntil = 0
+
+	local function StartSwatReach()
+		LPH_ATTRIBUTES(VM(NONE))
+		if Aural.Physics.SwatReach then
+			SwatReachUntil = os.clock() + 1
+		end
+	end
+
+	UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not GameProcessed and Input.KeyCode == Enum.KeyCode.R then
+			StartSwatReach()
+		end
+	end)
+
+	if IsMobile then
+		UserInputService.TouchTap:Connect(function(Positions, GameProcessed)
+			LPH_ATTRIBUTES(VM(NONE))
+			local MainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
+			local MobileButtons = MainGui and MainGui:FindFirstChild("MobileButtons")
+			local Block = MobileButtons and MobileButtons:FindFirstChild("Block")
+			local Label = Block and Block:FindFirstChild("TextLabel")
+			if not GameProcessed and Label and string.sub(Label.Text, 1, 4) == "Swat" then
+				StartSwatReach()
+			end
+		end)
+	end
+
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(0.1) do
+			if os.clock() > SwatReachUntil or not Aural.Physics.SwatReach then
+				continue
+			end
+
+			local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+			local Hand = Character and Character:FindFirstChild(IsPractice and "CatchRight" or "CatchR")
+			if not HumanoidRootPart then
+				continue
+			end
+
+			local Football = GetFlightFootball(HumanoidRootPart.Position, Aural.Physics.SwatReachRadius)
+			if not Football then
+				continue
+			end
+
+			if firetouchinterest and Hand then
+				firetouchinterest(Hand, Football, 0)
+				task.wait()
+				firetouchinterest(Hand, Football, 1)
+			else
+				HumanoidRootPart.CFrame = CFrame.new(Football.Position)
+			end
+		end
+	end)
+
+	local function FireAction(Swat)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not ActionRemote or os.clock() - LastAction < 1 then
+			return
+		end
+		if Flags and not ((GetFlag("Throwable") or not GetFlag("Carrier")) and GetFlag("Ball")) then
+			return
+		end
+		LastAction = os.clock()
+		ActionRemote:FireServer("PlayerActions", Swat and "swat" or (IsPractice and "catch " or "catch"))
+		if Swat then
+			StartSwatReach()
+		end
+	end
+
+	local function IsOnDefense()
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Flags or not LocalPlayer.Team then
+			return true
+		end
+		return GetFlag("PossessionTag") ~= LocalPlayer.Team.Name
+	end
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Automatics = Aural.Automatics
+		if not (Automatics.AutoCatch or Automatics.AutoSwat or Automatics.AutoJump) then
+			return
+		end
+
+		local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+		local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+		if not Humanoid or not HumanoidRootPart then
+			return
+		end
+
+		local Football, Distance = GetFlightFootball(HumanoidRootPart.Position, math.huge)
+		if not Football then
+			return
+		end
+		local ThrownBy = Football:FindFirstChild("ThrownBy")
+		if ThrownBy and ThrownBy.Value == LocalPlayer then
+			return
+		end
+
+		if Automatics.AutoJump and Distance <= Automatics.AutoJumpRadius and Humanoid.FloorMaterial ~= Enum.Material.Air then
+			local Height = Football.Position.Y - HumanoidRootPart.Position.Y
+			if Height > 0 and Height <= Automatics.AutoJumpHeight then
+				Humanoid.Jump = true
+			end
+		end
+
+		if Automatics.AutoSwat and Distance <= Automatics.AutoSwatRadius and IsOnDefense() then
+			FireAction(true)
+		elseif Automatics.AutoCatch and Distance <= Automatics.AutoCatchRadius then
+			FireAction(false)
+		end
+	end)
+
+	-- // Hand Size
+	local HandDefaults = setmetatable({}, { __mode = "k" })
+
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(0.25) do
+			if not Character then
+				continue
+			end
+			for Index, Name in (IsPractice and { "CatchLeft", "CatchRight" } or { "CatchL", "CatchR" }) do
+				local Hand = Character:FindFirstChild(Name)
+				if Hand and Hand:IsA("BasePart") then
+					HandDefaults[Hand] = HandDefaults[Hand] or Hand.Size
+					local Size = Aural.Player.HandSize
+					Hand.Size = Size > 2 and Vector3.new(Size, Size, Size) or HandDefaults[Hand]
+					Hand.Transparency = Aural.Player.ShowHandHitbox and 0.5 or 1
+				end
+			end
+		end
+	end)
+end
+
+-- // Auto Captain, Auto Rush, Auto Guard & Tackle Reach
+do
+	local Flags = ReplicatedStorage:FindFirstChild("GameState")
+	local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	local ActionRemote = Remotes and Remotes:FindFirstChild("CharacterSoundEvent")
+
+	local function GetFlag(Name)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Flag = Flags and Flags:FindFirstChild(Name)
+		return Flag and Flag.Value
+	end
+
+	local function GetParts(Model)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid = Model and Model:FindFirstChildOfClass("Humanoid")
+		local Root = Model and Model:FindFirstChild("HumanoidRootPart")
+		if Humanoid and Root then
+			return Humanoid, Root
+		end
+		return nil, nil
+	end
+
+	local function IsOpponent(Player)
+		LPH_ATTRIBUTES(VM(NONE))
+		return Player ~= LocalPlayer and (LocalPlayer.Team == nil or Player.Team ~= LocalPlayer.Team)
+	end
+
+	local function IsInPlay()
+		LPH_ATTRIBUTES(VM(NONE))
+		return not Flags or GetFlag("Status") == "InPlay"
+	end
+
+	local function GetOpposingCarrier()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Carrier = GetFlag("Carrier")
+		if Carrier then
+			return IsOpponent(Carrier) and Carrier.Character or nil
+		end
+		for Index, Player in Players:GetPlayers() do
+			local Model = Player.Character
+			if Model and IsOpponent(Player) and Model:FindFirstChild("Football") then
+				return Model
+			end
+		end
+		return nil
+	end
+
+	local function GetClosestOpponent(Origin, Radius)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Closest, ClosestDist = nil, Radius
+		for Index, Player in Players:GetPlayers() do
+			local Humanoid, Root = GetParts(Player.Character)
+			if Root and IsOpponent(Player) then
+				local Dist = (Root.Position - Origin).Magnitude
+				if Dist <= ClosestDist then
+					Closest = Player.Character
+					ClosestDist = Dist
+				end
+			end
+		end
+		return Closest
+	end
+
+	local function GetHighlightedPlayer()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Models = workspace:FindFirstChild("Models")
+		local Beam = Models and Models:FindFirstChild("GroundBeam")
+		local Attachment = Beam and Beam.Enabled and Beam.Attachment1
+		local Model = Attachment and Attachment.Parent and Attachment.Parent.Parent
+		if Model and Model ~= LocalPlayer.Character and Model:FindFirstChildOfClass("Humanoid") then
+			return Model
+		end
+		return nil
+	end
+
+	local function FlatVelocity(Root)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Velocity = Root.AssemblyLinearVelocity
+		return Vector3.new(Velocity.X, 0, Velocity.Z)
+	end
+
+	-- // Auto Captain
+	if not IsPractice then
+		task.spawn(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			local Models = workspace:WaitForChild("Models", 10)
+			local LockerRoom = Models and Models:WaitForChild("LockerRoomA", 10)
+			local FinishLine = LockerRoom and LockerRoom:WaitForChild("FinishLine3", 10)
+			if not FinishLine then
+				return
+			end
+
+			FinishLine:GetPropertyChangedSignal("CFrame"):Connect(function()
+				LPH_ATTRIBUTES(VM(NONE))
+				if not Aural.Automatics.AutoCaptain or FinishLine.Position.Y <= 0 then
+					return
+				end
+				for Index = 1, 7 do
+					task.wait(0.2)
+					local Humanoid, Root = GetParts(LocalPlayer.Character)
+					if Root then
+						Root.CFrame = FinishLine.CFrame + Vector3.new(0, 2, 0)
+					end
+				end
+			end)
+		end)
+	end
+
+	-- // Auto QB
+	local SkippedPlays = { KICKOFF = true, PUNT = true, PAT = true }
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Aural.Automatics.AutoQb or not Flags or not LocalPlayer.Team then
+			return
+		end
+		if GetFlag("Status") ~= "PrePlay" or GetFlag("PossessionTag") ~= LocalPlayer.Team.Name then
+			return
+		end
+		if SkippedPlays[GetFlag("StatusTag")] or GetFlag("QB") or GetFlag("Carrier") then
+			return
+		end
+
+		local Humanoid, Root = GetParts(LocalPlayer.Character)
+		local Football = workspace:FindFirstChild("Football")
+		if not Root or not Football or not Football:IsA("BasePart") then
+			return
+		end
+
+		local Mode = Aural.Automatics.AutoQbType
+		if Mode == "Legit" then
+			Humanoid:MoveTo(Football.Position)
+		elseif Mode == "Precise" then
+			Root.CFrame = CFrame.new(Football.Position + Vector3.new(0, 2, -0.5))
+		else
+			Root.CFrame = CFrame.new(Football.Position + Vector3.new(0, 2, 0))
+		end
+	end)
+
+	-- // Auto Rush
+	local RushTarget, RushStart, RushSpread, RushSpreadTick = nil, 0, Vector3.zero, 0
+	local Rushing = false
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid, Root = GetParts(LocalPlayer.Character)
+		local Target = Aural.Automatics.AutoRush and IsInPlay() and GetOpposingCarrier() or nil
+		local TargetHumanoid, TargetRoot = GetParts(Target)
+
+		if not Root or not TargetRoot then
+			RushTarget = nil
+			if Rushing and Humanoid then
+				Humanoid:Move(Vector3.zero)
+			end
+			Rushing = false
+			return
+		end
+
+		if Target ~= RushTarget then
+			RushTarget = Target
+			RushStart = os.clock()
+		end
+		if os.clock() - RushStart < Aural.Automatics.AutoRushDelay then
+			return
+		end
+
+		if os.clock() - RushSpreadTick > 0.5 then
+			RushSpreadTick = os.clock()
+			local Angle = math.random() * math.pi * 2
+			RushSpread = Vector3.new(math.cos(Angle), 0, math.sin(Angle))
+		end
+
+		local Distance = (TargetRoot.Position - Root.Position).Magnitude
+		local Time = Distance / math.max(Humanoid.WalkSpeed, 16) * (Aural.Automatics.AutoRushPrediction / 100)
+		local Error = (100 - Aural.Automatics.AutoRushAccuracy) / 100 * 8 * math.min(1, Distance / 15)
+
+		Rushing = true
+		Humanoid:MoveTo(TargetRoot.Position + FlatVelocity(TargetRoot) * Time + RushSpread * Error)
+	end)
+
+	-- // Auto Guard
+	local GuardTarget = nil
+	local Guarding = false
+
+	if Flags and Flags:FindFirstChild("Status") then
+		Flags.Status.Changed:Connect(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			GuardTarget = nil
+		end)
+	end
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid, Root = GetParts(LocalPlayer.Character)
+		if not Aural.Automatics.AutoGuard or not Root then
+			GuardTarget = nil
+			if Guarding and Humanoid then
+				Humanoid:Move(Vector3.zero)
+			end
+			Guarding = false
+			return
+		end
+
+		local TargetHumanoid, TargetRoot = GetParts(GuardTarget)
+		if not TargetRoot or not GuardTarget.Parent then
+			GuardTarget = GetHighlightedPlayer() or GetClosestOpponent(Root.Position, Aural.Automatics.AutoGuardRadius)
+			TargetHumanoid, TargetRoot = GetParts(GuardTarget)
+		end
+		if not TargetRoot then
+			if Guarding then
+				Humanoid:Move(Vector3.zero)
+			end
+			Guarding = false
+			return
+		end
+
+		Guarding = true
+		Humanoid:MoveTo(TargetRoot.Position + FlatVelocity(TargetRoot) * 0.2)
+	end)
+
+	-- // Tackle Reach
+	local LastTackle = 0
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Aural.Physics.TackleReach or not Flags or not ActionRemote then
+			return
+		end
+		if not IsInPlay() or os.clock() - LastTackle < 0.2 then
+			return
+		end
+
+		local Humanoid, Root = GetParts(LocalPlayer.Character)
+		local TargetHumanoid, TargetRoot = GetParts(GetOpposingCarrier())
+		if not Root or not TargetRoot then
+			return
+		end
+
+		if (TargetRoot.Position - Root.Position).Magnitude <= Aural.Physics.TackleReachRadius then
+			LastTackle = os.clock()
+			ActionRemote:FireServer("Game", "TackleTouch", "Torso", "Torso")
+		end
+	end)
+
+	-- // Click Tackle Teleport
+	UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+		LPH_ATTRIBUTES(VM(NONE))
+		if GameProcessed or not Aural.Physics.ClickTackleAimbot or not IsInPlay() then
+			return
+		end
+		if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+
+		local Humanoid, Root = GetParts(LocalPlayer.Character)
+		local TargetHumanoid, TargetRoot = GetParts(GetOpposingCarrier())
+		if Root and TargetRoot and (TargetRoot.Position - Root.Position).Magnitude <= Aural.Physics.ClickTackleAimbotRadius then
+			Root.CFrame = TargetRoot.CFrame
+		end
+	end)
+
+	-- // Anti Block (the walk speed half lives in the Player block, which owns the humanoid's speed)
+	local function CleanMover(Object)
+		LPH_ATTRIBUTES(VM(NONE))
+		if Aural.Physics.AntiBlock and string.find(Object.Name, "FFmover") then
+			task.defer(Object.Destroy, Object)
+		end
+	end
+
+	if LocalPlayer.Character then
+		LocalPlayer.Character.DescendantAdded:Connect(CleanMover)
+	end
+	LocalPlayer.CharacterAdded:Connect(function(Model)
+		LPH_ATTRIBUTES(VM(NONE))
+		Model.DescendantAdded:Connect(CleanMover)
+	end)
+
+	-- // Anti Jam
+	local JamConstraints = {}
+
+	local function ClearJamConstraints()
+		LPH_ATTRIBUTES(VM(NONE))
+		for Index, Constraint in JamConstraints do
+			Constraint:Destroy()
+		end
+		table.clear(JamConstraints)
+	end
+
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(0.5) do
+			ClearJamConstraints()
+			local Model = LocalPlayer.Character
+			if not Aural.Physics.AntiJam or not Model then
+				continue
+			end
+
+			for Index, Player in Players:GetPlayers() do
+				local Other = Player.Character
+				if Other and IsOpponent(Player) then
+					for Index, MyName in { "Head", "Torso" } do
+						for Index, OtherName in { "Head", "Torso" } do
+							local MyPart, OtherPart = Model:FindFirstChild(MyName), Other:FindFirstChild(OtherName)
+							if MyPart and OtherPart then
+								local Constraint = Instance.new("NoCollisionConstraint")
+								Constraint.Part0 = MyPart
+								Constraint.Part1 = OtherPart
+								Constraint.Parent = workspace.CurrentCamera
+								table.insert(JamConstraints, Constraint)
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+
+	-- // Anti OOB
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(0.5) do
+			local Models = workspace:FindFirstChild("Models")
+			local Boundaries = Models and Models:FindFirstChild("Boundaries")
+			if Boundaries then
+				for Index, Boundary in Boundaries:GetChildren() do
+					if Boundary:IsA("BasePart") then
+						Boundary.CanTouch = not Aural.Physics.AntiOob
+					end
+				end
+			end
+		end
+	end)
+
+	-- // Block Extender
+	local BlokDefaults = setmetatable({}, { __mode = "k" })
+
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(0.1) do
+			local Model = LocalPlayer.Character
+			local BlokPart = Model and Model:FindFirstChild("BlokPart")
+			if BlokPart and BlokPart:IsA("BasePart") then
+				BlokDefaults[BlokPart] = BlokDefaults[BlokPart] or { Size = BlokPart.Size, Transparency = BlokPart.Transparency }
+				if Aural.Physics.BlockExtender then
+					local Reach = math.max(Aural.Physics.BlockExtenderReach, 1.5)
+					BlokPart.Size = Vector3.new(Reach, 5, Reach)
+					BlokPart.Transparency = Aural.Physics.BlockExtenderTransparency
+				else
+					BlokPart.Size = BlokDefaults[BlokPart].Size
+					BlokPart.Transparency = BlokDefaults[BlokPart].Transparency
+				end
+			end
+		end
+	end)
+
+	-- // Auto Block
+	local AutoBlocking = false
+
+	local function IsAllowedToBlock(Root)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Flags then
+			return false
+		end
+		local Carrier = GetFlag("Carrier")
+		if Carrier == LocalPlayer then
+			return false
+		end
+		if (Carrier and GetFlag("Throwable") == false) or GetFlag("Fumble") then
+			return true
+		end
+		local LineDown, LineTogo = workspace:FindFirstChild("LineDown"), workspace:FindFirstChild("LineTogo")
+		if not LineDown or not LineTogo then
+			return false
+		end
+		if LineTogo.Position.Z < LineDown.Position.Z then
+			return Root.Position.Z > LineDown.Position.Z - 15
+		end
+		return Root.Position.Z < LineDown.Position.Z + 15
+	end
+
+	local function GetBlockTarget(BlokPart, Model)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Params = OverlapParams.new()
+		Params.FilterType = Enum.RaycastFilterType.Exclude
+		Params.FilterDescendantsInstances = { Model }
+
+		local Fallback = nil
+		for Index, Part in workspace:GetPartsInPart(BlokPart, Params) do
+			local Player = Part.Parent and Players:GetPlayerFromCharacter(Part.Parent)
+			if Player and IsOpponent(Player) and Part.Transparency == 0 then
+				if Part.Name == "Torso" then
+					return Part
+				end
+				Fallback = Fallback or Part
+			end
+		end
+		return Fallback
+	end
+
+	local function AutoBlock(Model, Humanoid)
+		LPH_ATTRIBUTES(VM(NONE))
+		AutoBlocking = true
+		local Start = os.clock()
+		ActionRemote:FireServer("PlayerActions", "block")
+
+		local Animations = ReplicatedStorage:FindFirstChild("Animations")
+		local Animation = Animations and Animations:FindFirstChild("Block")
+		if Animation and Animation:IsA("Animation") then
+			pcall(function()
+				LPH_ATTRIBUTES(VM(NONE))
+				Humanoid:LoadAnimation(Animation):Play()
+			end)
+		end
+
+		local BlokPart = Model:WaitForChild("BlokPart", 1)
+		local Target = nil
+		while BlokPart and BlokPart.Parent and os.clock() - Start < 1 do
+			local Touching = GetBlockTarget(BlokPart, Model)
+			if not Target and Touching then
+				Target = Touching
+				ActionRemote:FireServer("PlayerActions", "execBlock ", Target.Parent.Name, Target.Name)
+				task.wait(0.15)
+			elseif Target and not Touching then
+				break
+			end
+			task.wait(0.1)
+		end
+		if Target then
+			ActionRemote:FireServer("PlayerActions", "blockTouchEnded")
+		end
+
+		task.wait(math.max(0, 1 - (os.clock() - Start)))
+		AutoBlocking = false
+	end
+
+	RunService.Heartbeat:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		if AutoBlocking or not Aural.Automatics.AutoBlock or not ActionRemote or not Flags then
+			return
+		end
+		if GetFlag("Status") ~= "InPlay" or (LocalPlayer.Team and GetFlag("PossessionTag") ~= LocalPlayer.Team.Name) then
+			return
+		end
+
+		local Model = LocalPlayer.Character
+		local Humanoid, Root = GetParts(Model)
+		if not Root or Humanoid.PlatformStand or not IsAllowedToBlock(Root) then
+			return
+		end
+
+		if GetClosestOpponent(Root.Position, Aural.Automatics.AutoBlockRadius) then
+			task.spawn(AutoBlock, Model, Humanoid)
+		end
+	end)
+end
+
+-- // Player
+do
+	local Settings = Aural.Player
+	local MaxWalkSpeed = 23
+	local MaxJumpPower = 60
+
+	-- The game's own values are tracked separately so its freezes and slowdowns can be told apart from ours.
+	local GameSpeed, GameJump = 20, 50
+	local WrittenSpeed, WrittenJump = nil, nil
+	local AngleUntil = 0
+
+	-- Only the newest copy of the script may drive the humanoid; older copies stand down so they cannot fight over it.
+	local Environment = getgenv and getgenv() or _G
+	local Generation = (Environment.AuralPlayerGeneration or 0) + 1
+	Environment.AuralPlayerGeneration = Generation
+
+	local function IsCurrent()
+		LPH_ATTRIBUTES(VM(NONE))
+		return Environment.AuralPlayerGeneration == Generation
+	end
+
+	local function WatchCharacter(Character)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid = Character:WaitForChild("Humanoid", 5)
+		if not Humanoid then
+			return
+		end
+		GameSpeed, GameJump = Humanoid.WalkSpeed, Humanoid.JumpPower
+		WrittenSpeed, WrittenJump = nil, nil
+
+		Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			if IsCurrent() and (not WrittenSpeed or math.abs(Humanoid.WalkSpeed - WrittenSpeed) > 0.01) then
+				GameSpeed = Humanoid.WalkSpeed
+			end
+		end)
+		Humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			if IsCurrent() and (not WrittenJump or math.abs(Humanoid.JumpPower - WrittenJump) > 0.01) then
+				GameJump = Humanoid.JumpPower
+			end
+		end)
+	end
+
+	if LocalPlayer.Character then
+		task.spawn(WatchCharacter, LocalPlayer.Character)
+	end
+	LocalPlayer.CharacterAdded:Connect(WatchCharacter)
+
+	-- // Angle Enhancer (boosts the jump taken right after shift lock is released)
+	local WasShiftLocked = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+	UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local ShiftLocked = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+		if WasShiftLocked and not ShiftLocked then
+			AngleUntil = os.clock() + 0.2
+		end
+		WasShiftLocked = ShiftLocked
+	end)
+
+	-- // Fly
+	local FlyVelocity, FlyGyro = nil, nil
+	local FlyUp, FlyDown = false, false
+
+	local function StopFly()
+		LPH_ATTRIBUTES(VM(NONE))
+		if FlyVelocity then
+			FlyVelocity:Destroy()
+			FlyVelocity = nil
+		end
+		if FlyGyro then
+			FlyGyro:Destroy()
+			FlyGyro = nil
+		end
+	end
+
+	local function UpdateFly(Humanoid, Root)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not FlyVelocity or FlyVelocity.Parent ~= Root then
+			StopFly()
+			FlyVelocity = Instance.new("BodyVelocity")
+			-- The anti-cheat ignores body movers whose name starts with "FF".
+			FlyVelocity.Name = "FF" .. HttpService:GenerateGUID(false)
+			FlyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+			FlyVelocity.Velocity = Vector3.zero
+			FlyVelocity.Parent = Root
+
+			FlyGyro = Instance.new("BodyGyro")
+			FlyGyro.Name = "FF" .. HttpService:GenerateGUID(false)
+			FlyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+			FlyGyro.D = 200
+			FlyGyro.P = 10000
+			FlyGyro.Parent = Root
+		end
+
+		local Camera = workspace.CurrentCamera.CFrame
+		local Direction = Vector3.zero
+		if IsMobile then
+			Direction = Humanoid.MoveDirection
+		else
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then Direction += Camera.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then Direction -= Camera.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then Direction += Camera.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then Direction -= Camera.RightVector end
+		end
+		if FlyUp or UserInputService:IsKeyDown(Enum.KeyCode.Space) then Direction += Vector3.new(0, 1, 0) end
+		if FlyDown or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then Direction -= Vector3.new(0, 1, 0) end
+
+		FlyVelocity.Velocity = Direction.Magnitude > 0 and Direction.Unit * Settings.FlySpeed or Vector3.zero
+		FlyGyro.CFrame = Camera
+		Humanoid:ChangeState(Enum.HumanoidStateType.Flying)
+	end
+
+	if IsMobile then
+		local Gui = Instance.new("ScreenGui")
+		Gui.Name = HttpService:GenerateGUID(false)
+		Gui.ResetOnSpawn = false
+		Gui.DisplayOrder = 50
+		Gui.Parent = CoreGui
+
+		local function FlyButton(Text, Offset, SetHeld)
+			LPH_ATTRIBUTES(VM(NONE))
+			local Button = Instance.new("TextButton")
+			Button.AnchorPoint = Vector2.new(1, 1)
+			Button.Position = UDim2.new(1, -180, 1, Offset)
+			Button.Size = UDim2.fromOffset(52, 52)
+			Button.BackgroundColor3 = Color3.fromRGB(15, 15, 19)
+			Button.BackgroundTransparency = 0.25
+			Button.Font = Enum.Font.GothamBold
+			Button.TextSize = 12
+			Button.TextColor3 = Color3.fromRGB(240, 240, 245)
+			Button.Text = Text
+			Button.Parent = Gui
+
+			local Corner = Instance.new("UICorner")
+			Corner.CornerRadius = UDim.new(1, 0)
+			Corner.Parent = Button
+
+			Button.MouseButton1Down:Connect(function() SetHeld(true) end)
+			Button.MouseButton1Up:Connect(function() SetHeld(false) end)
+			Button.MouseLeave:Connect(function() SetHeld(false) end)
+			return Button
+		end
+
+		local Up = FlyButton("UP", -250, function(Held) FlyUp = Held end)
+		local Down = FlyButton("DOWN", -190, function(Held) FlyDown = Held end)
+		RunService.Heartbeat:Connect(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			Up.Visible = Settings.Fly
+			Down.Visible = Settings.Fly
+		end)
+	end
+
+	-- // Walkspeed, Jump Power, Boost Enhancer, No Move Restrictions, CFrame Speed
+	local PlayerConnection
+	PlayerConnection = RunService.Heartbeat:Connect(function(DeltaTime)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not IsCurrent() then
+			PlayerConnection:Disconnect()
+			StopFly()
+			return
+		end
+
+		local Character = LocalPlayer.Character
+		local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+		local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+		if not Humanoid or not Root then
+			StopFly()
+			return
+		end
+
+		local Frozen = GameSpeed <= 0
+		local HoldFreeze = Frozen and Settings.FreezeDuringPrePlay
+
+		local Speed = GameSpeed
+		if Frozen then
+			if not HoldFreeze and (Settings.WalkSpeed or Settings.NoMoveRestrictions) then
+				Speed = Settings.WalkSpeed and Settings.WalkSpeedValue or 20
+			end
+		else
+			if (Settings.NoMoveRestrictions or Aural.Physics.AntiBlock) and Speed < 16 then
+				Speed = 20
+			end
+			if Settings.WalkSpeed then
+				Speed = Settings.WalkSpeedValue
+			end
+			if Settings.BoostEnhancer and (IsMobile or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) then
+				Speed = math.max(Speed, Settings.BoostEnhancerSpeed)
+			end
+		end
+		Speed = math.min(Speed, MaxWalkSpeed)
+		if math.abs(Humanoid.WalkSpeed - Speed) > 0.01 then
+			WrittenSpeed = Speed
+			Humanoid.WalkSpeed = Speed
+		end
+
+		local Jump = GameJump
+		if GameJump > 0 then
+			if Settings.NoMoveRestrictions and Jump < 50 then
+				Jump = 50
+			end
+			if Settings.JumpPower then
+				Jump = math.min(Settings.Jp, MaxJumpPower)
+			end
+			if Settings.AngleEnhancer and os.clock() < AngleUntil then
+				Jump = math.max(Jump, Settings.AngleEnhancerValue)
+			end
+		end
+		if math.abs(Humanoid.JumpPower - Jump) > 0.01 then
+			WrittenJump = Jump
+			Humanoid.JumpPower = Jump
+		end
+
+		-- The game switches the Jumping state off for 3 seconds after every jump; this switches it straight back on.
+		if Aural.Physics.NoJumpCooldown and not Humanoid.PlatformStand and not Humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
+			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+		end
+
+		if Settings.Fly then
+			UpdateFly(Humanoid, Root)
+		else
+			StopFly()
+			if Settings.CframeSpeed and not HoldFreeze and Humanoid.MoveDirection.Magnitude > 0 then
+				Root.CFrame = Root.CFrame + Humanoid.MoveDirection * (Settings.CfSpeed * DeltaTime)
+			end
+		end
+	end)
+
+	-- // Gamepasses
+	local PassModule, OriginalOwnsPass = nil, nil
+
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(1) do
+			if PassModule or not Aural.Gamepasses.UnlockAll or not getgc then
+				continue
+			end
+			for Index, Object in getgc(true) do
+				if type(Object) == "table" and type(rawget(Object, "PlayerOwnsPass")) == "function" and type(rawget(Object, "WaitForSave")) == "function" then
+					PassModule = Object
+					OriginalOwnsPass = rawget(Object, "PlayerOwnsPass")
+					rawset(Object, "PlayerOwnsPass", function(...)
+						LPH_ATTRIBUTES(VM(NONE))
+						if Aural.Gamepasses.UnlockAll then
+							return true
+						end
+						return OriginalOwnsPass(...)
+					end)
+					break
+				end
+			end
+		end
+	end)
+end
+
+-- // Remove Gloves
+do
+	-- Gloves are the LeftGlove and RightGlove parts of the Uniform model; the game hides them the same way, by transparency.
+	local Originals = setmetatable({}, { __mode = "k" })
+
+	task.spawn(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		while task.wait(0.25) do
+			local Character = LocalPlayer.Character
+			local Uniform = Character and Character:FindFirstChild("Uniform")
+			if Uniform then
+				for Index, Name in { "LeftGlove", "RightGlove" } do
+					local Glove = Uniform:FindFirstChild(Name)
+					if Glove and Glove:IsA("BasePart") then
+						if Aural.Visuals.RemoveGloves then
+							if Originals[Glove] == nil then
+								Originals[Glove] = Glove.Transparency
+							end
+							Glove.Transparency = 1
+						elseif Originals[Glove] ~= nil then
+							Glove.Transparency = Originals[Glove]
+							Originals[Glove] = nil
+						end
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- // Quick Teleport
+do
+	local function QuickTeleport()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Distance = Aural.Physics.QuickTpSpeed
+		local Character = LocalPlayer.Character
+		local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+		local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+		if not Aural.Physics.QuickTp or Distance <= 0 or not Humanoid or not Root then
+			return
+		end
+
+		local Direction = Humanoid.MoveDirection
+		if Direction.Magnitude < 0.1 then
+			local Look = Root.CFrame.LookVector
+			Direction = Vector3.new(Look.X, 0, Look.Z)
+		end
+		if Direction.Magnitude < 0.1 then
+			return
+		end
+
+		Root.CFrame = Root.CFrame + Direction.Unit * Distance
+	end
+
+	UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+		LPH_ATTRIBUTES(VM(NONE))
+		if GameProcessed or Input.KeyCode ~= Enum.KeyCode.F then
+			return
+		end
+		-- F is the aimbot's angle-down key while a ball is in hand.
+		local Character = LocalPlayer.Character
+		if Aural.QbAimbot.Enabled and Character and Character:FindFirstChildOfClass("Tool") then
+			return
+		end
+		QuickTeleport()
+	end)
+
+	if IsMobile then
+		local Gui = Instance.new("ScreenGui")
+		Gui.Name = HttpService:GenerateGUID(false)
+		Gui.ResetOnSpawn = false
+		Gui.DisplayOrder = 50
+		Gui.Parent = CoreGui
+
+		local Button = Instance.new("TextButton")
+		Button.AnchorPoint = Vector2.new(1, 1)
+		Button.Position = UDim2.new(1, -110, 1, -190)
+		Button.Size = UDim2.fromOffset(58, 58)
+		Button.BackgroundColor3 = Color3.fromRGB(15, 15, 19)
+		Button.BackgroundTransparency = 0.25
+		Button.AutoButtonColor = true
+		Button.Font = Enum.Font.GothamBold
+		Button.TextSize = 13
+		Button.TextColor3 = Color3.fromRGB(240, 240, 245)
+		Button.Text = "TP"
+		Button.Parent = Gui
+
+		local Corner = Instance.new("UICorner")
+		Corner.CornerRadius = UDim.new(1, 0)
+		Corner.Parent = Button
+
+		local Stroke = Instance.new("UIStroke")
+		Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		Stroke.Thickness = 1.5
+		Stroke.Transparency = 0.3
+		Stroke.Parent = Button
+
+		Button.MouseButton1Click:Connect(QuickTeleport)
+
+		RunService.Heartbeat:Connect(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			Button.Visible = Aural.Physics.QuickTp
+			Stroke.Color = Theme.Accent
+		end)
+	end
+end
+
+-- // QB Aimbot
+do
+	local AimbotVersion = tick()
+	if getgenv then getgenv()._AuralAimbotVersion = AimbotVersion end
+
+	local Settings = Aural.QbAimbot
+	local Gravity = 28
+	local MaxPower = 95
+	local RestHeight = 3.4
+	local Flags = ReplicatedStorage:FindFirstChild("GameState")
+
+	-- Arc scales the distance-based angle, Height is where the ball arrives above the receiver's waist, and Lead is extra
+	-- studs in front of them on top of the "lead in front" setting.
+	local ThrowTypes = {
+		Dime = { Arc = 1, Height = 2.5, Lead = 0 },
+		Mag = { Arc = 1.1, Height = 4.5, Lead = 1 },
+		Dive = { Arc = 0.9, Height = 0.5, Lead = 3 },
+		Dot = { Arc = 0.8, Height = 2, Lead = 0 },
+		Bullet = { Arc = 0.7, Height = 2, Lead = 0 },
+		Fade = { Arc = 1.45, Height = 5, Lead = 0 },
+	}
+
+	-- // Calibration (learned from the user's own throws, so Practice and the match place can differ)
+	local Calibration = { Speed = 1, Yaw = 0, Release = IsPractice and 4 or 4.7 }
+	local LastThrow = nil
+
+	local function Flatten(Vector)
+		LPH_ATTRIBUTES(VM(NONE))
+		return Vector3.new(Vector.X, 0, Vector.Z)
+	end
+
+	local function RotateYaw(Vector, Angle)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Cos, Sin = math.cos(Angle), math.sin(Angle)
+		return Vector3.new(Vector.X * Cos - Vector.Z * Sin, Vector.Y, Vector.X * Sin + Vector.Z * Cos)
+	end
+
+	-- // Anti OOB (measured in the match place: players go out at X = +/-80 and Z = +/-180, the inner faces of the boundary walls)
+	-- The limits are read from the place's own walls: "Boundaries" (where players go out) when it exists, otherwise
+	-- "Incomplete" (where the ball goes dead). The walls enclosing the quarterback are the ones that count.
+	local BoundsCache, BoundsClock = nil, 0
+
+	local function GetBounds(Position)
+		LPH_ATTRIBUTES(VM(NONE))
+		if BoundsCache and os.clock() - BoundsClock < 1 then
+			return BoundsCache
+		end
+
+		local Bounds = { MinX = -math.huge, MaxX = math.huge, MinZ = -math.huge, MaxZ = math.huge }
+		local Models = workspace:FindFirstChild("Models")
+		local Folder = Models and (Models:FindFirstChild("Boundaries") or Models:FindFirstChild("Incomplete"))
+		if Folder then
+			for Index, Part in Folder:GetDescendants() do
+				if Part:IsA("BasePart") then
+					local Frame, Size = Part.CFrame, Part.Size / 2
+					local Right, Up, Look = Frame.RightVector, Frame.UpVector, Frame.LookVector
+					local HalfX = math.abs(Right.X) * Size.X + math.abs(Up.X) * Size.Y + math.abs(Look.X) * Size.Z
+					local HalfY = math.abs(Right.Y) * Size.X + math.abs(Up.Y) * Size.Y + math.abs(Look.Y) * Size.Z
+					local HalfZ = math.abs(Right.Z) * Size.X + math.abs(Up.Z) * Size.Y + math.abs(Look.Z) * Size.Z
+					local Center = Part.Position
+
+					if HalfY > 5 then
+						if HalfX < 2 and math.abs(Position.Z - Center.Z) <= HalfZ + 1 then
+							if Center.X > Position.X then
+								Bounds.MaxX = math.min(Bounds.MaxX, Center.X - HalfX)
+							else
+								Bounds.MinX = math.max(Bounds.MinX, Center.X + HalfX)
+							end
+						elseif HalfZ < 2 and math.abs(Position.X - Center.X) <= HalfX + 1 then
+							if Center.Z > Position.Z then
+								Bounds.MaxZ = math.min(Bounds.MaxZ, Center.Z - HalfZ)
+							else
+								Bounds.MinZ = math.max(Bounds.MinZ, Center.Z + HalfZ)
+							end
+						end
+					end
+				end
+			end
+		end
+
+		-- A field narrower than the inset range would make the limits cross, so such an axis is left unlimited.
+		if Bounds.MaxX - Bounds.MinX < 40 then
+			Bounds.MinX, Bounds.MaxX = -math.huge, math.huge
+		end
+		if Bounds.MaxZ - Bounds.MinZ < 40 then
+			Bounds.MinZ, Bounds.MaxZ = -math.huge, math.huge
+		end
+
+		BoundsCache, BoundsClock = Bounds, os.clock()
+		return Bounds
+	end
+
+	local function IsInBounds(Position, Inset, Bounds)
+		LPH_ATTRIBUTES(VM(NONE))
+		return Position.X >= Bounds.MinX + Inset and Position.X <= Bounds.MaxX - Inset
+			and Position.Z >= Bounds.MinZ + Inset and Position.Z <= Bounds.MaxZ - Inset
+	end
+
+	-- // Projectile maths
+	local function SolveAngle(Range, Height, Speed, HighArc)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Speed2 = Speed * Speed
+		local Discriminant = Speed2 * Speed2 - Gravity * (Gravity * Range * Range + 2 * Height * Speed2)
+		if Discriminant < 0 or Range < 0.01 then
+			return nil
+		end
+		local Root = math.sqrt(Discriminant)
+		return math.atan((Speed2 + (HighArc and Root or -Root)) / (Gravity * Range))
+	end
+
+	local function RequiredSpeed(Range, Height, Angle)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Cos = math.cos(Angle)
+		local Denominator = 2 * Cos * Cos * (Range * math.tan(Angle) - Height)
+		if Denominator <= 0 then
+			return nil
+		end
+		return math.sqrt(Gravity * Range * Range / Denominator)
+	end
+
+	-- // Receivers
+	local function GetTargetParts(Model)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid = Model and Model:FindFirstChildOfClass("Humanoid")
+		local Root = Model and Model:FindFirstChild("HumanoidRootPart")
+		if Humanoid and Root and Model.Parent then
+			return Humanoid, Root
+		end
+		return nil, nil
+	end
+
+	local function GetReceivers()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Receivers = {}
+		for Index, Player in Players:GetPlayers() do
+			local SameSide = IsPractice or LocalPlayer.Team == nil or Player.Team == LocalPlayer.Team
+			if Player ~= LocalPlayer and SameSide and Player.Character then
+				table.insert(Receivers, Player.Character)
+			end
+		end
+		local Bots = IsPractice and workspace:FindFirstChild("npcwr")
+		if Bots then
+			for Index, Object in Bots:GetDescendants() do
+				if Object:IsA("Model") and string.match(Object.Name, "^bot %d+$") then
+					table.insert(Receivers, Object)
+				end
+			end
+		end
+		return Receivers
+	end
+
+	local function GetDefenderDistance(Position)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Closest = math.huge
+		for Index, Player in Players:GetPlayers() do
+			if Player ~= LocalPlayer and LocalPlayer.Team and Player.Team ~= LocalPlayer.Team then
+				local Humanoid, Root = GetTargetParts(Player.Character)
+				if Root then
+					Closest = math.min(Closest, (Root.Position - Position).Magnitude)
+				end
+			end
+		end
+		return Closest
+	end
+
+	local function GetAimPoint()
+		LPH_ATTRIBUTES(VM(NONE))
+		if IsMobile then
+			return workspace.CurrentCamera.ViewportSize / 2
+		end
+		return UserInputService:GetMouseLocation()
+	end
+
+	local function PickTarget(MyRoot)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Locked = Settings.LockedTarget
+		if Locked then
+			if GetTargetParts(Locked) then
+				return Locked
+			end
+			Settings.LockedTarget = nil
+		end
+
+		local Camera = workspace.CurrentCamera
+		local AimPoint = GetAimPoint()
+		local Best, BestScore = nil, -math.huge
+		for Index, Model in GetReceivers() do
+			local Humanoid, Root = GetTargetParts(Model)
+			if Root and Settings.AntiOob and not IsInBounds(Root.Position, 0, GetBounds(MyRoot.Position)) then
+				Root = nil
+			end
+			if Root then
+				local Screen, OnScreen = Camera:WorldToViewportPoint(Root.Position)
+				local ScreenDistance = (Vector2.new(Screen.X, Screen.Y) - AimPoint).Magnitude
+				if OnScreen and (Settings.Fov <= 0 or ScreenDistance <= Settings.Fov) then
+					local Score = -ScreenDistance
+					if Settings.TargetPriority == "Most Open" and LocalPlayer.Team then
+						Score = GetDefenderDistance(Root.Position)
+					elseif Settings.TargetPriority == "Furthest Downfield" then
+						Score = math.abs(Root.Position.Z - MyRoot.Position.Z)
+					end
+					if Score > BestScore then
+						Best, BestScore = Model, Score
+					end
+				end
+			end
+		end
+		return Best
+	end
+
+	-- // Routes & throw types
+	local function GetRoute(Humanoid, Root, MyRoot)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Velocity = Flatten(Root.AssemblyLinearVelocity)
+		if Velocity.Magnitude < 2 then
+			return "Still"
+		end
+		local Downfield = (Root.Position.Z - MyRoot.Position.Z) >= 0 and 1 or -1
+		local Dot = Velocity.Unit.Z * Downfield
+		if Dot >= 0.8 then
+			return "Straight"
+		elseif Dot >= 0.45 then
+			return "Post"
+		elseif Dot >= -0.2 then
+			return "Slant"
+		end
+		return "Comeback"
+	end
+
+	local function ChooseThrowType(Range, Route)
+		LPH_ATTRIBUTES(VM(NONE))
+		if Route == "Slant" then
+			return Range <= 100 and "Bullet" or "Dive"
+		elseif Route == "Straight" or Route == "Post" then
+			return Range <= 150 and "Dive" or "Dime"
+		elseif Route == "Comeback" then
+			return Range <= 150 and "Bullet" or "Dive"
+		end
+		return Range <= 100 and "Dot" or "Dime"
+	end
+
+	-- Auto angle rises with distance: about 19 degrees at 40 studs, 26 at 100 and 38 at 200, scaled by the throw type.
+	local function GetWantedAngle(ThrowType, Range)
+		LPH_ATTRIBUTES(VM(NONE))
+		if Settings.AutoAngle then
+			local Base = math.clamp(14 + Range * 0.12, 16, 42)
+			return math.rad(math.clamp(Base * (ThrowTypes[ThrowType] or ThrowTypes.Dime).Arc, 10, 62))
+		elseif ThrowType == "Bullet" then
+			return math.rad(Settings.BulletAngle)
+		end
+		return math.rad(Settings.AngleBased and Settings.DesiredAngle or Settings.ThrowAngle)
+	end
+
+	-- The angle is what the user (or auto angle) asked for, and the power is whatever that angle needs. A fixed power
+	-- with a free angle always has two answers that add up to about 90 degrees, a flat one and a lob, so choosing
+	-- "the one nearest 45" was a coin flip between a ball thrown into the defenders and one hung in the air.
+	local function ResolveAngleAndPower(Range, Height, ThrowType)
+		LPH_ATTRIBUTES(VM(NONE))
+		-- Every extra second in the air roughly doubles the expected miss, so the fastest throw is full power on the low arc.
+		-- A bullet is the same thing by definition: a slower ball on a flat line is just an easy interception.
+		if Settings.FastestThrow or Settings.Use95PowerMode or ThrowType == "Bullet" then
+			return SolveAngle(Range, Height, MaxPower * Calibration.Speed, false), MaxPower
+		end
+		if Settings.HighestPowerMode then
+			local Power = math.clamp(math.ceil(math.sqrt(Range * Gravity)), 85, MaxPower)
+			return SolveAngle(Range, Height, Power * Calibration.Speed, false), Power
+		end
+
+		local Wanted = math.clamp(GetWantedAngle(ThrowType, Range), math.rad(1), math.rad(85))
+		local Needed = RequiredSpeed(Range, Height, Wanted)
+		if not Needed then
+			Wanted = math.min(math.atan2(Height, Range) + math.rad(12), math.rad(85))
+			Needed = RequiredSpeed(Range, Height, Wanted)
+		end
+		if not Needed then
+			return nil, MaxPower
+		end
+
+		-- "Normal power" is the most the aimbot may use unless auto power lifts that to the game's maximum.
+		local Limit = Settings.AutoPower and MaxPower or math.clamp(math.round(Settings.NormalPower), 1, MaxPower)
+		local Power = math.clamp(math.ceil(Needed / Calibration.Speed), 1, MaxPower)
+		local WantsLob = Wanted > math.rad(45)
+		if Power > Limit then
+			-- Out of reach at that angle: use all the allowed power and let the arc steepen as far as it has to.
+			Power = Limit
+		end
+
+		-- Power is an integer in-game, so the angle is re-solved for the exact speed the ball will really leave at.
+		local Speed = Power * Calibration.Speed
+		local Low, High = SolveAngle(Range, Height, Speed, false), SolveAngle(Range, Height, Speed, true)
+		if not Low then
+			return nil, Power
+		end
+		if WantsLob and Range / (Speed * math.cos(High)) <= Settings.MaxAirTime then
+			return High, Power
+		end
+		return Low, Power
+	end
+
+	-- // Receiver prediction
+	-- Tuned on about 6,800 samples of real match movement (10 players, 20 Hz). Compared with extrapolating the current
+	-- velocity, heading along the player's input direction at full speed cut the average miss by roughly a quarter:
+	-- 9.3 -> 7.0 studs at 1.0s, 20.2 -> 15.9 at 1.75s, 32.5 -> 24.5 at 2.5s. Turn-rate models were worse than both.
+	-- A player who has held one direction for 0.6s is about twice as predictable as one who has just cut.
+	local RunSpeed = 20
+	local SpeedUpTime = 0.25
+	local Motion = setmetatable({}, { __mode = "k" })
+
+	local function TrackMotion(Target, Humanoid, Root)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Now = os.clock()
+		local Track = Motion[Target]
+		if Track and Track.Stamp == Now then
+			return Track
+		end
+
+		local Velocity = Flatten(Root.AssemblyLinearVelocity)
+		local Speed = Velocity.Magnitude
+		local Input = Flatten(Humanoid.MoveDirection)
+		local Direction = nil
+		if Input.Magnitude > 0.1 then
+			Direction = Input.Unit
+		elseif Speed > 2 and not Players:GetPlayerFromCharacter(Target) then
+			Direction = Velocity.Unit
+		end
+
+		if not Track then
+			Track = { Since = Now }
+			Motion[Target] = Track
+		end
+		if not Direction or not Track.Anchor or Direction:Dot(Track.Anchor) < 0.97 or Now - (Track.Stamp or 0) > 0.3 then
+			Track.Anchor = Direction
+			Track.Since = Now
+		end
+
+		Track.Stamp = Now
+		Track.Direction = Direction
+		Track.Speed = Speed
+		Track.Velocity = Velocity
+		Track.Steady = Direction ~= nil and Speed > 15 and Now - Track.Since >= 0.6
+		return Track
+	end
+
+	-- Shortening the lead minimises the average miss, but every miss it leaves is behind the receiver, where the
+	-- trailing defender is. So a steady runner gets the full lead and anyone else loses only a little of it.
+	local function GetLeadTrust(Track, Time)
+		LPH_ATTRIBUTES(VM(NONE))
+		if Track.Steady then
+			return 1
+		end
+		return math.clamp(1 - 0.06 * Time, 0.85, 1)
+	end
+
+	local function GetExpectedMiss(Track, Time)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Track.Direction then
+			return 2 + 3 * Time
+		elseif Track.Steady then
+			return 4.4 * Time ^ 1.65
+		end
+		return 8.2 * Time ^ 1.2
+	end
+
+	local function PredictPosition(Humanoid, Root, Time, Profile, Track)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Position = Root.Position + Vector3.new(0, Settings.VerticalLead + Profile.Height, 0)
+		local Direction, Speed = Track.Direction, Track.Speed
+		if not Direction then
+			-- No input: the player is stopping, and only coasts a short way.
+			if Speed > 0.5 then
+				return Position + Track.Velocity.Unit * (Speed * 0.12)
+			end
+			return Position
+		end
+
+		local TopSpeed = math.max(RunSpeed, Speed)
+		local Distance = TopSpeed * Time - (TopSpeed - Speed) * SpeedUpTime * (1 - math.exp(-Time / SpeedUpTime))
+		local Lead = Distance * GetLeadTrust(Track, Time) + Settings.HorizontalLead + Profile.Lead + Settings.CustomLead * Time
+		return Position + Direction * Lead
+	end
+
+	local function ClampToField(Position)
+		LPH_ATTRIBUTES(VM(NONE))
+		if IsPractice then
+			return Position
+		end
+		-- The boundary walls sit at X = +/-80.5 and Z = +/-180.5; anti OOB keeps the catch point inside them.
+		local Margin = Settings.AntiOob and -Settings.AntiOobInset or Settings.FieldMargin
+		return Vector3.new(
+			math.clamp(Position.X, -(80 + Margin), 80 + Margin),
+			Position.Y,
+			math.clamp(Position.Z, -(180 + Margin), 180 + Margin)
+		)
+	end
+
+	local function KeepInBounds(Current, Predicted, Bounds)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Settings.AntiOob then
+			return ClampToField(Predicted), false
+		end
+
+		local Inset = Settings.AntiOobInset
+		if IsInBounds(Predicted, Inset, Bounds) then
+			return Predicted, false
+		end
+
+		-- Walk back along the receiver's own path to the last point that is still in bounds, so the ball meets them there.
+		local MinX, MaxX = Bounds.MinX + Inset, Bounds.MaxX - Inset
+		local MinZ, MaxZ = Bounds.MinZ + Inset, Bounds.MaxZ - Inset
+		local Delta = Predicted - Current
+		local Fraction = 1
+		if math.abs(Delta.X) > 0.01 then
+			if Predicted.X > MaxX then
+				Fraction = math.min(Fraction, (MaxX - Current.X) / Delta.X)
+			elseif Predicted.X < MinX then
+				Fraction = math.min(Fraction, (MinX - Current.X) / Delta.X)
+			end
+		end
+		if math.abs(Delta.Z) > 0.01 then
+			if Predicted.Z > MaxZ then
+				Fraction = math.min(Fraction, (MaxZ - Current.Z) / Delta.Z)
+			elseif Predicted.Z < MinZ then
+				Fraction = math.min(Fraction, (MinZ - Current.Z) / Delta.Z)
+			end
+		end
+
+		local Point = Current + Delta * math.clamp(Fraction, 0, 1)
+		return Vector3.new(math.clamp(Point.X, MinX, MaxX), Predicted.Y, math.clamp(Point.Z, MinZ, MaxZ)), true
+	end
+
+	local FlightTimes = setmetatable({}, { __mode = "k" })
+
+	local function BuildSolution(Target, MyRoot, Head)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Humanoid, Root = GetTargetParts(Target)
+		if not Root then
+			return nil
+		end
+
+		local Route = GetRoute(Humanoid, Root, MyRoot)
+		local Range = Flatten(Root.Position - Head.Position).Magnitude
+		local ThrowType = Settings.AutoChooseThrowType and ChooseThrowType(Range, Route) or Settings.ThrowProfile
+		local Profile = ThrowTypes[ThrowType] or ThrowTypes.Dime
+		local Latency = LocalPlayer:GetNetworkPing() * 2
+		local Track = TrackMotion(Target, Humanoid, Root)
+
+		-- The ball is released a few studs ahead of the head along the throw direction, so origin and direction are solved together.
+		local Time = FlightTimes[Target] or 1
+		local Origin, Aim, Angle, Power, FlatDirection
+		local Direction = nil
+		local Sideline = false
+		for Index = 1, 8 do
+			Aim, Sideline = KeepInBounds(Root.Position, PredictPosition(Humanoid, Root, Time + Latency, Profile, Track), GetBounds(MyRoot.Position))
+
+			local Offset = Flatten(Aim - Head.Position)
+			if Offset.Magnitude < 1 then
+				return nil
+			end
+			Direction = Direction or (Aim - Head.Position).Unit
+			Origin = Head.Position + Direction * Calibration.Release
+
+			Offset = Flatten(Aim - Origin)
+			if Offset.Magnitude < 1 then
+				return nil
+			end
+			FlatDirection = Offset.Unit
+			Angle, Power = ResolveAngleAndPower(Offset.Magnitude, Aim.Y - Origin.Y, ThrowType)
+			if not Angle then
+				break
+			end
+			Direction = FlatDirection * math.cos(Angle) + Vector3.new(0, math.sin(Angle), 0)
+			Time = Offset.Magnitude / (Power * Calibration.Speed * math.cos(Angle))
+		end
+
+		if not Angle then
+			return { Target = Target, Aim = Aim, Origin = Origin, ThrowType = ThrowType, Route = Route, Power = Power, OutOfRange = true }
+		end
+		FlightTimes[Target] = Time
+
+		local Velocity = Direction * (Power * Calibration.Speed)
+		local LandTime = Time
+		local Discriminant = Velocity.Y * Velocity.Y + 2 * Gravity * (Origin.Y - RestHeight)
+		if Discriminant > 0 then
+			LandTime = math.max(Time, (Velocity.Y + math.sqrt(Discriminant)) / Gravity)
+		end
+
+		return {
+			Steady = Track.Steady,
+			ExpectedMiss = GetExpectedMiss(Track, Time + Latency),
+			Sideline = Sideline,
+			LandTime = LandTime,
+			Landing = Origin + Velocity * LandTime - Vector3.new(0, 0.5 * Gravity * LandTime * LandTime, 0),
+			Target = Target,
+			Aim = Aim,
+			Origin = Origin,
+			ThrowType = ThrowType,
+			Route = Route,
+			Power = Power,
+			Angle = Angle,
+			Time = Time,
+			Direction = Direction,
+			Velocity = Velocity,
+			Range = Flatten(Aim - Origin).Magnitude,
+		}
+	end
+
+	-- // Throwing
+	local function GetThrowRemote(Character)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Tool = Character and Character:FindFirstChildOfClass("Tool")
+		local Handle = Tool and Tool:FindFirstChild("Handle")
+		return Handle and Handle:FindFirstChild("RemoteEvent")
+	end
+
+	local function IsReadyToThrow(Character)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not GetThrowRemote(Character) then
+			return false
+		end
+		if IsPractice or not Flags then
+			return true
+		end
+		local Status, Throwable = Flags:FindFirstChild("Status"), Flags:FindFirstChild("Throwable")
+		return LocalPlayer.PlayerGui:FindFirstChild("BallGui") ~= nil and Status and Status.Value == "InPlay" and Throwable and Throwable.Value
+	end
+
+	local function FireThrow(Character, Solution)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Remote = GetThrowRemote(Character)
+		local Head = Character:FindFirstChild("Head")
+		local Root = Character:FindFirstChild("HumanoidRootPart")
+		if not Remote or not Head or not Root then
+			return
+		end
+
+		LastThrow = { Clock = os.clock(), Head = Head.Position, Velocity = Solution.Velocity, Direction = Solution.Direction }
+		local Direction = Solution.Direction
+
+		if IsPractice then
+			Remote:FireServer("Clicked", Head.CFrame.Position, Head.Position + Direction * 10000, Solution.Power)
+		else
+			local Origin = (Root.CFrame * CFrame.new(0, 1.5, 0)).Position + Vector3.new(-6000000, 0, 0)
+			Remote:FireServer("Clicked", Origin, Head.Position + Direction * 10000, 90, Solution.Power, 1)
+		end
+	end
+
+	local function Blend(Old, New)
+		LPH_ATTRIBUTES(VM(NONE))
+		return Old + (New - Old) * 0.5
+	end
+
+	workspace.ChildAdded:Connect(function(Ball)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Throw = LastThrow
+		if not Throw or os.clock() - Throw.Clock > 1 or Ball.Name ~= "Football" or not Ball:IsA("BasePart") then
+			return
+		end
+		if (Ball.Position - Throw.Head).Magnitude > 25 then
+			return
+		end
+		LastThrow = nil
+		task.wait()
+
+		local Launch = Ball.AssemblyLinearVelocity
+		local Intended = Throw.Velocity
+		local FlatLaunch, FlatIntended = Flatten(Launch), Flatten(Intended)
+		if FlatLaunch.Magnitude < 1 or FlatIntended.Magnitude < 1 then
+			return
+		end
+
+		local SpeedRatio = FlatLaunch.Magnitude / FlatIntended.Magnitude
+		if math.abs(SpeedRatio - 1) < 0.1 then
+			Calibration.Speed = Blend(Calibration.Speed, Calibration.Speed * SpeedRatio)
+		end
+
+		local YawError = math.atan2(FlatLaunch.Z, FlatLaunch.X) - math.atan2(FlatIntended.Z, FlatIntended.X)
+		YawError = (YawError + math.pi) % (2 * math.pi) - math.pi
+		if math.abs(YawError) < math.rad(6) then
+			Calibration.Yaw = Blend(Calibration.Yaw, Calibration.Yaw + YawError)
+		end
+
+		local Current = Ball:GetAttribute("v")
+		if typeof(Current) == "Vector3" then
+			local Elapsed = math.clamp((Intended.Y - Current.Y) / Gravity, 0, 1)
+			local Origin = Ball.Position - Vector3.new(Launch.X, Intended.Y, Launch.Z) * Elapsed + Vector3.new(0, 0.5 * Gravity * Elapsed * Elapsed, 0)
+			local Release = (Origin - Throw.Head):Dot(Throw.Direction)
+			if Release > 0 and Release < 10 then
+				Calibration.Release = Blend(Calibration.Release, Release)
+			end
+		end
+	end)
+
+	-- // Visuals
+	local Visuals = nil
+
+	local function BeamProjectile(Velocity, Origin, Time)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Acceleration = Vector3.new(0, -Gravity, 0)
+		local P3 = 0.5 * Acceleration * Time * Time + Velocity * Time + Origin
+		local P1 = Origin + Velocity * Time / 3
+		local P2 = P3 - (Acceleration * Time * Time + Velocity * Time) / 3
+
+		local R1, R2 = (P1 - Origin).Unit, (P2 - P3).Unit
+		local Up = Vector3.new(0, 1, 0)
+		local B1, B2 = R1:Cross(Up).Unit, R2:Cross(Up).Unit
+		local U1, U2 = B1:Cross(R1).Unit, B2:Cross(R2).Unit
+
+		local CFrame1 = CFrame.new(Origin.X, Origin.Y, Origin.Z, R1.X, U1.X, B1.X, R1.Y, U1.Y, B1.Y, R1.Z, U1.Z, B1.Z)
+		local CFrame2 = CFrame.new(P3.X, P3.Y, P3.Z, R2.X, U2.X, B2.X, R2.Y, U2.Y, B2.Y, R2.Z, U2.Z, B2.Z)
+		return (P1 - Origin).Magnitude, -(P2 - P3).Magnitude, CFrame1, CFrame2
+	end
+
+	-- // Target card
+	local CardText = Color3.fromRGB(240, 240, 245)
+	local CardMuted = Color3.fromRGB(150, 150, 162)
+	local CardRed = Color3.fromRGB(255, 90, 90)
+	local CardGreen = Color3.fromRGB(110, 230, 150)
+	local CardAmber = Color3.fromRGB(255, 185, 90)
+
+	local function New(ClassName, Properties, Parent)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Object = Instance.new(ClassName)
+		for Property, Value in Properties do
+			Object[Property] = Value
+		end
+		Object.Parent = Parent
+		return Object
+	end
+
+	local function NewText(Properties, Parent)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Label = New("TextLabel", {
+			BackgroundTransparency = 1,
+			Font = Enum.Font.GothamBold,
+			TextSize = 14,
+			TextColor3 = CardText,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		}, nil)
+		for Property, Value in Properties do
+			Label[Property] = Value
+		end
+		Label.Parent = Parent
+		return Label
+	end
+
+	local function CreateCard()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Billboard = New("BillboardGui", {
+			Name = HttpService:GenerateGUID(false),
+			AlwaysOnTop = true,
+			LightInfluence = 0,
+			Size = UDim2.fromOffset(236, 104),
+			StudsOffsetWorldSpace = Vector3.new(0, 5.5, 0),
+			Enabled = false,
+		}, CoreGui)
+
+		local Frame = New("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = Color3.fromRGB(15, 15, 19),
+			BackgroundTransparency = 0.08,
+			BorderSizePixel = 0,
+		}, Billboard)
+		New("UICorner", { CornerRadius = UDim.new(0, 12) }, Frame)
+		New("UIGradient", {
+			Rotation = 90,
+			Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(190, 190, 205)),
+		}, Frame)
+		local Stroke = New("UIStroke", { Thickness = 1, Transparency = 0.5 }, Frame)
+		local Scale = New("UIScale", { Scale = 1 }, Frame)
+
+		local Glow = New("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.new(0.5, 0, 0, 0),
+			Size = UDim2.new(0.55, 0, 0, 2),
+			BorderSizePixel = 0,
+		}, Frame)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Glow)
+		New("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.5, 0),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+		}, Glow)
+
+		local Avatar = New("Frame", {
+			Position = UDim2.fromOffset(12, 11),
+			Size = UDim2.fromOffset(34, 34),
+			BackgroundColor3 = Color3.fromRGB(32, 32, 40),
+			BorderSizePixel = 0,
+		}, Frame)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Avatar)
+		local AvatarStroke = New("UIStroke", { Thickness = 1.5, Transparency = 0.2 }, Avatar)
+		local Initial = NewText({
+			Size = UDim2.fromScale(1, 1),
+			TextSize = 15,
+			TextXAlignment = Enum.TextXAlignment.Center,
+		}, Avatar)
+		local Image = New("ImageLabel", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+		}, Avatar)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Image)
+
+		local Name = NewText({
+			Position = UDim2.fromOffset(55, 11),
+			Size = UDim2.new(1, -150, 0, 17),
+		}, Frame)
+		local Detail = NewText({
+			Position = UDim2.fromOffset(55, 29),
+			Size = UDim2.new(1, -67, 0, 14),
+			Font = Enum.Font.GothamMedium,
+			TextSize = 11,
+			TextColor3 = CardMuted,
+		}, Frame)
+
+		local Badge = New("Frame", {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -12, 0, 11),
+			Size = UDim2.fromOffset(0, 18),
+			AutomaticSize = Enum.AutomaticSize.X,
+			BackgroundTransparency = 0.82,
+			BorderSizePixel = 0,
+		}, Frame)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Badge)
+		New("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, Badge)
+		local BadgeText = NewText({
+			Size = UDim2.fromOffset(0, 18),
+			AutomaticSize = Enum.AutomaticSize.X,
+			TextSize = 9,
+			TextTruncate = Enum.TextTruncate.None,
+			TextXAlignment = Enum.TextXAlignment.Center,
+		}, Badge)
+
+		New("Frame", {
+			Position = UDim2.fromOffset(12, 54),
+			Size = UDim2.new(1, -24, 0, 1),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.92,
+			BorderSizePixel = 0,
+		}, Frame)
+
+		local Row = New("Frame", {
+			Position = UDim2.fromOffset(12, 60),
+			Size = UDim2.new(1, -24, 0, 30),
+			BackgroundTransparency = 1,
+		}, Frame)
+		New("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}, Row)
+
+		local Cells = {}
+		for Order, Key in { "Power", "Angle", "Air", "Range" } do
+			local Cell = New("Frame", { BackgroundTransparency = 1, LayoutOrder = Order, Size = UDim2.fromScale(0.25, 1) }, Row)
+			local Value = NewText({ Size = UDim2.new(1, 0, 0, 17), TextSize = 15 }, Cell)
+			NewText({
+				Position = UDim2.fromOffset(0, 18),
+				Size = UDim2.new(1, 0, 0, 11),
+				Font = Enum.Font.GothamMedium,
+				TextSize = 9,
+				TextColor3 = CardMuted,
+				Text = ({ Power = "POWER", Angle = "ANGLE", Air = "AIR TIME", Range = "DISTANCE" })[Key],
+			}, Cell)
+			Cells[Key] = { Frame = Cell, Value = Value }
+		end
+
+		local Track = New("Frame", {
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, 12, 1, -7),
+			Size = UDim2.new(1, -24, 0, 3),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.9,
+			BorderSizePixel = 0,
+		}, Frame)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Track)
+		local Fill = New("Frame", { Size = UDim2.fromScale(0, 1), BorderSizePixel = 0 }, Track)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Fill)
+		New("UIGradient", {
+			Color = ColorSequence.new(Color3.fromRGB(170, 170, 185), Color3.new(1, 1, 1)),
+		}, Fill)
+
+		return {
+			Billboard = Billboard, Stroke = Stroke, Scale = Scale, Glow = Glow, AvatarStroke = AvatarStroke, Initial = Initial, Image = Image,
+			Name = Name, Detail = Detail, Badge = Badge, BadgeText = BadgeText, Cells = Cells, Fill = Fill,
+			Target = nil, Power = 0, Angle = 0, Air = 0, Range = 0, Clock = os.clock(),
+		}
+	end
+
+	local function UpdateCard(Card, Solution, Accent)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Now = os.clock()
+		local Alpha = math.clamp((Now - Card.Clock) * 12, 0, 1)
+		Card.Clock = Now
+
+		local Target = Solution.Target
+		local Humanoid, Root = GetTargetParts(Target)
+		if Card.Target ~= Target then
+			Card.Target = Target
+			Card.Scale.Scale = 0.84
+			Alpha = 1
+
+			local Player = Players:GetPlayerFromCharacter(Target)
+			Card.Name.Text = Player and Player.DisplayName or Target.Name
+			Card.Initial.Text = string.upper(string.sub(Target.Name, 1, 1))
+			Card.Image.Image = Player and string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=48&h=48", Player.UserId) or ""
+		end
+		Card.Scale.Scale += (1 - Card.Scale.Scale) * math.clamp(Alpha * 1.2, 0, 1)
+		Card.Billboard.Adornee = Target:FindFirstChild("Head") or Root
+		Card.Billboard.Enabled = true
+
+		local BadgeLabel, BadgeColor = nil, Accent
+		if Solution.OutOfRange then
+			BadgeLabel, BadgeColor = "OUT OF RANGE", CardRed
+		elseif Solution.Sideline then
+			BadgeLabel, BadgeColor = "SIDELINE", CardAmber
+		elseif Settings.LockedTarget == Target then
+			BadgeLabel = "LOCKED"
+		elseif LocalPlayer.Team and Root and not IsPractice then
+			if GetDefenderDistance(Root.Position) >= 12 then
+				BadgeLabel, BadgeColor = "OPEN", CardGreen
+			else
+				BadgeLabel, BadgeColor = "COVERED", CardAmber
+			end
+		end
+		Card.Badge.Visible = BadgeLabel ~= nil
+		Card.Name.Size = UDim2.new(1, BadgeLabel and -160 or -67, 0, 17)
+		Card.Badge.BackgroundColor3 = BadgeColor
+		Card.BadgeText.Text = BadgeLabel or ""
+		Card.BadgeText.TextColor3 = BadgeColor
+
+		Card.Stroke.Color = Accent
+		Card.Glow.BackgroundColor3 = Accent
+		Card.AvatarStroke.Color = Accent
+		Card.Fill.BackgroundColor3 = Accent
+		local Detail = Settings.ShowRoutes and (Solution.ThrowType .. "  ·  " .. Solution.Route) or Solution.ThrowType
+		if Solution.ExpectedMiss then
+			Detail ..= string.format("  ·  %s ±%d", Solution.Steady and "steady" or "breaking", math.round(Solution.ExpectedMiss))
+		end
+		Card.Detail.Text = Detail
+
+		Card.Cells.Range.Frame.Visible = Settings.ShowDistance
+		local Width = Settings.ShowDistance and 0.25 or (1 / 3)
+		for Key, Cell in Card.Cells do
+			Cell.Frame.Size = UDim2.fromScale(Width, 1)
+		end
+
+		if Solution.OutOfRange then
+			for Key, Cell in Card.Cells do
+				Cell.Value.Text = "--"
+				Cell.Value.TextColor3 = CardMuted
+			end
+			Card.Power = 0
+		else
+			Card.Power += (Solution.Power - Card.Power) * Alpha
+			Card.Angle += (math.deg(Solution.Angle) - Card.Angle) * Alpha
+			Card.Air += (Solution.Time - Card.Air) * Alpha
+			Card.Range += (Solution.Range - Card.Range) * Alpha
+
+			Card.Cells.Power.Value.Text = string.format("%d", math.round(Card.Power))
+			Card.Cells.Angle.Value.Text = string.format("%d°", math.round(Card.Angle))
+			Card.Cells.Air.Value.Text = string.format("%.1fs", Card.Air)
+			Card.Cells.Range.Value.Text = string.format("%d", math.round(Card.Range))
+			for Key, Cell in Card.Cells do
+				Cell.Value.TextColor3 = CardText
+			end
+		end
+		Card.Fill.Size = UDim2.fromScale(math.clamp(Card.Power / MaxPower, 0, 1), 1)
+	end
+
+	local function CreateVisuals()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Attachment0, Attachment1 = Instance.new("Attachment"), Instance.new("Attachment")
+		Attachment0.Parent = workspace.Terrain
+		Attachment1.Parent = workspace.Terrain
+
+		local Beam = Instance.new("Beam")
+		Beam.Attachment0 = Attachment0
+		Beam.Attachment1 = Attachment1
+		Beam.Segments = 60
+		Beam.Width0 = 0.35
+		Beam.Width1 = 0.35
+		Beam.LightEmission = 1
+		Beam.LightInfluence = 0
+		Beam.FaceCamera = true
+		Beam.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.08, 0.15),
+			NumberSequenceKeypoint.new(1, 0.15),
+		})
+		Beam.Parent = workspace.Terrain
+
+		local Marker = Instance.new("Part")
+		Marker.Name = HttpService:GenerateGUID(false)
+		Marker.Shape = Enum.PartType.Ball
+		Marker.Material = Enum.Material.Neon
+		Marker.Size = Vector3.new(1.2, 1.2, 1.2)
+		Marker.Anchored = true
+		Marker.CanCollide = false
+		Marker.CanTouch = false
+		Marker.CanQuery = false
+		Marker.CastShadow = false
+		Marker.Parent = workspace
+
+		local Landing = Instance.new("Part")
+		Landing.Name = HttpService:GenerateGUID(false)
+		Landing.Shape = Enum.PartType.Cylinder
+		Landing.Material = Enum.Material.Neon
+		Landing.Size = Vector3.new(0.12, 3, 3)
+		Landing.Anchored = true
+		Landing.CanCollide = false
+		Landing.CanTouch = false
+		Landing.CanQuery = false
+		Landing.CastShadow = false
+		Landing.Parent = workspace
+
+		local Highlight = Instance.new("Highlight")
+		Highlight.Name = HttpService:GenerateGUID(false)
+		Highlight.FillTransparency = 0.8
+		Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		Highlight.Parent = CoreGui
+
+		return { Attachment0 = Attachment0, Attachment1 = Attachment1, Beam = Beam, Marker = Marker, Landing = Landing, Card = CreateCard(), Highlight = Highlight }
+	end
+
+	local function HideVisuals()
+		LPH_ATTRIBUTES(VM(NONE))
+		if Visuals then
+			Visuals.Beam.Enabled = false
+			Visuals.Card.Billboard.Enabled = false
+			Visuals.Card.Target = nil
+			Visuals.Marker.Transparency = 1
+			Visuals.Landing.Transparency = 1
+			Visuals.Highlight.Adornee = nil
+		end
+	end
+
+	local function UpdateVisuals(Solution)
+		LPH_ATTRIBUTES(VM(NONE))
+		Visuals = Visuals or CreateVisuals()
+
+		local Color = Solution.OutOfRange and Color3.fromRGB(255, 80, 80) or Settings.PredictionColor
+		Visuals.Marker.Color = Color
+		Visuals.Marker.Transparency = 0.2
+		Visuals.Marker.Position = Solution.Aim
+		Visuals.Highlight.Adornee = Settings.ReceiverEsp and Solution.Target or nil
+		Visuals.Highlight.FillColor = Color
+		Visuals.Highlight.OutlineColor = Color
+
+		UpdateCard(Visuals.Card, Solution, Color)
+
+		if Settings.BeamMode and not Solution.OutOfRange then
+			Visuals.Landing.Color = Color
+			Visuals.Landing.Transparency = 0.45
+			Visuals.Landing.CFrame = CFrame.new(Solution.Landing.X, RestHeight - 0.3, Solution.Landing.Z) * CFrame.Angles(0, 0, math.pi / 2)
+		else
+			Visuals.Landing.Transparency = 1
+		end
+
+		if Settings.BeamMode and not Solution.OutOfRange then
+			local Curve0, Curve1, CFrame1, CFrame2 = BeamProjectile(Solution.Velocity, Solution.Origin, Solution.LandTime)
+			Visuals.Attachment0.CFrame = CFrame1
+			Visuals.Attachment1.CFrame = CFrame2
+			Visuals.Beam.CurveSize0 = Curve0
+			Visuals.Beam.CurveSize1 = Curve1
+			Visuals.Beam.Color = ColorSequence.new(Color)
+			Visuals.Beam.Enabled = true
+		else
+			Visuals.Beam.Enabled = false
+		end
+	end
+
+	-- // Loop
+	local CurrentSolution = nil
+
+	RunService.RenderStepped:Connect(function()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Character = LocalPlayer.Character
+		local Head = Character and Character:FindFirstChild("Head")
+		local MyRoot = Character and Character:FindFirstChild("HumanoidRootPart")
+		if not Settings.Enabled or not Head or not MyRoot or not GetThrowRemote(Character) then
+			CurrentSolution = nil
+			HideVisuals()
+			return
+		end
+
+		-- Every receiver is tracked every frame so "steady" has history behind it the moment a target is picked.
+		for Index, Model in GetReceivers() do
+			local Humanoid, Root = GetTargetParts(Model)
+			if Root then
+				TrackMotion(Model, Humanoid, Root)
+			end
+		end
+
+		local Target = PickTarget(MyRoot)
+		if Target and Settings.TargetLock and not Settings.LockedTarget then
+			Settings.LockedTarget = Target
+		end
+
+		CurrentSolution = Target and BuildSolution(Target, MyRoot, Head) or nil
+		if CurrentSolution then
+			UpdateVisuals(CurrentSolution)
+		else
+			HideVisuals()
+		end
+	end)
+
+	local function TryThrow()
+		LPH_ATTRIBUTES(VM(NONE))
+		if getgenv and getgenv()._AuralAimbotVersion ~= AimbotVersion then
+			return
+		end
+		local Character = LocalPlayer.Character
+		local Solution = CurrentSolution
+		if not Settings.Enabled or not Solution or Solution.OutOfRange or not IsReadyToThrow(Character) then
+			return
+		end
+		FireThrow(Character, Solution)
+	end
+
+	UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not GameProcessed and Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			TryThrow()
+		end
+	end)
+
+	if IsMobile then
+		UserInputService.TouchTapInWorld:Connect(function(Position, GameProcessed)
+			LPH_ATTRIBUTES(VM(NONE))
+			if not GameProcessed then
+				TryThrow()
+			end
+		end)
+	end
+end
+
+-- // Football Trajectory
+do
+	local GroundHeight = 3
+	local RestHeight = 3.4
+	local PathObjects = {}
+	local PathConnection = nil
+
+	local function BeamProjectile(Gravity, Velocity, Origin, Time)
+		LPH_ATTRIBUTES(VM(NONE))
+		local C = 0.5 * 0.5 * 0.5
+		local P3 = 0.5 * Gravity * Time * Time + Velocity * Time + Origin
+		local P2 = P3 - (Gravity * Time * Time + Velocity * Time) / 3
+		local P1 = (C * Gravity * Time * Time + 0.5 * Velocity * Time + Origin - C * (Origin + P3)) / (3 * C) - P2
+
+		local Curve0 = (P1 - Origin).Magnitude
+		local Curve1 = (P2 - P3).Magnitude
+
+		local B = (Origin - P3).Unit
+		local R1 = (P1 - Origin).Unit
+		local U1 = R1:Cross(B).Unit
+		local R2 = (P2 - P3).Unit
+		local U2 = R2:Cross(B).Unit
+		B = U1:Cross(R1).Unit
+
+		local CFrame1 = CFrame.new(
+			Origin.X, Origin.Y, Origin.Z,
+			R1.X, U1.X, B.X,
+			R1.Y, U1.Y, B.Y,
+			R1.Z, U1.Z, B.Z
+		)
+
+		local CFrame2 = CFrame.new(
+			P3.X, P3.Y, P3.Z,
+			R2.X, U2.X, B.X,
+			R2.Y, U2.Y, B.Y,
+			R2.Z, U2.Z, B.Z
+		)
+
+		return Curve0, -Curve1, CFrame1, CFrame2
+	end
+
+	local RevealTime = 0.45
+	local FadeTime = 0.35
+	local White = Color3.new(1, 1, 1)
+
+	local function StopBallPath()
+		LPH_ATTRIBUTES(VM(NONE))
+		if PathConnection then
+			PathConnection:Disconnect()
+			PathConnection = nil
+		end
+		for Index, Object in PathObjects do
+			Object:Destroy()
+		end
+		table.clear(PathObjects)
+	end
+
+	local function BuildTransparency(Base, Reveal, Fade)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Body = Base + (1 - Base) * Fade
+		if Reveal >= 0.999 then
+			return NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.06, Body),
+				NumberSequenceKeypoint.new(0.9, Body),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+		end
+		local Edge = math.clamp(Reveal, 0.08, 0.98)
+		return NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.06, Body),
+			NumberSequenceKeypoint.new(Edge - 0.01, Body),
+			NumberSequenceKeypoint.new(Edge, 1),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+	end
+
+	local function BuildColor(Color0, Color1, Shine)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Center = 0.1 + 0.8 * Shine
+		return ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color0),
+			ColorSequenceKeypoint.new(Center - 0.07, Color0:Lerp(Color1, Center - 0.07)),
+			ColorSequenceKeypoint.new(Center, Color0:Lerp(Color1, Center):Lerp(White, 0.8)),
+			ColorSequenceKeypoint.new(Center + 0.07, Color0:Lerp(Color1, Center + 0.07)),
+			ColorSequenceKeypoint.new(1, Color1),
+		})
+	end
+
+	local function CreateBeam(Attachment0, Attachment1, Curve0, Curve1, Width0, Width1)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Beam = Instance.new("Beam")
+		Beam.Attachment0 = Attachment0
+		Beam.Attachment1 = Attachment1
+		Beam.Segments = 100
+		Beam.Width0 = Width0
+		Beam.Width1 = Width1
+		Beam.CurveSize0 = Curve0
+		Beam.CurveSize1 = Curve1
+		Beam.LightEmission = 1
+		Beam.LightInfluence = 0
+		Beam.FaceCamera = true
+		Beam.Transparency = NumberSequence.new(1)
+		Beam.Parent = workspace.Terrain
+		return Beam
+	end
+
+	local function StartBallPath(Ball)
+		LPH_ATTRIBUTES(VM(NONE))
+		StopBallPath()
+
+		if not Aural.Visuals.ThrownBallBeam then
+			return
+		end
+		if not Ball or not Ball:IsA("BasePart") or Ball.Name ~= "Football" then
+			return
+		end
+		if Ball.AssemblyLinearVelocity.Magnitude < 1 then
+			return
+		end
+
+		local Configuration = Ball:FindFirstChild("Configuration")
+		local GravityValue = Configuration and Configuration:FindFirstChild("Gravity")
+		local Gravity = Vector3.new(0, GravityValue and GravityValue.Value or -28, 0)
+		local LaunchVelocity = Ball.AssemblyLinearVelocity
+
+		-- The replicated velocity is frozen at (launch minus one server step of gravity) and the match place has no live
+		-- velocity attribute, so the path is fitted to the ball's observed positions: horizontal speed is known exactly,
+		-- and the vertical speed and position come from a running least-squares fit.
+		local Fall = math.max(-Gravity.Y, 1)
+		local TrueLaunchY = LaunchVelocity.Y + (IsPractice and 0.82 or 0.467)
+		local FitStart = os.clock()
+		local Count, SumT, SumTT, SumY, SumTY, SumX, SumZ = 0, 0, 0, 0, 0, 0, 0
+		local LastSample = nil
+
+		local function AddSample()
+			LPH_ATTRIBUTES(VM(NONE))
+			local Position = Ball.Position
+			if LastSample and (Position - LastSample).Magnitude < 0.01 then
+				return
+			end
+			LastSample = Position
+
+			local Time = os.clock() - FitStart
+			local Height = Position.Y + 0.5 * Fall * Time * Time
+			Count += 1
+			SumT += Time
+			SumTT += Time * Time
+			SumY += Height
+			SumTY += Time * Height
+			SumX += Position.X - LaunchVelocity.X * Time
+			SumZ += Position.Z - LaunchVelocity.Z * Time
+		end
+
+		local function SolvePath()
+			LPH_ATTRIBUTES(VM(NONE))
+			-- Until the fit has enough spread, assume the ball was first seen about 0.04s after release (measured in-game).
+			local Slope = TrueLaunchY - Fall * 0.04
+			local Mean = SumT / Count
+			if Count >= 8 and SumTT / Count - Mean * Mean > 0.005 then
+				Slope = (Count * SumTY - SumT * SumY) / (Count * SumTT - SumT * SumT)
+			end
+			local Base = Vector3.new(SumX / Count, (SumY - Slope * SumT) / Count, SumZ / Count)
+
+			local LaunchTime = math.clamp((Slope - TrueLaunchY) / Fall, -0.5, 0)
+			local Origin = Base + Vector3.new(LaunchVelocity.X, Slope, LaunchVelocity.Z) * LaunchTime - Vector3.new(0, 0.5 * Fall * LaunchTime * LaunchTime, 0)
+			local Velocity = Vector3.new(LaunchVelocity.X, Slope - Fall * LaunchTime, LaunchVelocity.Z)
+
+			local AirTime = 2
+			local Discriminant = Velocity.Y * Velocity.Y + 2 * Fall * (Origin.Y - RestHeight)
+			if Discriminant > 0 then
+				AirTime = math.max((Velocity.Y + math.sqrt(Discriminant)) / Fall, 0.05)
+			end
+			return Origin, Velocity, AirTime, LaunchTime
+		end
+
+		AddSample()
+		local Origin, PathVelocity, AirTime, LaunchTime = SolvePath()
+		local Curve0, Curve1, CFrame1, CFrame2 = BeamProjectile(Gravity, PathVelocity, Origin, AirTime)
+
+		local Attachment0 = Instance.new("Attachment")
+		Attachment0.CFrame = CFrame1
+		Attachment0.Parent = workspace.Terrain
+
+		local Attachment1 = Instance.new("Attachment")
+		Attachment1.CFrame = CFrame2
+		Attachment1.Parent = workspace.Terrain
+
+		local Core = CreateBeam(Attachment0, Attachment1, Curve0, Curve1, 0.45, 0.2)
+		local Glow = CreateBeam(Attachment0, Attachment1, Curve0, Curve1, 2.4, 1.2)
+		local Flow = CreateBeam(Attachment0, Attachment1, Curve0, Curve1, 1.1, 0.6)
+		Flow.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		Flow.TextureMode = Enum.TextureMode.Wrap
+		Flow.TextureLength = 5
+		Flow.TextureSpeed = 1.6
+
+		local Landing = CFrame2.Position
+		local Marker = Instance.new("Part")
+		Marker.Name = HttpService:GenerateGUID(false)
+		Marker.Shape = Enum.PartType.Cylinder
+		Marker.Material = Enum.Material.Neon
+		Marker.Anchored = true
+		Marker.CanCollide = false
+		Marker.CanTouch = false
+		Marker.CanQuery = false
+		Marker.CastShadow = false
+		Marker.Transparency = 1
+		Marker.Size = Vector3.new(0.12, 3, 3)
+		Marker.CFrame = CFrame.new(Landing.X, GroundHeight + 0.1, Landing.Z) * CFrame.Angles(0, 0, math.pi / 2)
+		Marker.Parent = workspace
+
+		PathObjects = { Attachment0, Attachment1, Core, Glow, Flow, Marker }
+
+		local Started = os.clock()
+		local FadeStarted = nil
+
+		PathConnection = RunService.Heartbeat:Connect(function()
+			LPH_ATTRIBUTES(VM(NONE))
+			local Now = os.clock()
+			local Landed = Ball.Parent ~= nil and (Ball.Position.Y < RestHeight - 1 or Now - FitStart > LaunchTime + AirTime + 0.25)
+			local Ended = not Aural.Visuals.ThrownBallBeam or not Ball.Parent or Landed or (Ball.AssemblyLinearVelocity - LaunchVelocity).Magnitude > 1
+			if Ended and not FadeStarted then
+				FadeStarted = Now
+			end
+
+			if not FadeStarted then
+				AddSample()
+				Origin, PathVelocity, AirTime, LaunchTime = SolvePath()
+				Curve0, Curve1, CFrame1, CFrame2 = BeamProjectile(Gravity, PathVelocity, Origin, AirTime)
+				Attachment0.CFrame = CFrame1
+				Attachment1.CFrame = CFrame2
+				for Index, Beam in { Core, Glow, Flow } do
+					Beam.CurveSize0 = Curve0
+					Beam.CurveSize1 = Curve1
+				end
+				Landing = CFrame2.Position
+				Marker.CFrame = CFrame.new(Landing.X, GroundHeight + 0.1, Landing.Z) * CFrame.Angles(0, 0, math.pi / 2)
+			end
+
+			local Fade = FadeStarted and math.clamp((Now - FadeStarted) / FadeTime, 0, 1) or 0
+			if Fade >= 1 then
+				StopBallPath()
+				return
+			end
+
+			local Linear = math.clamp((Now - Started) / RevealTime, 0, 1)
+			local Reveal = 1 - (1 - Linear) ^ 3
+			local Pulse = 0.5 + 0.5 * math.sin(Now * 5)
+			local Shine = (Now * 0.7) % 1
+
+			local Color0, Color1 = Aural.Visuals.ThrownBallBeamColor, Aural.Visuals.ThrownBallBeamColor2
+			local Colors = BuildColor(Color0, Color1, Shine)
+
+			Core.Color = Colors
+			Core.Transparency = BuildTransparency(0, Reveal, Fade)
+			Glow.Color = Colors
+			Glow.Transparency = BuildTransparency(0.8 + 0.06 * Pulse, Reveal, Fade)
+			Flow.Color = Colors
+			Flow.Transparency = BuildTransparency(0.35, Reveal, Fade)
+
+			local Diameter = 2.6 + 1.6 * Pulse
+			Marker.Color = Color1
+			Marker.Size = Vector3.new(0.12, Diameter, Diameter)
+			Marker.Transparency = 1 - (0.55 - 0.3 * Pulse) * Linear * (1 - Fade)
+		end)
+	end
+
+	workspace.ChildAdded:Connect(function(Ball)
+		LPH_ATTRIBUTES(VM(NONE))
+		if not Aural.Visuals.ThrownBallBeam then
+			return
+		end
+		if not Ball:IsA("BasePart") or Ball.Name ~= "Football" then
+			return
+		end
+
+		task.wait()
+		StartBallPath(Ball)
+	end)
+end
+
+-- // Kicker Aim
+do
+	local function GetKickTrigger()
+		LPH_ATTRIBUTES(VM(NONE))
+		if not (getconnections and debug.getupvalues and debug.setupvalue) then
+			return nil
+		end
+		for Index, SignalName in { "InputBegan", "TouchTap" } do
+			for Index, Connection in getconnections(UserInputService[SignalName]) do
+				local Function = Connection.Function
+				if Function and islclosure(Function) then
+					local Source = debug.info(Function, "s")
+					if Source and string.find(Source, "KickerScript") then
+						local Upvalues = debug.getupvalues(Function)
+						if typeof(Upvalues[1]) == "boolean" and typeof(Upvalues[2]) == "boolean" then
+							return function()
+								LPH_ATTRIBUTES(VM(NONE))
+								debug.setupvalue(Function, 2, true)
+							end
+						end
+					end
+				end
+			end
+		end
+		return nil
+	end
+
+	local function GetPowerTarget(KickerGui, Masks)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Power = Aural.Automatics.KickerAimPower
+		local Section = Power >= 90 and 4 or Power >= 65 and 3 or Power >= 25 and 2 or 1
+		local Mask = Masks:FindFirstChild("s" .. Section)
+		if not Mask or KickerGui.AbsoluteSize.X <= 0 then
+			return 0.5
+		end
+		local Center = (Mask.AbsolutePosition.X + Mask.AbsoluteSize.X / 2) / KickerGui.AbsoluteSize.X
+		return math.clamp(Center, 0.12, 0.88)
+	end
+
+	-- The match place renames the cursor and the mask frame to random characters and adds a decoy cursor that never
+	-- moves, so the parts are found by structure: the masks frame holds "s4", and the real cursor is the one that moves.
+	local function FindKickerParts(KickerGui)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Frame = KickerGui:WaitForChild("Frame", 5)
+		if not Frame then
+			return nil, nil
+		end
+
+		local Masks, Candidates = nil, {}
+		local Deadline = os.clock() + 2
+		repeat
+			Masks, Candidates = nil, {}
+			for Index, Child in Frame:GetChildren() do
+				if Child:IsA("Frame") then
+					if Child:FindFirstChild("s4") then
+						Masks = Child
+					else
+						table.insert(Candidates, Child)
+					end
+				end
+			end
+			if not Masks or #Candidates == 0 then
+				task.wait()
+			end
+		until (Masks and #Candidates > 0) or os.clock() > Deadline
+		if not Masks or #Candidates == 0 then
+			return nil, nil
+		end
+		if #Candidates == 1 then
+			return Candidates[1], Masks
+		end
+
+		local Start = {}
+		for Index, Candidate in Candidates do
+			Start[Candidate] = Candidate.Position.X.Scale
+		end
+		Deadline = os.clock() + 2
+		while os.clock() < Deadline and KickerGui.Parent do
+			RunService.Heartbeat:Wait()
+			for Index, Candidate in Candidates do
+				if math.abs(Candidate.Position.X.Scale - Start[Candidate]) > 0.001 then
+					return Candidate, Masks
+				end
+			end
+		end
+		return nil, nil
+	end
+
+	-- Fallback when the game's own input handler cannot be reached (it is hidden from the executor in the match place).
+	-- The game listens for a mouse click on desktop and a tap on touch devices, and ignores input that lands on a GUI.
+	local function GetInputTrigger()
+		LPH_ATTRIBUTES(VM(NONE))
+		local Ok, VirtualInputManager = pcall(game.GetService, game, "VirtualInputManager")
+		if not Ok or not VirtualInputManager then
+			return mouse1click
+		end
+
+		local function FreePoint()
+			LPH_ATTRIBUTES(VM(NONE))
+			local Viewport = workspace.CurrentCamera.ViewportSize
+			local Inset = GuiService:GetGuiInset()
+			for Index, Scale in { Vector2.new(0.5, 0.35), Vector2.new(0.3, 0.3), Vector2.new(0.7, 0.3), Vector2.new(0.5, 0.6), Vector2.new(0.2, 0.55), Vector2.new(0.8, 0.55) } do
+				local Point = Viewport * Scale
+				local Blocked = false
+				for Index, Root in { LocalPlayer.PlayerGui, CoreGui } do
+					local Found, Objects = pcall(Root.GetGuiObjectsAtPosition, Root, Point.X, Point.Y - Inset.Y)
+					if Found then
+						for Index, Object in Objects do
+							if Object.Visible and (Object:IsA("GuiButton") or Object.Active) then
+								Blocked = true
+								break
+							end
+						end
+					end
+				end
+				if not Blocked then
+					return Point
+				end
+			end
+			return Viewport * Vector2.new(0.5, 0.35)
+		end
+
+		local UsesMouse = UserInputService.GamepadEnabled or LocalPlayer:GetAttribute("JoinMouse")
+		return function()
+			LPH_ATTRIBUTES(VM(NONE))
+			local Point = FreePoint()
+			pcall(function()
+				LPH_ATTRIBUTES(VM(NONE))
+				if UsesMouse then
+					VirtualInputManager:SendMouseButtonEvent(Point.X, Point.Y, 0, true, game, 1)
+					VirtualInputManager:SendMouseButtonEvent(Point.X, Point.Y, 0, false, game, 1)
+				else
+					VirtualInputManager:SendTouchEvent(1, 0, Point.X, Point.Y)
+					VirtualInputManager:SendTouchEvent(1, 2, Point.X, Point.Y)
+				end
+			end)
+		end
+	end
+
+	local function AutoKickCallback(KickerGui)
+		LPH_ATTRIBUTES(VM(NONE))
+		local Started = os.clock()
+		local Cursor, Masks = FindKickerParts(KickerGui)
+		if not Cursor or not Masks then
+			return
+		end
+
+		local Trigger
+		local Deadline = os.clock() + 0.6
+		repeat
+			Trigger = GetKickTrigger()
+			if not Trigger then
+				task.wait()
+			end
+		until Trigger or os.clock() > Deadline
+		Trigger = Trigger or GetInputTrigger()
+		if not Trigger then
+			return
+		end
+
+		-- Heartbeat runs after the game has moved the cursor for the frame, so the value read here is exactly the one
+		-- the game uses when the click registers on its next step.
+		local function ClickAt(Target)
+			LPH_ATTRIBUTES(VM(NONE))
+			local Last = Cursor.Position.X.Scale
+			while KickerGui.Parent do
+				RunService.Heartbeat:Wait()
+				local X = Cursor.Position.X.Scale
+				local Step = math.abs(X - Last)
+				Last = X
+				if Step > 0 and math.abs(X - Target) <= Step / 2 + 0.0005 then
+					Trigger()
+					return true
+				end
+			end
+			return false
+		end
+
+		local function WaitUntil(Predicate)
+			LPH_ATTRIBUTES(VM(NONE))
+			while KickerGui.Parent do
+				if Predicate(Cursor.Position.X.Scale) then
+					return true
+				end
+				RunService.Heartbeat:Wait()
+			end
+			return false
+		end
+
+		-- The game ignores clicks for the first half second after the meter appears.
+		while os.clock() - Started < 0.65 do
+			task.wait()
+		end
+
+		if not ClickAt(GetPowerTarget(KickerGui, Masks)) then
+			return
+		end
+		if not WaitUntil(function(X) return X < 0.1 or X > 0.9 end) then
+			return
+		end
+		if not WaitUntil(function(X) return X >= 0.1 and X <= 0.9 end) then
+			return
+		end
+
+		ClickAt(0.5 + (100 - Aural.Automatics.KickerAimAccuracy) / 100 * 0.051)
+	end
+
+	LocalPlayer.PlayerGui.ChildAdded:Connect(function(Child)
+		LPH_ATTRIBUTES(VM(NONE))
+		if Child.Name == "KickerGui" and Aural.Automatics.KickerAim then
+			AutoKickCallback(Child)
+		end
+	end)
+end
+
+return Library
