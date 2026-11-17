@@ -7,12 +7,15 @@ local Aural = {
 		PingMultiplier = 100,
 		ReleasePoint = 97,
 		TimingOffset = -5,
+		AutoGreen = true,
 
 		AutoAlign = true,
 		DistanceScaling = true,
 		ThreePointOnly = false,
 
 		AutoShoot = false,
+		AutoDunk = false,
+		DunkRange = 9,
 		ShootRange = 27,
 		RangeCircle = false,
 		RangeCircleColor = Color3.fromRGB(255, 92, 146),
@@ -7366,7 +7369,7 @@ local Library = (function()
         _win = AV2:CreateWindow({
             Title      = opts.Title or "Aural",
             Subtitle   = opts.Subtitle,
-            ToggleKey  = Enum.KeyCode.F5,
+            ToggleKey  = opts.ToggleKey or Enum.KeyCode.RightShift,
             Configs    = true,
         })
 
@@ -7630,6 +7633,7 @@ local Remotes = {
 	ShowFeedback = GetRemote("InterfaceService", "ShowFeedback"),
 	MeterRegister = GetRemote("MeterService", "RegisterPacket"),
 	MeterUnregister = GetRemote("MeterService", "UnregisterPacket"),
+	UpdateGreenWindow = GetRemote("MeterService", "UpdateGreenWindow"),
 	GreenAnimation = GetRemote("InputService", "GreenAnimation"),
 	GreenCelebration = GetRemote("InterfaceService", "GreenCelebration"),
 	RunGreenEffect = GetRemote("InterfaceService", "RunGreenEffect"),
@@ -7797,7 +7801,7 @@ Library.Folder = "Aural"
 
 local HttpService = game:GetService("HttpService")
 
-local MenuKey = Enum.KeyCode.F5
+local MenuKey = Enum.KeyCode.RightShift
 local Window = Library:CreateWindow({ Title = "Aural", Subtitle = "practical basketball", ToggleKey = MenuKey })
 local Icons = Library.Icons
 
@@ -7911,6 +7915,7 @@ do
 		if PerfTimingToggle then pcall(function() PerfTimingToggle:Set(newVal) end) end
 		Aural.Shooting.PerfectTiming = newVal
 	end })
+	Timing:AddToggle({ Title = "Auto Green", Description = "Learns the exact meter point that grades Perfect and stops the meter on it", Flag = "AutoGreen", Default = Aural.Shooting.AutoGreen, Callback = function(V) Aural.Shooting.AutoGreen = V end })
 	Timing:AddSlider({ Title = "Release Point", Description = "How full the meter is when the release lands", Min = 90, Max = 100, Default = Aural.Shooting.ReleasePoint, Step = 0.5, Decimals = 1, Suffix = "%", Flag = "ReleasePoint", Callback = function(V) Aural.Shooting.ReleasePoint = V end })
 	Timing:AddSlider({ Title = "Timing Offset", Description = "Manual nudge; positive releases later", Min = -100, Max = 100, Default = -5, Suffix = "ms", Flag = "TimingOffset", Callback = function(V) Aural.Shooting.TimingOffset = V end })
 	Timing:AddToggle({ Title = "Auto Align", Description = "Squares up directly facing the hoop to eliminate drift and angle penalties", Flag = "AutoAlign", Default = Aural.Shooting.AutoAlign, Callback = function(V) Aural.Shooting.AutoAlign = V end })
@@ -7948,6 +7953,11 @@ do
 	end })
 	Shoot:AddSlider({ Title = "Shoot Range", Description = "Max distance from the hoop to shoot", Min = 5, Max = 45, Default = Aural.Shooting.ShootRange, Suffix = " studs", Flag = "ShootRange", Callback = function(V) Aural.Shooting.ShootRange = V end })
 	Shoot:AddToggle({ Title = "3-Point Only", Description = "Auto shoot only fires when positioned behind the 3-point line (21.5+ studs)", Flag = "ThreePointOnly", Default = Aural.Shooting.ThreePointOnly, Callback = function(V) Aural.Shooting.ThreePointOnly = V end })
+
+	-- Auto Dunk (own box)
+	local Dunk = ShootingTab:CreateSection({ Title = "Auto Dunk", Icon = Icons.Target })
+	Dunk:AddToggle({ Title = "Auto Dunk", Description = "Holds space like you do when you run at the rim with the ball", Flag = "AutoDunk", Default = Aural.Shooting.AutoDunk, Callback = function(V) Aural.Shooting.AutoDunk = V end })
+	Dunk:AddSlider({ Title = "Dunk Range", Description = "How close to the hoop before it holds space", Min = 5, Max = 25, Default = Aural.Shooting.DunkRange, Suffix = " studs", Flag = "DunkRange", Callback = function(V) Aural.Shooting.DunkRange = V end })
 
 	local Circle = ShootingTab:CreateSection({ Title = "Range Circle", Icon = Icons.Target })
 	Circle:AddToggle({ Title = "Show Range", Description = "Draws the shoot range around the hoop you attack", Flag = "RangeCircle", Default = Aural.Shooting.RangeCircle, Callback = function(V) Aural.Shooting.RangeCircle = V end })
@@ -8223,7 +8233,28 @@ do
 	}
 	local AutoPending = 0
 	local Calibration = 0
+	-- Auto Green: meter point (0 to 1) that grades Perfect, learned per meter type from shot feedback.
+	local GreenTargets = {}
+	-- Meters whose server green window is the meter position where the green ends (from the game's Config.Meters).
+	local DirectGreen = {} -- disabled: the server green value is not confirmed to be a meter position, it released far too early
+	local GreenOffsets = {} -- per-meter nudge learned from shot feedback, on top of the real green edge
+	local GreenMargin = 0.012 -- aim just inside the top edge of the green
+
+	local function CleanEdge(Value)
+		Value = tonumber(Value)
+		if Value and Value > 0.3 and Value <= 1.2 then
+			return Value
+		end
+		return nil
+	end
+
+	local function UsesRealGreen()
+		return Aural.Shooting.AutoGreen and DirectGreen[Shot.Meter] == true and type(Shot.GreenEdge) == "number"
+	end
 	local LastAutoShot = 0
+	local DunkHold, DunkSeen, LastDunk = nil, false, 0
+	local DunkLastPos, DunkLastTime = nil, 0
+	local DunkIdleActions = { [""] = true, Dribbling = true, Moving = true, TripleThreat = true }
 	local Bound, BoundConnections = nil, {}
 	local SmoothedPing = nil
 
@@ -8235,6 +8266,8 @@ do
 
 	ResetCalibration = function()
 		Calibration = 0
+		GreenTargets = {}
+		GreenOffsets = {}
 		CalibrationLabel:Update("calibration: +0ms")
 	end
 
@@ -8259,6 +8292,13 @@ do
 	-- On 3-pointers, the release point must be clean and high to clear the front iron
 	local function GetEffectiveTarget(Distance)
 		local BaseTarget = Aural.Shooting.ReleasePoint / 100
+		if UsesRealGreen() then
+			-- Real green edge from the server, aimed just inside it, plus what feedback taught us.
+			return math.clamp(Shot.GreenEdge - GreenMargin + (GreenOffsets[Shot.Meter] or 0), 0.5, 1.1)
+		end
+		if Aural.Shooting.AutoGreen and GreenTargets[Shot.Meter] then
+			BaseTarget = GreenTargets[Shot.Meter]
+		end
 		if not Aural.Shooting.DistanceScaling or not Distance then
 			return BaseTarget
 		end
@@ -8436,25 +8476,35 @@ do
 
 		Shot.PredictedReleaseTime = TargetTime
 
+		-- Auto Green: stop as soon as the live meter reading (plus ping lead) reaches the green point.
+		local Latest = Shot.Samples[#Shot.Samples]
+		if Aural.Shooting.AutoGreen and Latest and Shot.Slope and Shot.Slope > 0 then
+			if Latest[2] + Shot.Slope * GetLead() >= GetEffectiveTarget(Shot.Distance) then
+				Release()
+				return
+			end
+		end
+
 		if os.clock() >= TargetTime then
 			Release()
 			return
 		end
 	end
 
-	local function BeginShot(MeterType)
+	local function BeginShot(MeterType, GreenEdge)
 		Shot.Generation += 1
 		Shot.Active = true
 		Shot.Start = os.clock()
 		Shot.Meter = MeterType or Shot.Meter
 		Shot.Samples = {}
+		Shot.GreenEdge = CleanEdge(GreenEdge)
 		Shot.Slope = nil
 		Shot.Intercept = nil
 		Shot.PredictedReleaseTime = nil
 		Shot.Released = false
 		Shot.Final = nil
 		Shot.Ours = false
-		Shot.Auto = (os.clock() - AutoPending < 0.6)
+		Shot.Auto = (os.clock() - AutoPending < 0.6) or (DunkHold ~= nil and os.clock() - DunkHold < 2.5)
 		AutoPending = 0
 
 		-- Distance & fadeaway calculations for clean 3-point arcs
@@ -8509,6 +8559,20 @@ do
 			Change = Stalled and -0.008 or math.max(Error, 0.003)
 		end
 		Change = math.clamp(Change * 0.5, -0.015, 0.015)
+		if Aural.Shooting.AutoGreen then
+			-- Auto Green: move the meter point itself toward the green instead of shifting time.
+			if UsesRealGreen() then
+				local RealSlope = (Shot.Slope and Shot.Slope > 0) and Shot.Slope or (1 / GetDistanceFillTime(Shot.Distance))
+				GreenOffsets[Shot.Meter] = math.clamp((GreenOffsets[Shot.Meter] or 0) + Change * RealSlope, -0.05, 0.02)
+				CalibrationLabel:Update(string.format("green edge %.1f%%, offset %+.1f%%", Shot.GreenEdge * 100, GreenOffsets[Shot.Meter] * 100))
+				return
+			end
+			local Slope = (Shot.Slope and Shot.Slope > 0) and Shot.Slope or (1 / GetDistanceFillTime(Shot.Distance))
+			local Current = GreenTargets[Shot.Meter] or (Aural.Shooting.ReleasePoint / 100)
+			GreenTargets[Shot.Meter] = math.clamp(Current + Change * Slope, 0.85, 1.08)
+			CalibrationLabel:Update(string.format("green point: %.1f%%", GreenTargets[Shot.Meter] * 100))
+			return
+		end
 		Calibration = math.clamp(Calibration + Change, -0.15, 0.15)
 		CalibrationLabel:Update(string.format("calibration: %+dms", math.round(Calibration * 1000)))
 	end
@@ -8573,11 +8637,12 @@ do
 		end
 	end)
 
-	Connect(Remotes.MeterRegister.OnClientEvent, function(Model, MeterType)
+	Connect(Remotes.MeterRegister.OnClientEvent, function(Model, MeterType, GreenWindow)
 		if Model == Bound and (not Shot.Active or os.clock() - Shot.Start > 0.3) then
-			BeginShot(MeterType)
+			BeginShot(MeterType, GreenWindow)
 		elseif Model == Bound then
 			Shot.Meter = MeterType or Shot.Meter
+			Shot.GreenEdge = CleanEdge(GreenWindow) or Shot.GreenEdge
 			UpdatePrediction()
 		end
 	end)
@@ -8585,6 +8650,14 @@ do
 	Connect(Remotes.MeterUnregister.OnClientEvent, function(Model)
 		if Model == Bound then
 			Shot.Active = false
+		end
+	end)
+
+	Connect(Remotes.UpdateGreenWindow.OnClientEvent, function(Model, Window)
+		local Edge = CleanEdge(Window)
+		if Model == Bound and Edge then
+			Shot.GreenEdge = Edge
+			UpdatePrediction()
 		end
 	end)
 
@@ -8633,7 +8706,73 @@ do
 		CheckShot()
 
 		local Character = GetCharacter()
-		if Aural.Shooting.AutoShoot and not Shot.Active and Character and HasBall(Character) and Character:GetAttribute("Action") == "" and os.clock() - LastAutoShot > 1.5 then
+
+		-- Auto Dunk: hold space (same calls as the key) while running at the rim, let go once the dunk starts
+		if DunkHold then
+			local Action = Character and Character:GetAttribute("Action")
+			if Action == "Dunking" then
+				DunkSeen = true
+			end
+			-- a meter that started after we pressed is this dunk's: the Perfect Timing worker predicts the green and releases it
+			local MeterRunning = Shot.Active and Shot.Start >= DunkHold - 0.05
+			local Done = false
+			if not Character or not Aural.Shooting.AutoDunk then
+				Done = true
+			elseif MeterRunning then
+				if Shot.Released then
+					Done = true
+				elseif os.clock() - DunkHold > 3 then
+					Done = true
+					Fire(Remotes.Shoot, { Shoot = false })
+				end
+			elseif DunkSeen and Action ~= "Dunking" then
+				Done = true
+				Fire(Remotes.Shoot, { Shoot = false })
+			elseif os.clock() - DunkHold > 1.6 or (not HasBall(Character) and not DunkSeen) then
+				Done = true
+				Fire(Remotes.Shoot, { Shoot = false })
+			end
+			if Done then
+				DunkHold, DunkSeen = nil, false
+				LastDunk = os.clock()
+			end
+		elseif Aural.Shooting.AutoDunk and not Shot.Active and Character and HasBall(Character) and DunkIdleActions[Character:GetAttribute("Action")] and os.clock() - LastDunk > 1.5 then
+			local Root, Goal = GetRoot(Character), GetGoal(Character)
+			if Root and Goal then
+				local ToGoal = Flat(Goal - Root.Position)
+				-- the game moves a proxy part and the visible root just follows, so read speed from whichever is moving
+				local Proxy = GetProxy()
+				local Vel = Flat(Root.AssemblyLinearVelocity)
+				if Proxy and Flat(Proxy.AssemblyLinearVelocity).Magnitude > Vel.Magnitude then
+					Vel = Flat(Proxy.AssemblyLinearVelocity)
+				end
+				if DunkLastPos and os.clock() > DunkLastTime then
+					local Delta = Flat(Root.Position - DunkLastPos) / (os.clock() - DunkLastTime)
+					if Delta.Magnitude > Vel.Magnitude then
+						Vel = Delta
+					end
+				end
+				local Running = Vel.Magnitude > 3 and Vel.Unit:Dot(ToGoal.Unit) > 0.4
+				if ToGoal.Magnitude <= Aural.Shooting.DunkRange and (Running or (Character:GetAttribute("Sprinting") == true and Vel.Magnitude < 0.5)) then
+					DunkHold, DunkSeen = os.clock(), false
+					AutoPending = os.clock()
+					AlignToBasket(Character)
+					Fire(Remotes.Shoot, { Shoot = true, Input = "E", UseSpace = true })
+					Fire(Remotes.Jump)
+				end
+			end
+		end
+		do
+			local Root = GetRoot(Character)
+			DunkLastPos, DunkLastTime = Root and Root.Position, os.clock()
+		end
+
+		local DunkNear = false
+		if Aural.Shooting.AutoDunk and Character then
+			local Root, Goal = GetRoot(Character), GetGoal(Character)
+			DunkNear = Root ~= nil and Goal ~= nil and Flat(Goal - Root.Position).Magnitude <= Aural.Shooting.DunkRange
+		end
+		if Aural.Shooting.AutoShoot and not DunkHold and not DunkNear and not Shot.Active and Character and HasBall(Character) and Character:GetAttribute("Action") == "" and os.clock() - LastAutoShot > 1.5 then
 			local Root, Goal = GetRoot(Character), GetGoal(Character)
 			if Root and Goal then
 				local Distance = Flat(Goal - Root.Position).Magnitude
