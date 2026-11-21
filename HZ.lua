@@ -1,3 +1,34 @@
+for _, actor in pairs(getactors()) do
+    run_on_actor(actor, [[
+        local reporter = filtergc("table", {
+            Keys = { 3 },
+            KeyValuePairs = { [2] = ":anticheat:" }
+        }, true);
+
+        if not reporter then
+            return;
+        end;
+
+        local original;
+        original = hookfunction(reporter[0], function(...)
+            local event = ...;
+
+            -- Log what the hooked function receives
+            --warn("[bypass] arguments", ...);
+            if type(event) == "string" then
+                --warn("[bypass] string:", event);
+            end;
+
+            local is_report = (type(event) == "string") and (event:find("anticheat") ~= nil);
+
+            if not is_report then
+                return original(...);
+            end;
+            -- is_report is true: block directly, return nil
+        end);
+    ]]);
+end;
+
 local AuralV2 = (function()
 
 local Players = game:GetService("Players")
@@ -7910,6 +7941,414 @@ local HeadRide = (function()
 
 end)()
 
+-- ============================================================
+-- Court Skin Spoofer
+-- ============================================================
+local CourtSpoofer = (function()
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local LocalPlayer = Players.LocalPlayer
+
+    local CS = {
+        Enabled = false,
+        SkinName = "CourtSkin_Default",
+        Status = "OFF",
+        _skinner = nil,
+        _resolved = false,
+        _lastApply = 0,
+    }
+
+    local function getAllCourts()
+        local out = {}
+        local folder = workspace:FindFirstChild("Courts")
+        if folder then
+            for _, c in ipairs(folder:GetChildren()) do
+                if c:IsA("Model") then table.insert(out, c) end
+            end
+        end
+        local single = workspace:FindFirstChild("Court")
+        if single and single:IsA("Model") then table.insert(out, single) end
+        return out
+    end
+
+    local function resolveSkinner()
+        if CS._resolved then return CS._skinner end
+        CS._resolved = true
+        local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        if not scripts then return nil end
+        local found = scripts:FindFirstChild("CourtSkinner", true)
+        if not found or not found:IsA("ModuleScript") then return nil end
+        local ok, mod = pcall(require, found)
+        if ok and type(mod) == "table" and type(mod.changeSkin) == "function" then
+            CS._skinner = mod
+            return mod
+        end
+        return nil
+    end
+
+    local function resolveSkin(name)
+        local shop = ReplicatedStorage:FindFirstChild("ShopItems")
+        local folder = shop and shop:FindFirstChild("CourtSkin")
+        if not folder then return nil end
+        if name and name ~= "None" then
+            local m = folder:FindFirstChild(name)
+            if m then return m end
+        end
+        return folder:FindFirstChild("CourtSkin_Default")
+    end
+
+    function CS:GetOptions()
+        local list = { "None" }
+        local shop = ReplicatedStorage:FindFirstChild("ShopItems")
+        local folder = shop and shop:FindFirstChild("CourtSkin")
+        if folder then
+            for _, item in ipairs(folder:GetChildren()) do
+                table.insert(list, item.Name)
+            end
+        end
+        table.sort(list)
+        return list
+    end
+
+    function CS:Apply(force)
+        if not CS.Enabled then return false end
+        local now = os.clock()
+        if not force and now - CS._lastApply < 0.5 then return false end
+        CS._lastApply = now
+        local skinner = resolveSkinner()
+        if not skinner then
+            CS.Status = "UNSUPPORTED"
+            return false
+        end
+        local skin = resolveSkin(CS.SkinName)
+        if not skin then
+            CS.Status = "NO ASSETS"
+            return false
+        end
+        local applied = 0
+        for _, court in ipairs(getAllCourts()) do
+            local ok = pcall(function() skinner.changeSkin(court, skin, false) end)
+            if ok then applied += 1 end
+        end
+        CS.Status = applied > 0 and (CS.SkinName .. " x" .. applied) or "NO COURTS"
+        return applied > 0
+    end
+
+    function CS:SetEnabled(on)
+        CS.Enabled = on == true
+        if CS.Enabled then
+            -- Game re-applies default when these flags are on, so clear them
+            pcall(function()
+                local PlayerData = require(ReplicatedStorage.Util.PlayerData)
+                if PlayerData and PlayerData.storedData then
+                    PlayerData.storedData.Config = PlayerData.storedData.Config or {}
+                    PlayerData.storedData.Config.Toggle_CourtSkins = true
+                end
+            end)
+            CS:Apply(true)
+        else
+            CS.SkinName = "CourtSkin_Default"
+            CS:Apply(true)
+            CS.Status = "OFF"
+        end
+    end
+
+    function CS:SetSkin(name)
+        CS.SkinName = name or "CourtSkin_Default"
+        if CS.Enabled then CS:Apply(true) end
+    end
+
+    -- Re-apply periodically because the game resets skin on court load
+    task.spawn(function()
+        while CS._skinner ~= false do
+            task.wait(2)
+            if CS.Enabled then pcall(function() CS:Apply(false) end) end
+        end
+    end)
+
+    return CS
+end)()
+getgenv().AuralCourtSpoofer = CourtSpoofer
+
+-- ============================================================
+-- Streak Spoofer (local-only)
+-- ============================================================
+local StreakSpoofer = (function()
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+    local SS = {
+        Enabled = false,
+        Value = 25,
+        Status = "OFF",
+        _rankings = nil,
+        _running = true,
+    }
+
+    local function getRankings()
+        if SS._rankings then return SS._rankings end
+        local util = ReplicatedStorage:FindFirstChild("Util")
+        local module = util and util:FindFirstChild("Rankings")
+        if not module then return nil end
+        local ok, result = pcall(require, module)
+        if ok and type(result) == "table" then
+            SS._rankings = result
+            return result
+        end
+        return nil
+    end
+
+    local function isLocalName(value)
+        value = tostring(value or "")
+        return value == LocalPlayer.Name
+            or value == LocalPlayer.DisplayName
+            or value == ("@" .. LocalPlayer.Name)
+    end
+
+    local function isLocalBanner(streakFrame, playerGui)
+        local node = streakFrame
+        while node and node ~= playerGui do
+            if node.Name == "MainFrame" or node.Name == "GameFrame" then
+                for _, child in node:GetDescendants() do
+                    if (child:IsA("TextLabel") or child:IsA("TextButton")) and isLocalName(child.Text) then
+                        return true
+                    end
+                end
+            end
+            node = node.Parent
+        end
+        return false
+    end
+
+    local function patchStreak(streakFrame)
+        if not (streakFrame and streakFrame.Parent and streakFrame:IsA("ImageLabel")) then return end
+
+        local value = math.max(0, math.floor(tonumber(SS.Value) or 0))
+        local rankings = getRankings()
+        local image
+
+        if value > 1 and rankings and type(rankings.getStreakImage) == "function" then
+            local ok, result = pcall(rankings.getStreakImage, value)
+            if ok and type(result) == "string" and result ~= "" then
+                image = result
+            end
+        end
+
+        if image then streakFrame.Image = image end
+        streakFrame.Visible = value > 1
+        streakFrame.ImageTransparency = 0
+        streakFrame.ImageColor3 = Color3.new(1, 1, 1)
+
+        local amount = streakFrame:FindFirstChild("AmountLabel", true)
+            or streakFrame:FindFirstChildWhichIsA("TextLabel", true)
+
+        if amount then
+            amount.Text = value > 0 and tostring(value) or ""
+            amount.Visible = value > 1
+            amount.TextColor3 = Color3.new(1, 1, 1)
+
+            local gradient = amount:FindFirstChildOfClass("UIGradient")
+            if gradient then
+                gradient.Color = ColorSequence.new(Color3.new(1, 1, 1))
+            end
+        end
+    end
+
+    function SS:Apply()
+        if not SS.Enabled then return end
+
+        local character = LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local nameTag = root and root:FindFirstChild("NameTag")
+
+        if nameTag then
+            for _, frameName in { "MainFrame", "GameFrame" } do
+                local frame = nameTag:FindFirstChild(frameName)
+                local streak = frame and (frame:FindFirstChild("StreakIcon") or frame:FindFirstChild("Streak"))
+                if streak and streak:IsA("ImageLabel") then
+                    patchStreak(streak)
+                end
+            end
+        end
+
+        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if not playerGui then return end
+
+        for _, object in playerGui:GetDescendants() do
+            if object:IsA("ImageLabel") and (object.Name == "StreakIcon" or object.Name == "Streak") then
+                if isLocalBanner(object, playerGui) then
+                    patchStreak(object)
+                end
+            end
+        end
+    end
+
+    function SS:SetEnabled(enabled)
+        SS.Enabled = enabled == true
+        SS.Status = SS.Enabled and "ACTIVE" or "OFF"
+        if SS.Enabled then SS:Apply() end
+    end
+
+    J:Spawn(function()
+        while true do
+            if SS.Enabled then
+                pcall(function() SS:Apply() end)
+                task.wait(0.35)
+            else
+                task.wait(0.6)
+            end
+        end
+    end)
+
+    function SS:SetValue(value)
+        SS.Value = math.max(0, math.floor(tonumber(value) or 0))
+        if SS.Enabled then SS:Apply() end
+    end
+
+    return SS
+end)()
+getgenv().AuralStreakSpoofer = StreakSpoofer
+
+-- ============================================================
+-- Auto Performance Mode
+-- ============================================================
+local AutoPerf = (function()
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local LocalPlayer = Players.LocalPlayer
+
+    local AP = {
+        Enabled = false,
+        LowFPS = 38,
+        RestoreFPS = 52,
+        Applied = false,
+        Saved = nil,
+        FPS = 60,
+        Status = "MONITORING",
+        _frames = 0,
+        _windowAt = os.clock(),
+    }
+
+    AP.Keys = {
+        Toggle_LowGraphics = true,
+        Toggle_GlobalShadows = false,
+        Toggle_GoalEffects = false,
+        Toggle_BallAuras = false,
+        Toggle_BallTrails = false,
+        Toggle_BodyAuras = false,
+        Toggle_AnimatedBanners = false,
+        Toggle_AnimatedStreaks = false,
+        Toggle_CourtMeshes = false,
+        Toggle_CourtSkins = false,
+        Toggle_Mountains = false,
+    }
+
+    local _playerData, _toggleEvent
+    local function getPlayerData()
+        if _playerData then return _playerData end
+        local ok, m = pcall(require, ReplicatedStorage.Util.PlayerData)
+        if ok and type(m) == "table" then _playerData = m end
+        return _playerData
+    end
+
+    local function getToggleEvent()
+        if _toggleEvent then return _toggleEvent end
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local ev = remotes and remotes:FindFirstChild("toggleEvent")
+        _toggleEvent = ev
+        return ev
+    end
+
+    local function setConfig(key, value)
+        local pd = getPlayerData()
+        if not pd then return false end
+        local ev = getToggleEvent()
+        if ev and ev.Parent then
+            pcall(function()
+                if type(value) == "boolean" then ev:FireServer(key)
+                else ev:FireServer(key, value) end
+            end)
+        end
+        if type(pd.updateData) == "function" then
+            pcall(pd.updateData, "Config", key, value)
+        end
+        return true
+    end
+
+    local function getConfig(key, fallback)
+        local pd = getPlayerData()
+        if pd and type(pd.Get) == "function" then
+            local ok, v = pcall(pd.Get, "Config", key)
+            if ok and v ~= nil then return v end
+        end
+        return fallback
+    end
+
+    function AP:Apply()
+        if AP.Applied then return end
+        AP.Saved = {}
+        for key, target in pairs(AP.Keys) do
+            AP.Saved[key] = getConfig(key, not target)
+            setConfig(key, target)
+        end
+        AP.Applied = true
+        AP.Status = "REDUCED | " .. tostring(math.floor(AP.FPS)) .. " FPS"
+    end
+
+    function AP:Restore()
+        if not AP.Applied then return end
+        for key, val in pairs(AP.Saved or {}) do
+            setConfig(key, val)
+        end
+        AP.Saved = nil
+        AP.Applied = false
+        AP.Status = "MONITORING"
+    end
+
+    function AP:SetEnabled(on)
+        AP.Enabled = on == true
+        if not AP.Enabled then
+            AP:Restore()
+            AP.Status = "OFF"
+        else
+            AP.Status = "MONITORING"
+            AP._frames = 0
+            AP._windowAt = os.clock()
+        end
+    end
+
+    function AP:SetThresholds(low, restore)
+        if low then AP.LowFPS = math.clamp(low, 10, 240) end
+        if restore then AP.RestoreFPS = math.clamp(restore, AP.LowFPS + 5, 360) end
+    end
+
+    -- Heartbeat FPS sampling, same 5-second window as GoldenEagle
+    local conn = RunService.Heartbeat:Connect(function()
+        AP._frames += 1
+        local now = os.clock()
+        local elapsed = now - AP._windowAt
+        if elapsed >= 5 then
+            AP.FPS = AP._frames / elapsed
+            AP._frames = 0
+            AP._windowAt = now
+            if AP.Enabled then
+                if not AP.Applied and AP.FPS < AP.LowFPS then
+                    pcall(function() AP:Apply() end)
+                elseif AP.Applied and AP.FPS > AP.RestoreFPS then
+                    pcall(function() AP:Restore() end)
+                end
+            end
+        end
+    end)
+
+    function AP:Destroy() conn:Disconnect() end
+    return AP
+end)()
+getgenv().AuralAutoPerf = AutoPerf
+J:Add(AutoPerf.Destroy, nil, "AutoPerf")
+
 local trash = { "Xeno", "Solara", "Nexomia" }
 local execName = identifyexecutor and identifyexecutor() or ""
 
@@ -7940,7 +8379,7 @@ local hoopDistConnection        = nil
 
 getgenv().Settings = {
     Shooting = {
-        Mode = "Aural", AuralKeybind = Enum.KeyCode.X, AuralAimAssist = false, HumanizeAim = false, HumanizeStrength = 0, MissChance = 0, AuralEnabled = false, ArmInMatch = false, FatalEnabled = false,
+        Mode = "Aural", AuralKeybind = Enum.KeyCode.X, AuralAimAssist = false, BankShots = false, HumanizeAim = false, HumanizeStrength = 0, MissChance = 0, AuralEnabled = false, ArmInMatch = false, FatalEnabled = false,
         ShotDelay = 0.32, ShotYAxis = 0, RandomizeShotDelay = false,
         ShotDelayMin = 0.25, ShotDelayMax = 0.38, GreenChance = 0,
         ThreesOnly = false, AimAssist = false, EBLHop = false,
@@ -7962,7 +8401,7 @@ getgenv().Settings = {
     Defending = {
         AutoGuard = false, OnlyGuardInMatch = false, AutoGuardButton = false, AutoGuardNearest = false, AutoGuardKeybind = "K",
         AutoGuardMode = "Prediction", AutoGuardRange = 33, GuardPrediction = 0.58, SpacingDistance = 3,
-        ReactionTime = 0, JumpIfThrown = false
+        GuardStyle = "Contain", CutoffLead = 3, ReactionTime = 0, JumpIfThrown = false
     },
     Automatics = {
         AutoQueue = false, QueueAlmostFinished = false,
@@ -7979,6 +8418,8 @@ getgenv().Settings = {
         CustomTitle = false, CustomTitleText = "",
         CustomRank = false,
         CustomRankChoice = "None",
+        HeadlessSpoof = false,
+        KorbloxSpoof = false,
         HoopDistance = false,
         HoopDistanceColor = "White",
         HoopDistanceTransparency = 0.6,
@@ -8078,6 +8519,75 @@ getgenv().Settings = {
     },
     LocalAnonymizer = { Enabled = false, Alias = "Aural V2" },
 }
+
+-- ============================================================
+-- Bank shot module: aims at the mirror point of the rim
+-- reflected across the backboard, so the ball banks in.
+-- ============================================================
+local Backboard = {}
+
+function Backboard.FindForRim(Rim)
+    local Container = Rim and Rim.Parent
+    for _ = 1, 4 do
+        if not Container then break end
+        local Board = Container:FindFirstChild("Backboard")
+        if Board and Board:IsA("BasePart") then return Board end
+        Container = Container.Parent
+    end
+    return nil
+end
+
+function Backboard.GetPlane(Board, ReleaseOrigin, BallRadius)
+    if not (Board and ReleaseOrigin) then return nil end
+    local Size = Board.Size
+    local RawNormal, Thickness
+    -- The thinnest axis is the face normal of the backboard.
+    if Size.X <= Size.Y and Size.X <= Size.Z then
+        RawNormal, Thickness = Board.CFrame.RightVector, Size.X
+    elseif Size.Y <= Size.X and Size.Y <= Size.Z then
+        RawNormal, Thickness = Board.CFrame.UpVector, Size.Y
+    else
+        RawNormal, Thickness = Board.CFrame.LookVector, Size.Z
+    end
+    local Normal = Vector3.new(RawNormal.X, 0, RawNormal.Z)
+    if Normal.Magnitude <= 1e-4 then return nil end
+    Normal = Normal.Unit
+    -- Flip so the normal points toward the shooter.
+    if (ReleaseOrigin - Board.Position):Dot(Normal) < 0 then Normal = -Normal end
+    local Radius = math.max(tonumber(BallRadius) or 1.25, 0)
+    local PlanePoint = Board.Position + Normal * ((Thickness * 0.5) + Radius + 0.08)
+    return PlanePoint, Normal
+end
+
+function Backboard.GetMirrorTarget(Rim, ReleaseOrigin, BallRadius)
+    local Board = Backboard.FindForRim(Rim)
+    if not Board then return nil end
+    local PlanePoint, Normal = Backboard.GetPlane(Board, ReleaseOrigin, BallRadius)
+    if not PlanePoint then return nil end
+    local Offset = Rim.Position - PlanePoint
+    local FlatOffset = Vector3.new(Offset.X, 0, Offset.Z)
+    -- Reflect the rim across the plane.
+    local Target = Rim.Position - 2 * Normal * FlatOffset:Dot(Normal)
+    return Target, Board
+end
+
+-- Returns the aim point to feed settarget()/fatalClick().
+-- Falls back to the rim position when there is no backboard.
+function Backboard.ResolveAimPoint(Rim)
+    if not Rim then return nil end
+    local char = LocalPlayer.Character
+    local head = char and char:FindFirstChild("Head")
+    if not head then return Rim.Position end
+    local basketball = char:FindFirstChild("Basketball")
+    local ball = basketball and basketball:FindFirstChild("Ball", true)
+    local origin = (ball and ball:IsA("BasePart") and ball.Position) or head.Position
+    local radius = (ball and ball:IsA("BasePart")
+        and math.max(ball.Size.X, ball.Size.Y, ball.Size.Z) * 0.5) or 1.25
+    local target = Backboard.GetMirrorTarget(Rim, origin, radius)
+    return target or Rim.Position
+end
+
+getgenv().AuralBackboard = Backboard
 
 local function isConsole()
     return UserInputService.GamepadEnabled
@@ -9528,6 +10038,96 @@ local BuiltInArcTable = {
 {6.20, 5.00, 10},
 }
 
+local HoopzArc = (function()
+    local self = {}
+    self.MIN_RANGE = 9
+    self.MAX_RANGE = 72
+    self.BAND_TOLERANCE = 2
+    self.POWER_LADDER = {
+    { 9, 12, 25 }, { 13, 19, 30 }, { 18, 22, 35 }, { 22, 25, 40 },
+    { 25, 29, 45 }, { 30, 33, 50 }, { 33, 36, 55 }, { 36, 42, 60 },
+    { 42, 48, 65 }, { 48, 55, 70 }, { 56, 60, 75 }, { 61, 69, 80 },
+    { 69, 72, 85 },
+}
+    self.SHOT_DATA = {
+    [25] = { { 9, 10, 60 }, { 10, 12, 55 } },
+    [30] = { { 15, 17, 20 }, { 17, 18, 15 }, { 18, 19, 10 } },
+    [35] = { { 18, 20, 25 }, { 20, 21, 20 }, { 21, 22, 15 } },
+    [40] = { { 21, 23, 30 }, { 23, 24, 25 }, { 24, 25, 20 } },
+    [45] = { { 24, 26, 35 }, { 26, 27, 30 }, { 27, 28, 25 } },
+    [50] = { { 29, 31, 40 }, { 31, 32, 35 }, { 32, 33, 30 } },
+    [55] = { { 30, 32, 50 }, { 32, 34, 45 }, { 34, 36, 40 } },
+    [60] = { { 36, 38, 50 }, { 38, 40, 45 }, { 40, 42, 40 } },
+    [65] = { { 43, 45, 55 }, { 45, 47, 50 }, { 47, 48, 45 } },
+    [70] = { { 48, 50, 50 }, { 50, 52, 45 }, { 52, 54, 40 }, { 54, 55, 35 } },
+    [75] = { { 57, 59, 55 }, { 59, 60, 50 }, { 60, 61, 45 }, { 61, 62, 40 } },
+    [80] = { { 57, 59, 75 }, { 59, 63, 70 }, { 63, 65, 60 }, { 65, 69, 54 } },
+    [85] = {
+        { 57, 61, 90 }, { 61, 64, 85 }, { 64, 66, 80 }, { 66, 69, 75 },
+        { 69, 70, 70 }, { 70, 72, 65 }, { 72, 74, 60 },
+    },
+}
+    self.POWERS_DESC = { 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25 }
+
+    local function strictArc(bands, range)
+        for _, b in ipairs(bands) do
+            if range >= b[1] and range <= b[2] then return b[3] end
+        end
+        return nil
+    end
+
+    local function arcFrom(bands, range)
+        for _, b in ipairs(bands) do
+            if range >= b[1] and range <= b[2] then return b[3] end
+        end
+        local first, last = bands[1], bands[#bands]
+        if range < first[1] and (first[1] - range) <= self.BAND_TOLERANCE then return first[3] end
+        if range > last[2] and (range - last[2]) <= self.BAND_TOLERANCE then return last[3] end
+        return nil
+    end
+
+    function self.LadderPower(range)
+		if range >= 68 and range <= 69 then
+        return 85
+    end
+
+        local step = math.floor(range)
+        for _, band in ipairs(self.POWER_LADDER) do
+            if step >= band[1] and step <= band[2] then return band[3] end
+        end
+        return nil
+    end
+
+    function self.PowerFor(range, highArc)
+        local step = math.floor(range)
+        if step < self.MIN_RANGE or step > self.MAX_RANGE then return nil end
+        if highArc then
+            for _, power in ipairs(self.POWERS_DESC) do
+                local bands = self.SHOT_DATA[power]
+                if bands and strictArc(bands, range) then return power end
+            end
+            return self.LadderPower(range)
+        end
+        return self.LadderPower(range)
+    end
+
+    function self.Shot(range, highArc)
+        local step = math.floor(range)
+        if step < self.MIN_RANGE or step > self.MAX_RANGE then return nil end
+        local power = self.PowerFor(range, highArc)
+        if not power then return nil end
+        local bands = self.SHOT_DATA[power]
+        local arc = bands and arcFrom(bands, range) or nil
+        if not arc then return nil end
+        return arc, power
+    end
+
+    return self
+end)()
+
+getgenv().HoopzArcCfg = getgenv().HoopzArcCfg or { High = false, Mode = "Low Arc" }
+getgenv().HoopzArcCfg.Mode = getgenv().HoopzArcCfg.Mode or (getgenv().HoopzArcCfg.High == true and "High Arc" or "Low Arc")
+
 do
     local byPower, minRange, maxRange = {}, {}, {}
     do
@@ -9604,11 +10204,34 @@ do
     function getTableShot(flatDist)
         local st = getgenv().Settings and getgenv().Settings.Shooting
         if not (st and st.ArcTableAuto) or touchEnabled or type(flatDist) ~= "number" then return nil end
+
+        local cfg = getgenv().HoopzArcCfg or {}
+        local mode = cfg.Mode or (cfg.High == true and "High Arc" or "Low Arc")
+
+        if mode == "None" then
+            local t = LUT[st.ArcTablePref] or LUT["Closest to 85"]
+            local i = math.floor(flatDist / STEP + 0.5)
+            local power = t and t.pow[i]
+            return nil, power
+        end
+
+        local arc, power = HoopzArc.Shot(flatDist, mode == "High Arc")
+        if arc and power then return arc, power end
+
         local t = LUT[st.ArcTablePref] or LUT["Closest to 85"]
         local i = math.floor(flatDist / STEP + 0.5)
-        local arc = t.arc[i]
-        if not arc then return nil end
-        return arc, t.pow[i]
+        local fallbackArc = t.arc[i]
+        if not fallbackArc then return nil end
+        return fallbackArc, t.pow[i]
+    end
+
+    function getAuralShotArc(distance, tableArc, tablePower)
+        if tableArc then return tableArc end
+        local cfg = getgenv().HoopzArcCfg or {}
+        if cfg.Mode == "None" and tablePower then
+            return getArcOffset(distance) * (85 / tablePower)
+        end
+        return getArcOffset(distance)
     end
 
     function flatDistTo(rim, fromPos)
@@ -10229,7 +10852,8 @@ end
         local myPos = myHrp.Position
         local mySpeed = myHum.WalkSpeed
         local distance = (ballPos - myPos).Magnitude
-        local timeToReach = distance / (mySpeed + 10)
+        local reactionTime = math.max(tonumber(s.Defending.ReactionTime) or 0, 0)
+        local timeToReach = math.max(0, distance / (mySpeed + 10) - reactionTime)
         local predictionScale = s.Defending.GuardPrediction or 0.58
 
         if mode == "legit" then
@@ -10242,7 +10866,24 @@ end
 
         local predictedMove = moveDir * speed * predictionScale + Vector3.new(vel.X, 0, vel.Z) * 0.5
         local interceptPos = targetHrp.Position + predictedMove * timeToReach
-        local offsetDir = (moveDir.Magnitude > 0 and moveDir.Unit or Vector3.new(0, 0, 1)) * ((mode == "blatant") and 4 or 2)
+        local facing = Vector3.new(moveDir.X, 0, moveDir.Z)
+        if facing.Magnitude < 0.05 then
+            facing = Vector3.new(targetHrp.CFrame.LookVector.X, 0, targetHrp.CFrame.LookVector.Z)
+        end
+        if facing.Magnitude < 0.05 then facing = Vector3.new(0, 0, 1) end
+        facing = facing.Unit
+        local spacing = math.clamp(tonumber(s.Defending.SpacingDistance) or 3, 0.5, 12)
+        local style = tostring(s.Defending.GuardStyle or "Contain")
+        if style == "Smother" then
+            spacing = math.max(0.75, spacing * 0.55)
+        elseif style == "Cutoff" then
+            local lead = math.clamp(tonumber(s.Defending.CutoffLead) or 3, 0, 12)
+            if predictedMove.Magnitude > 0.05 then
+                interceptPos += predictedMove.Unit * lead
+            end
+        end
+        if mode == "legit" then spacing *= 0.85 elseif mode == "blatant" then spacing *= 1.15 end
+        local offsetDir = facing * spacing
         return Vector3.new(interceptPos.X + offsetDir.X, ballPos.Y, interceptPos.Z + offsetDir.Z)
     end
 
@@ -10256,11 +10897,27 @@ end
         local moveDir = targetHum.MoveDirection
         local vel = Vector3.new(targetHrp.AssemblyLinearVelocity.X, 0, targetHrp.AssemblyLinearVelocity.Z)
         local dist = (targetHrp.Position - myHrp.Position).Magnitude
-        local timeToReach = dist / (targetHum.WalkSpeed + 10)
+        local reactionTime = math.max(tonumber(s.Defending.ReactionTime) or 0, 0)
+        local timeToReach = math.max(0, dist / (targetHum.WalkSpeed + 10) - reactionTime)
         local predictionScale = (getGuardMode() == "blatant") and (s.Defending.GuardPrediction * 1.5) or s.Defending.GuardPrediction
-        local predicted = targetHrp.Position + (moveDir * targetHum.WalkSpeed * predictionScale + vel * 0.5) * timeToReach
-        local facing = (moveDir.Magnitude > 0) and moveDir.Unit or (targetHrp.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
-        local offset = facing * ((getGuardMode() == "blatant") and 4 or 2)
+        local predictedMove = moveDir * targetHum.WalkSpeed * predictionScale + vel * 0.5
+        local predicted = targetHrp.Position + predictedMove * timeToReach
+        local facing = Vector3.new(moveDir.X, 0, moveDir.Z)
+        if facing.Magnitude < 0.05 then
+            facing = Vector3.new(targetHrp.CFrame.LookVector.X, 0, targetHrp.CFrame.LookVector.Z)
+        end
+        if facing.Magnitude < 0.05 then facing = Vector3.new(0, 0, 1) end
+        facing = facing.Unit
+        local spacing = math.clamp(tonumber(s.Defending.SpacingDistance) or 3, 0.5, 12)
+        local style = tostring(s.Defending.GuardStyle or "Contain")
+        if style == "Smother" then
+            spacing = math.max(0.75, spacing * 0.55)
+        elseif style == "Cutoff" then
+            local lead = math.clamp(tonumber(s.Defending.CutoffLead) or 3, 0, 12)
+            if predictedMove.Magnitude > 0.05 then predicted += predictedMove.Unit * lead end
+        end
+        if getGuardMode() == "legit" then spacing *= 0.85 elseif getGuardMode() == "blatant" then spacing *= 1.15 end
+        local offset = facing * spacing
         return Vector3.new(predicted.X + offset.X, targetHrp.Position.Y, predicted.Z + offset.Z)
     end
 
@@ -11470,19 +12127,39 @@ do
 end
 
 do
+    local trailRuntime = {
+        Balls = setmetatable({}, { __mode = "k" }),
+        LastUpdate = 0,
+        FlightUntil = 0,
+        Holding = false,
+        LastBall = nil,
+    }
+
     function getTemplateTrail()
         local trailName = s.TrailChanger.CurrentTrail
         if not trailName or trailName == "None" then return nil end
         local trailModel = Trails[trailName]
         if not trailModel then return nil end
         if trailModel:IsA("BasePart") then
-            local t = trailModel:FindFirstChildOfClass("Trail")
-            if t then return t end
+            local trail = trailModel:FindFirstChildOfClass("Trail")
+            if trail then return trail end
         end
-        local t = trailModel:FindFirstChildOfClass("Trail")
-        if t then return t end
-        for _, desc in trailModel:GetDescendants() do
-            if desc:IsA("Trail") then return desc end
+        local trail = trailModel:FindFirstChildOfClass("Trail")
+        if trail then return trail end
+        for _, descendant in trailModel:GetDescendants() do
+            if descendant:IsA("Trail") then return descendant end
+        end
+        return nil
+    end
+
+    local function getLocalBasketball()
+        local character = LocalPlayer.Character
+        local basketball = character and character:FindFirstChild("Basketball")
+        if not basketball then return nil end
+        local ballPart = basketball:FindFirstChild("Ball", true)
+        if ballPart and ballPart:IsA("BasePart") then
+            trailRuntime.LastBall = ballPart
+            return ballPart
         end
         return nil
     end
@@ -11490,35 +12167,172 @@ do
     function cleanBallTrails(ballPart)
         if not ballPart then return end
         for _, child in ballPart:GetChildren() do
-            if child.Name == "AuralAttach0" or child.Name == "AuralAttach1" then child:Destroy() end
-            if child:IsA("Trail") and child.Name == "AuralTrail" then child:Destroy() end
+            if child.Name == "AuralAttach0" or child.Name == "AuralAttach1"
+                or (child:IsA("Trail") and child.Name == "AuralTrail") then
+                child:Destroy()
+            end
+        end
+        trailRuntime.Balls[ballPart] = nil
+    end
+
+    function applyTrailToBall(ballPart)
+        local localBall = getLocalBasketball()
+        if not (ballPart and ballPart:IsA("BasePart")
+            and (ballPart == localBall or ballPart == trailRuntime.LastBall
+                or trailRuntime.Balls[ballPart] == true)
+            and s.TrailChanger.Enabled) then return end
+
+        local templateTrail = getTemplateTrail()
+        if not templateTrail then
+            cleanBallTrails(ballPart)
+            return
+        end
+
+        cleanBallTrails(ballPart)
+
+        local radius = math.max(ballPart.Size.X, ballPart.Size.Y, ballPart.Size.Z) * 0.5
+        local attach0 = Instance.new("Attachment")
+        attach0.Name = "AuralAttach0"
+        attach0.Position = Vector3.new(0, radius * 0.8, 0)
+        attach0.Parent = ballPart
+
+        local attach1 = Instance.new("Attachment")
+        attach1.Name = "AuralAttach1"
+        attach1.Position = Vector3.new(0, -radius * 0.8, 0)
+        attach1.Parent = ballPart
+
+        local newTrail = templateTrail:Clone()
+        newTrail.Name = "AuralTrail"
+        newTrail.Attachment0 = attach0
+        newTrail.Attachment1 = attach1
+        newTrail.Enabled = false
+        newTrail.FaceCamera = true
+        newTrail.TextureMode = Enum.TextureMode.Stretch
+        newTrail.Parent = ballPart
+
+        trailRuntime.Balls[ballPart] = true
+        trailRuntime.LastBall = ballPart
+    end
+
+    function applyTrailToAllBalls()
+        if not s.TrailChanger.Enabled then return end
+        if not getTemplateTrail() then
+            resetTrailOnAllBalls()
+            return
+        end
+        local ballPart = getLocalBasketball() or trailRuntime.LastBall
+        if ballPart and ballPart.Parent then
+            applyTrailToBall(ballPart)
         end
     end
 
-    function restoreTrailColor(ballPart)
-        if not s.TrailChanger.Enabled then return end
-        local templateTrail = getTemplateTrail()
-        if not templateTrail then return end
-        local function fix(trail)
-            trail.Color = templateTrail.Color
-            trail.LightEmission = templateTrail.LightEmission
-            trail.Transparency = templateTrail.Transparency
-            trail.Enabled = true
-        end
-        if ballPart then
-            for _, child in ballPart:GetChildren() do
-                if child:IsA("Trail") and child.Name == "AuralTrail" then fix(child) end
+    function resetTrailOnBall(ballPart)
+        if not ballPart then return end
+        cleanBallTrails(ballPart)
+    end
+
+    function resetTrailOnAllBalls()
+        for ballPart in pairs(trailRuntime.Balls) do
+            if ballPart and ballPart.Parent then
+                cleanBallTrails(ballPart)
             end
-        else
-            for _, desc in workspace:GetDescendants() do
-                if desc:IsA("BasePart") and desc.Name == "Ball" then
-                    for _, child in desc:GetChildren() do
-                        if child:IsA("Trail") and child.Name == "AuralTrail" then fix(child) end
-                    end
+        end
+        local localBall = getLocalBasketball() or trailRuntime.LastBall
+        if localBall and localBall.Parent then
+            cleanBallTrails(localBall)
+        end
+        table.clear(trailRuntime.Balls)
+        trailRuntime.FlightUntil = 0
+        trailRuntime.Holding = false
+        trailRuntime.LastBall = nil
+    end
+
+    local function bindLocalTrailCharacter(character)
+        local function tryApply()
+            if not s.TrailChanger.Enabled then return end
+            local ballPart = getLocalBasketball()
+            if ballPart then applyTrailToBall(ballPart) end
+        end
+
+        character.ChildAdded:Connect(function(child)
+            if child.Name == "Basketball" then
+                task.defer(function()
+                    child:WaitForChild("Ball", 2)
+                    tryApply()
+                end)
+            end
+        end)
+
+        local basketball = character:FindFirstChild("Basketball")
+        if basketball then
+            task.defer(function()
+                basketball:WaitForChild("Ball", 2)
+                tryApply()
+            end)
+        end
+    end
+
+    if LocalPlayer.Character then
+        bindLocalTrailCharacter(LocalPlayer.Character)
+    end
+    J:Connect(LocalPlayer.CharacterAdded, bindLocalTrailCharacter, "AuralLocalTrailCharacter")
+
+    local function updateLocalTrail()
+        local character = LocalPlayer.Character
+        local basketball = character and character:FindFirstChild("Basketball")
+        local holding = basketball ~= nil
+        local ballPart = getLocalBasketball()
+        local now = os.clock()
+
+        if ballPart and s.TrailChanger.Enabled then
+            if not trailRuntime.Balls[ballPart] then
+                applyTrailToBall(ballPart)
+            end
+        end
+
+        if trailRuntime.Holding and not holding then
+            trailRuntime.FlightUntil = now + 4
+        elseif holding then
+            trailRuntime.FlightUntil = 0
+        end
+        trailRuntime.Holding = holding
+
+        local activeBall = ballPart or trailRuntime.LastBall
+        if activeBall and activeBall.Parent then
+            local trail = activeBall:FindFirstChild("AuralTrail")
+            if trail and trail:IsA("Trail") then
+                local speed = activeBall.AssemblyLinearVelocity.Magnitude
+                local shouldShow = s.TrailChanger.Enabled
+                    and not holding
+                    and now < trailRuntime.FlightUntil
+                    and speed >= 8
+                if trail.Enabled ~= shouldShow then
+                    trail.Enabled = shouldShow
+                end
+            end
+        elseif trailRuntime.LastBall then
+            trailRuntime.LastBall = nil
+        end
+
+        if now >= trailRuntime.FlightUntil and not holding then
+            local oldBall = trailRuntime.LastBall
+            if oldBall and oldBall.Parent then
+                local trail = oldBall:FindFirstChild("AuralTrail")
+                if trail and trail:IsA("Trail") then
+                    trail.Enabled = false
                 end
             end
         end
     end
+
+    J:Connect(RunService.Heartbeat, function()
+        if not s.TrailChanger.Enabled then return end
+        local now = os.clock()
+        if now - trailRuntime.LastUpdate < 1 / 30 then return end
+        trailRuntime.LastUpdate = now
+        updateLocalTrail()
+    end, "AuralBallTrailFlight")
+end
 
     autoDunkTask = nil
 
@@ -11554,52 +12368,6 @@ do
         end
     end
 
-    function applyTrailToBall(ballPart)
-        if not ballPart or not s.TrailChanger.Enabled then return end
-        local templateTrail = getTemplateTrail()
-        if not templateTrail then return end
-        cleanBallTrails(ballPart)
-        local attach0 = Instance.new("Attachment")
-        attach0.Name = "AuralAttach0"
-        attach0.Position = Vector3.new(0, 0.5, 0)
-        attach0.Parent = ballPart
-        local attach1 = Instance.new("Attachment")
-        attach1.Name = "AuralAttach1"
-        attach1.Position = Vector3.new(0, -0.5, 0)
-        attach1.Parent = ballPart
-        local newTrail = templateTrail:Clone()
-        newTrail.Name = "AuralTrail"
-        newTrail.Attachment0 = attach0
-        newTrail.Attachment1 = attach1
-        newTrail.Enabled = true
-        newTrail.Parent = ballPart
-        ballPart:GetPropertyChangedSignal("BrickColor"):Connect(function()
-            task.wait(0.05)
-            restoreTrailColor(ballPart)
-        end)
-        ballPart:GetPropertyChangedSignal("Color"):Connect(function()
-            task.wait(0.05)
-            restoreTrailColor(ballPart)
-        end)
-    end
-
-    function resetTrailOnBall(ballPart)
-        if not ballPart then return end
-        cleanBallTrails(ballPart)
-    end
-
-    function applyTrailToAllBalls()
-        for _, desc in workspace:GetDescendants() do
-            if desc:IsA("BasePart") and desc.Name == "Ball" then applyTrailToBall(desc) end
-        end
-    end
-
-    function resetTrailOnAllBalls()
-        for _, desc in workspace:GetDescendants() do
-            if desc:IsA("BasePart") and desc.Name == "Ball" then resetTrailOnBall(desc) end
-        end
-    end
-
     function applyGoalEffect()
         pcall(function()
             local PlayerData = require(ReplicatedStorage.Util.PlayerData)
@@ -11627,7 +12395,6 @@ do
             PlayerData.storedData["Inventory"][Effects["LightRay"].Name] = 1
         end)
     end
-end
 
 local oobOriginals = {}
 
@@ -11929,6 +12696,82 @@ do
         end
     end)
 end
+
+local avatarSpoofRuntime = {
+    Character = nil,
+    Originals = setmetatable({}, { __mode = "k" }),
+}
+
+local function restoreAvatarSpoofs()
+    for object, original in pairs(avatarSpoofRuntime.Originals) do
+        if object and object.Parent then
+            pcall(function()
+                if original.Transparency ~= nil then object.Transparency = original.Transparency end
+                if original.LocalTransparencyModifier ~= nil then
+                    object.LocalTransparencyModifier = original.LocalTransparencyModifier
+                end
+            end)
+        end
+        avatarSpoofRuntime.Originals[object] = nil
+    end
+end
+
+local function hideAvatarObject(object)
+    if not object then return end
+    if object:IsA("BasePart") then
+        if not avatarSpoofRuntime.Originals[object] then
+            avatarSpoofRuntime.Originals[object] = {
+                Transparency = object.Transparency,
+                LocalTransparencyModifier = object.LocalTransparencyModifier,
+            }
+        end
+        object.Transparency = 1
+        object.LocalTransparencyModifier = 1
+    elseif object:IsA("Decal") or object:IsA("Texture") then
+        if not avatarSpoofRuntime.Originals[object] then
+            avatarSpoofRuntime.Originals[object] = { Transparency = object.Transparency }
+        end
+        object.Transparency = 1
+    end
+end
+
+local function applyLocalAvatarSpoofs()
+    local character = LocalPlayer.Character
+    if avatarSpoofRuntime.Character ~= character then
+        restoreAvatarSpoofs()
+        avatarSpoofRuntime.Character = character
+    end
+    if not character then return end
+
+    restoreAvatarSpoofs()
+
+    if s.Visuals.HeadlessSpoof then
+        local head = character:FindFirstChild("Head")
+        if head then
+            hideAvatarObject(head)
+            for _, object in head:GetDescendants() do
+                if object:IsA("Decal") or object:IsA("Texture") then
+                    hideAvatarObject(object)
+                end
+            end
+        end
+    end
+
+    if s.Visuals.KorbloxSpoof then
+        for _, name in { "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot" } do
+            local part = character:FindFirstChild(name)
+            if part and part:IsA("BasePart") then
+                hideAvatarObject(part)
+            end
+        end
+    end
+end
+
+J:Connect(LocalPlayer.CharacterAdded, function()
+    task.wait(0.25)
+    applyLocalAvatarSpoofs()
+end, "LocalAvatarSpoofCharacter")
+applyLocalAvatarSpoofs()
 
 local hiddenTags = {}
 local hideTagsConnection = nil
@@ -13474,7 +14317,7 @@ if getgenv().__aural_passOverride then return end
         if not goal then settarget(nil); return end
         if s.Shooting.AuralAimAssist and not auralLookOk(goal) then settarget(nil); return end
         local tableArc, tablePower = getTableShot(distance)
-        if distance < AURAL_MIN_DIST or (distance > AURAL_MAX_DIST and not tableArc) then
+        if distance < AURAL_MIN_DIST or (distance > AURAL_MAX_DIST and not tablePower) then
             settarget(nil)
             return
         end
@@ -13485,7 +14328,7 @@ if getgenv().__aural_passOverride then return end
                 if tablePower and setpower then setpower(tablePower) else LocalPlayer:SetAttribute("Power", 85) end
             end
         end
-        local offset = (tableArc or getArcOffset(distance)) + getgenv().Settings.Shooting.ShotYAxis
+        local offset = getAuralShotArc(distance, tableArc, tablePower) + getgenv().Settings.Shooting.ShotYAxis
 
         if s.Shooting.HumanizeAim then
             local strength = s.Shooting.HumanizeStrength or 1.2
@@ -13502,7 +14345,11 @@ if getgenv().__aural_passOverride then return end
             end
         end
 
-        settarget(velocify(goal.Position + Vector3.new(0, offset, 0), distance))
+        local aimPos = goal.Position
+if s.Shooting.BankShots then
+    aimPos = getgenv().AuralBackboard.ResolveAimPoint(goal) or goal.Position
+end
+settarget(velocify(aimPos + Vector3.new(0, offset, 0), distance))
 
         if tablePower then setpower(tablePower) end
     end
@@ -13781,9 +14628,13 @@ function setupCharacterAural(char)
 
     local jumps = 0
     local airborne = false
+    local lastJumpRequest = 0
+    local jumpSequenceExpires = 0
 
-    addconnection(hum.Jumping:Connect(function(active)
-        if not active then return end
+    addconnection(UserInputService.JumpRequest:Connect(function()
+        local now = os.clock()
+        if now - lastJumpRequest < 0.07 then return end
+        lastJumpRequest = now
 
         airborne = true
 
@@ -13793,24 +14644,46 @@ if s.Shooting.ArmInMatch and not IsInMatch() then return end
         if not hasball(char) then return end
 
         if s.Shooting.EBLHop then
+            if now > jumpSequenceExpires then jumps = 0 end
             jumps += 1
-            if jumps < 2 then
-                return
-            end
+            jumpSequenceExpires = now + 1.5
+            if jumps < 2 then return end
             jumps = 0
+            jumpSequenceExpires = 0
+        else
+            jumps = 0
+            jumpSequenceExpires = 0
         end
 
         local root = char:FindFirstChild("HumanoidRootPart")
         if not root then return end
 
         local goal, distance = nearestgoal(root)
-        local minDist = isMobile and 30 or AURAL_MIN_DIST
+local minDist = isMobile and 30 or AURAL_MIN_DIST
 
-        local tableArc, tablePower = getTableShot(distance)
-        if not goal or distance < minDist or (distance > AURAL_MAX_DIST and not tableArc) then return end
+local tableArc, tablePower = getTableShot(distance)
+if not goal or distance < minDist or (distance > AURAL_MAX_DIST and not tablePower) then return end
 
-        local arc = (tableArc or getArcOffset(distance)) + s.Shooting.ShotYAxis
-        local targetPos = nil
+local arc = getAuralShotArc(distance, tableArc, tablePower) + s.Shooting.ShotYAxis
+
+-- Bank shot: aim at the mirrored rim across the backboard plane,
+-- and re-solve the arc using the mirrored distance.
+local aimBase = goal.Position
+if s.Shooting.BankShots then
+    local mirror = getgenv().AuralBackboard.ResolveAimPoint(goal)
+    if mirror then
+        aimBase = mirror
+        local d = mirror - root.Position
+        local mirrorDist = Vector3.new(d.X, 0, d.Z).Magnitude
+        local mirrorArc, mirrorPower = getTableShot(mirrorDist)
+        if mirrorArc or mirrorPower then
+            tableArc, tablePower = mirrorArc, mirrorPower
+            arc = getAuralShotArc(mirrorDist, mirrorArc, mirrorPower) + s.Shooting.ShotYAxis
+        end
+    end
+end
+
+local targetPos = nil
 
         if s.Shooting.HumanizeAim then
             local strength = s.Shooting.HumanizeStrength or 1.2
@@ -13824,16 +14697,16 @@ if s.Shooting.ArmInMatch and not IsInMatch() then return end
                     arc -= strength * 3 + math.random() * strength * 2
                 else
                     local side = (math.random() < 0.5) and -1 or 1
-                    targetPos = goal.Position
-                        + Vector3.new(0, (tableArc or getArcOffset(distance)) + s.Shooting.ShotYAxis, 0)
-                        + Camera.CFrame.RightVector * (side * (strength * 2 + math.random() * 2))
+                    targetPos = aimBase
+    				+ Vector3.new(0, (tableArc or getArcOffset(distance)) + s.Shooting.ShotYAxis, 0)
+    				+ Camera.CFrame.RightVector * (side * (strength * 2 + math.random() * 2))
                 end
             else
                 arc += (math.random() * 2 - 1) * strength
             end
         end
 
-        targetPos = targetPos or goal.Position + Vector3.new(0, arc, 0)
+        targetPos = targetPos or aimBase + Vector3.new(0, arc, 0)
 
         settarget(targetPos)
 
@@ -14047,9 +14920,9 @@ do
         local selectedPower = 85
         local maxDist = FATAL_MAX_DIST_85
         local tableArc, tablePower = getTableShot(flatDistTo(rim, hrp.Position))
-        if tableArc then selectedPower = tablePower; maxDist = math.huge end
+        if tablePower then selectedPower = tablePower; maxDist = math.huge end
         if dist < FATAL_MIN_DIST or dist > maxDist then fatalState.shooting = false; return end
-        local arc = tableArc or getArc(dist, selectedPower)
+        local arc = getAuralShotArc(dist, tableArc, tablePower)
         if dist < 59 then
             local toRim = (rim.Position - hrp.Position).Unit
             local velocityTowardRim = hrp.AssemblyLinearVelocity:Dot(toRim)
@@ -14121,7 +14994,8 @@ do
         end
         local selectedPower = 85
         local maxDist = FATAL_MAX_DIST_85
-        if getTableShot(flatDistTo(rim, hrp.Position)) then maxDist = math.huge end
+        local _, maxTablePower = getTableShot(flatDistTo(rim, hrp.Position))
+        if maxTablePower then maxDist = math.huge end
         local inRange = (dist >= FATAL_MIN_DIST) and (dist <= maxDist)
         fatalState.inRange = inRange
         if not inRange then
@@ -14503,7 +15377,7 @@ do
         task.delay(t1 + 1, cleanup)
     end
 
-    workspace.ChildAdded:Connect(function(b)
+    J:Connect(workspace.ChildAdded, function(b)
         if b.Name ~= "Basketball" then return end
 
         local ball = b:WaitForChild("Ball", 2)
@@ -14523,14 +15397,10 @@ do
             end
         end
 
-        if s.TrailChanger.Enabled then
-            task.wait(0.05)
-            applyTrailToBall(ball)
-        end
-    end)
+    end, "BasketballWorldAdded")
 
     if s.TrailChanger.Enabled then
-        task.delay(0.5, applyTrailToAllBalls)
+        J:Delay(0.5, applyTrailToAllBalls)
     end
 end
 
@@ -14978,7 +15848,7 @@ end
 
 arrayListTask = task.spawn(function()
     while arrayListGui and arrayListGui.Parent do
-        task.spawn(function() pcall(updateArrayList) end)
+        pcall(updateArrayList)
         task.wait(0.2)
     end
 end)
@@ -16443,123 +17313,193 @@ do
         end
     end
 
+    do
     local OffenseTab = Window:AddTab({ Name = "Offense", Icon = "swords" })
-    local OffensePage = OffenseTab:AddPage({ Name = "Silent Aim" })
 
-    local auralSection = OffensePage:AddSection({ Title = "Silent Aim (Aural)", Side = "Left" })
-    local auralsilent = auralSection:AddToggle({
-        Name = "Enable Aural Silent Aim",
-        Default = s.Shooting.AuralEnabled,
-        Flag = "aural_toggle",
-        Keybind = { Default = s.Shooting.AuralKeybind or Enum.KeyCode.Unknown, Mode = "Toggle" },
-        Callback = function(value)
-            s.Shooting.AuralEnabled = value
-            if value then
-                s.Shooting.FatalEnabled = false
-                s.Shooting.Mode = "Aural"
-                disableFatal()
-            end
+-- ════════════════════════════════════════════════════════════════
+-- PAGE 1 · SILENT AIM
+-- ════════════════════════════════════════════════════════════════
+local SilentAimPage = OffenseTab:AddPage({ Name = "Silent Aim" })
+
+local auralSection = SilentAimPage:AddSection({ Title = "Silent Aim (Aural)", Side = "Left" })
+local auralsilent = auralSection:AddToggle({
+    Name = "Enable Aural Silent Aim",
+    Default = s.Shooting.AuralEnabled,
+    Flag = "aural_toggle",
+    Keybind = { Default = s.Shooting.AuralKeybind or Enum.KeyCode.Unknown, Mode = "Toggle" },
+    Callback = function(value)
+        s.Shooting.AuralEnabled = value
+        if value then
+            s.Shooting.FatalEnabled = false
+            s.Shooting.Mode = "Aural"
+            disableFatal()
         end
-    })
-    uiToggles.aural = auralsilent
+    end
+})
+uiToggles.aural = auralsilent
 
-    auralSection:AddToggle({ Name = "Only Arm In Match", Default = s.Shooting.ArmInMatch, Flag = "aural_arminmatch", Callback = function(value) s.Shooting.ArmInMatch = value end })
-    auralSection:AddToggle({ Name = "Aim Assist", Default = s.Shooting.AuralAimAssist, Flag = "aural_aimassist", Callback = function(v) s.Shooting.AuralAimAssist = v end })
-    auralSection:AddToggle({ Name = "Humanize Aim", Default = s.Shooting.HumanizeAim, Flag = "aural_humanizeaim", Callback = function(value) s.Shooting.HumanizeAim = value end })
-    auralSection:AddSlider({ Name = "Humanize strength", Min = 0.2, Max = 5, Default = 1.2, Increment = 0.1, Flag = "aural_hstrength", Callback = function(v) s.Shooting.HumanizeStrength = v end })
-    auralSection:AddSlider({ Name = "Humanize miss %", Min = 0, Max = 80, Default = 0, Increment = 1, Suffix = "%", Flag = "aural_hmiss", Callback = function(v) s.Shooting.MissChance = v end })
-    auralSection:AddToggle({ Name = "EBL Hop", Default = s.Shooting.EBLHop, Flag = "aural_eblhop", Callback = function(value) s.Shooting.EBLHop = value end })
-    auralSection:AddSlider({ Name = "Shot Y axis offset", Min = -15, Max = 10, Default = s.Shooting.ShotYAxis, Increment = 0.1, Flag = "aural_yaxis", Callback = function(v) s.Shooting.ShotYAxis = v end })
-    auralSection:AddSlider({ Name = "Shot delay", Min = 0.15, Max = 0.42, Default = s.Shooting.ShotDelay, Increment = 0.01, Suffix = "s", Flag = "aural_delay", Callback = function(v) s.Shooting.ShotDelay = v end })
-    auralSection:AddToggle({ Name = "Randomize shot delay", Default = s.Shooting.RandomizeShotDelay, Flag = "aural_rand", Callback = function(v) s.Shooting.RandomizeShotDelay = v end })
-    auralSection:AddSlider({ Name = "Min delay", Min = 0, Max = 1, Default = s.Shooting.ShotDelayMin, Increment = 0.05, Suffix = "s", Flag = "aural_mindelay", Callback = function(v) s.Shooting.ShotDelayMin = v end })
-    auralSection:AddSlider({ Name = "Max delay", Min = 0, Max = 1, Default = s.Shooting.ShotDelayMax, Increment = 0.05, Suffix = "s", Flag = "aural_maxdelay", Callback = function(v) s.Shooting.ShotDelayMax = v end })
-    auralSection:AddToggle({ Name = "Silent Aim Button", Default = s.Shooting.SilentAimButton or false, Flag = "aural_mobilebutton", Callback = function(v) s.Shooting.SilentAimButton = v end })
+auralSection:AddToggle({ Name = "Only Arm In Match", Default = s.Shooting.ArmInMatch, Flag = "aural_arminmatch", Callback = function(value) s.Shooting.ArmInMatch = value end })
+auralSection:AddToggle({ Name = "Aim Assist", Default = s.Shooting.AuralAimAssist, Flag = "aural_aimassist", Callback = function(v) s.Shooting.AuralAimAssist = v end })
+auralSection:AddToggle({
+    Name = "Bank shots",
+    Default = s.Shooting.BankShots or false,
+    Flag = "aural_bankshots",
+    Callback = function(value) s.Shooting.BankShots = value end,
+})
+auralSection:AddToggle({ Name = "Silent Aim Button", Default = s.Shooting.SilentAimButton or false, Flag = "aural_mobilebutton", Callback = function(v) s.Shooting.SilentAimButton = v end })
 
-    local fatalSection = OffensePage:AddSection({ Title = "Silent Aim (Fatal)", Side = "Right" })
-    fatalSection:AddToggle({
-        Name = "Enable Fatal Silent Aim",
-        Default = s.Shooting.FatalEnabled,
-        Flag = "fatal_toggle",
-        Callback = function(value)
-            s.Shooting.FatalEnabled = value
-            if value then
-                s.Shooting.AuralEnabled = false
-                s.Shooting.Mode = "Fatal"
-                enableFatal()
-            else
-                disableFatal()
-            end
+local fatalSection = SilentAimPage:AddSection({ Title = "Silent Aim (Fatal)", Side = "Right" })
+fatalSection:AddToggle({
+    Name = "Enable Fatal Silent Aim",
+    Default = s.Shooting.FatalEnabled,
+    Flag = "fatal_toggle",
+    Callback = function(value)
+        s.Shooting.FatalEnabled = value
+        if value then
+            s.Shooting.AuralEnabled = false
+            s.Shooting.Mode = "Fatal"
+            enableFatal()
+        else
+            disableFatal()
         end
-    })
-    fatalSection:AddSlider({ Name = "Green Chance", Min = 0, Max = 100, Default = s.Shooting.GreenChance, Increment = 5, Suffix = "%", Flag = "fatal_green", Callback = function(v) s.Shooting.GreenChance = v end })
-    fatalSection:AddToggle({ Name = "High Arc (85s only)", Default = s.Shooting.ThreesOnly, Flag = "fatal_threes", Callback = function(v) s.Shooting.ThreesOnly = v end })
-    fatalSection:AddToggle({ Name = "Aim Assist (only shoot when looking up)", Default = s.Shooting.AimAssist, Flag = "fatal_aimassist", Callback = function(v) s.Shooting.AimAssist = v end })
+    end
+})
+fatalSection:AddSlider({ Name = "Green Chance", Min = 0, Max = 100, Default = s.Shooting.GreenChance, Increment = 5, Suffix = "%", Flag = "fatal_green", Callback = function(v) s.Shooting.GreenChance = v end })
+fatalSection:AddToggle({ Name = "High Arc (85s only)", Default = s.Shooting.ThreesOnly, Flag = "fatal_threes", Callback = function(v) s.Shooting.ThreesOnly = v end })
+fatalSection:AddToggle({ Name = "Aim Assist (only shoot when looking up)", Default = s.Shooting.AimAssist, Flag = "fatal_aimassist", Callback = function(v) s.Shooting.AimAssist = v end })
 
-    local arcTableSection = OffensePage:AddSection({ Title = "Auto Power", Side = "Right" })
-    arcTableSection:AddToggle({ Name = "Auto Power", Default = s.Shooting.ArcTableAuto, Flag = "arctable_auto", Callback = function(v) s.Shooting.ArcTableAuto = v end })
-    arcTableSection:AddDropdown({ Name = "Power Preference", Values = { "Closest to 85", "Lowest", "Highest" }, Default = s.Shooting.ArcTablePref, Flag = "arctable_pref", Callback = function(v) s.Shooting.ArcTablePref = v end })
 
-    local releaseSection = OffensePage:AddSection({ Title = "Release Timing", Side = "Left" })
-    releaseSection:AddToggle({ Name = "Perfect release", Default = s.Release.Perfect, Flag = "release_perfect", Callback = function(v) s.Release.Perfect = v end })
-    releaseSection:AddToggle({ Name = "Self-calibrate release", Default = s.Release.AutoCalibrate, Flag = "release_autocal", Callback = function(v) s.Release.AutoCalibrate = v end })
-    releaseSection:AddToggle({ Name = "Precision spin (exact release frame)", Default = s.Release.PrecisionSpin, Flag = "release_spin", Callback = function(v) s.Release.PrecisionSpin = v end })
-    releaseSection:AddToggle({ Name = "Ping compensation", Default = s.Release.PingCompensation, Flag = "release_pingcomp", Callback = function(v) s.Release.PingCompensation = v end })
-    releaseSection:AddSlider({ Name = "Release base delay", Min = 0.15, Max = 0.45, Default = s.Release.Base, Increment = 0.0005, Suffix = "s", Flag = "release_base", Callback = function(v) s.Release.Base = v end })
-    releaseSection:AddToggle({ Name = "Ping-adaptive release", Default = s.Release.PingAdaptive, Flag = "release_pingadaptive", Callback = function(v) s.Release.PingAdaptive = v end })
-    releaseSection:AddSlider({ Name = "Baseline ping", Min = 0, Max = 300, Default = s.Release.PingBaseline, Increment = 1, Suffix = "ms", Flag = "release_pingbase", Callback = function(v) s.Release.PingBaseline = v end })
-    releaseSection:AddSlider({ Name = "Ping strength", Min = 0, Max = 3, Default = s.Release.PingStrength, Increment = 0.05, Flag = "release_pingstrength", Callback = function(v) s.Release.PingStrength = v end })
-    releaseSection:AddSlider({ Name = "Max ping lead", Min = 0, Max = 500, Default = s.Release.PingMaxLead, Increment = 5, Suffix = "ms", Flag = "release_pingmax", Callback = function(v) s.Release.PingMaxLead = v end })
-    releaseSection:AddButton({ Name = "Release stats", Text = "Show", Callback = function()
-        local st = getReleaseStats()
-        notify("Release: " .. tostring(st.Last), string.format("%d/%d perfect (%.0f%%) | streak %d (best %d) | base %.4fs%s | ping %.0fms +%.0fms lead", st.Hits, st.Attempts, st.Accuracy, st.Streak, st.Best, st.Base, st.Locked and " locked" or "", st.Ping, st.Lead * 1000), "info", 5)
-    end })
-    releaseSection:AddButton({ Name = "Reset release calibration", Text = "Reset", Callback = function()
-        resetReleaseCalibration()
-        notify("Release", "Calibration reset to the base delay slider.", "info", 3)
-    end })
+-- ════════════════════════════════════════════════════════════════
+-- PAGE 2 · HUMANIZER
+-- ════════════════════════════════════════════════════════════════
+local HumanizerPage = OffenseTab:AddPage({ Name = "Humanizer" })
 
-    local selfPassSection = OffensePage:AddSection({ Title = "Self Pass", Side = "Left" })
-    selfPassSection:AddToggle({
-        Name = "Enable Self Pass",
-        Default = s.SelfPass.Enabled,
-        Flag = "selfpass_toggle",
-        Keybind = {
-            Default = Enum.KeyCode[s.SelfPass.Keybind] or Enum.KeyCode.T,
-            Mode = "Press",
-            OnPress = function()
-                if s.SelfPass.Enabled then task.spawn(performSelfPass) end
-            end,
-        },
-        Callback = function(value) s.SelfPass.Enabled = value end,
-    })
-    selfPassSection:AddSlider({ Name = "Pass Power", Min = 10, Max = 85, Default = s.SelfPass.Power, Increment = 1, Flag = "selfpass_power", Callback = function(v) s.SelfPass.Power = v end })
-    selfPassSection:AddSlider({ Name = "Pass Distance", Min = 10, Max = 100, Default = s.SelfPass.Distance, Increment = 1, Flag = "selfpass_distance", Callback = function(v) s.SelfPass.Distance = v end })
-    selfPassSection:AddSlider({ Name = "Pass Angle", Min = 90, Max = 180, Default = s.SelfPass.Angle, Increment = 1, Flag = "selfpass_angle", Callback = function(v) s.SelfPass.Angle = v end })
-    selfPassSection:AddToggle({ Name = "Self Pass Button", Default = s.SelfPass.SelfPassButton or false, Flag = "selfpass_mobilebutton", Callback = function(v) s.SelfPass.SelfPassButton = v end })
+local humanizeSection = HumanizerPage:AddSection({ Title = "Humanize Aim", Side = "Left" })
+humanizeSection:AddToggle({ Name = "Humanize Aim", Default = s.Shooting.HumanizeAim, Flag = "aural_humanizeaim", Callback = function(value) s.Shooting.HumanizeAim = value end })
+humanizeSection:AddSlider({ Name = "Humanize strength", Min = 0.2, Max = 5, Default = 1.2, Increment = 0.1, Flag = "aural_hstrength", Callback = function(v) s.Shooting.HumanizeStrength = v end })
+humanizeSection:AddSlider({ Name = "Humanize miss %", Min = 0, Max = 80, Default = 0, Increment = 1, Suffix = "%", Flag = "aural_hmiss", Callback = function(v) s.Shooting.MissChance = v end })
 
-    local autoDimeSection = OffensePage:AddSection({ Title = "Auto Dime", Side = "Right" })
-    autoDimeSection:AddToggle({
-        Name = "Enable Auto Dime",
-        Default = s.AutoDime.Enabled,
-        Flag = "autodime_toggle",
-        Keybind = { Default = Enum.KeyCode.G, Mode = "Toggle" },
-        Callback = function(value)
-            s.AutoDime.Enabled = value
-            if value then enableAutoDime() else disableAutoDime() end
-        end
-    })
-    autoDimeSection:AddSlider({ Name = "Pass Power", Min = 60, Max = 85, Default = s.AutoDime.PassPower, Increment = 5, Flag = "autodime_power", Callback = function(v) s.AutoDime.PassPower = v end })
-    autoDimeSection:AddToggle({ Name = "Jump Before Pass", Default = s.AutoDime.JumpBeforePass, Flag = "autodime_jump", Callback = function(v) s.AutoDime.JumpBeforePass = v end })
-    autoDimeSection:AddSlider({ Name = "Jump Delay", Min = 0.05, Max = 0.5, Default = s.AutoDime.JumpDelay, Increment = 0.01, Suffix = "s", Flag = "autodime_jumpdelay", Callback = function(v) s.AutoDime.JumpDelay = v end })
-    autoDimeSection:AddSlider({ Name = "Lead Multiplier", Min = 0, Max = 3, Default = s.AutoDime.LeadMultiplier, Increment = 0.05, Flag = "autodime_lead", Callback = function(v) s.AutoDime.LeadMultiplier = v end })
-    autoDimeSection:AddLabel({ Text = "── Teammate Pass Keys ──" })
-    autoDimeSection:AddKeybind({ Name = "Slot 1 Key", Default = Enum.KeyCode[s.AutoDime.Key1] or Enum.KeyCode.One, Mode = "None", Flag = "autodime_key1", Callback = function(kc) s.AutoDime.Key1 = kc and kc.Name or "One" end })
-    autoDimeSection:AddKeybind({ Name = "Slot 2 Key", Default = Enum.KeyCode[s.AutoDime.Key2] or Enum.KeyCode.Two, Mode = "None", Flag = "autodime_key2", Callback = function(kc) s.AutoDime.Key2 = kc and kc.Name or "Two" end })
-    autoDimeSection:AddKeybind({ Name = "Slot 3 Key", Default = Enum.KeyCode[s.AutoDime.Key3] or Enum.KeyCode.Three, Mode = "None", Flag = "autodime_key3", Callback = function(kc) s.AutoDime.Key3 = kc and kc.Name or "Three" end })
-    autoDimeSection:AddKeybind({ Name = "Slot 4 Key", Default = Enum.KeyCode[s.AutoDime.Key4] or Enum.KeyCode.Four, Mode = "None", Flag = "autodime_key4", Callback = function(kc) s.AutoDime.Key4 = kc and kc.Name or "Four" end })
-    autoDimeSection:AddKeybind({ Name = "Slot 5 Key", Default = Enum.KeyCode[s.AutoDime.Key5] or Enum.KeyCode.Five, Mode = "None", Flag = "autodime_key5", Callback = function(kc) s.AutoDime.Key5 = kc and kc.Name or "Five" end })
+local variationSection = HumanizerPage:AddSection({ Title = "Shot Variation", Side = "Right" })
+variationSection:AddToggle({ Name = "EBL Hop", Default = s.Shooting.EBLHop, Flag = "aural_eblhop", Callback = function(value) s.Shooting.EBLHop = value end })
+variationSection:AddSlider({ Name = "Shot Y axis offset", Min = -15, Max = 10, Default = s.Shooting.ShotYAxis, Increment = 0.1, Flag = "aural_yaxis", Callback = function(v) s.Shooting.ShotYAxis = v end })
+variationSection:AddSlider({ Name = "Shot delay", Min = 0.15, Max = 0.42, Default = s.Shooting.ShotDelay, Increment = 0.01, Suffix = "s", Flag = "aural_delay", Callback = function(v) s.Shooting.ShotDelay = v end })
+variationSection:AddToggle({ Name = "Randomize shot delay", Default = s.Shooting.RandomizeShotDelay, Flag = "aural_rand", Callback = function(v) s.Shooting.RandomizeShotDelay = v end })
+variationSection:AddSlider({ Name = "Min delay", Min = 0, Max = 1, Default = s.Shooting.ShotDelayMin, Increment = 0.05, Suffix = "s", Flag = "aural_mindelay", Callback = function(v) s.Shooting.ShotDelayMin = v end })
+variationSection:AddSlider({ Name = "Max delay", Min = 0, Max = 1, Default = s.Shooting.ShotDelayMax, Increment = 0.05, Suffix = "s", Flag = "aural_maxdelay", Callback = function(v) s.Shooting.ShotDelayMax = v end })
 
+
+-- ════════════════════════════════════════════════════════════════
+-- PAGE 3 · AUTO POWER
+-- ════════════════════════════════════════════════════════════════
+local AutoPowerPage = OffenseTab:AddPage({ Name = "Auto Power" })
+
+local arcTableSection = AutoPowerPage:AddSection({ Title = "Auto Power", Side = "Left" })
+arcTableSection:AddToggle({ Name = "Auto Power", Default = s.Shooting.ArcTableAuto, Flag = "arctable_auto", Callback = function(v) s.Shooting.ArcTableAuto = v end })
+arcTableSection:AddDropdown({ Name = "Power Choice", Values = { "Closest to 85", "Lowest", "Highest" }, Default = s.Shooting.ArcTablePref, Flag = "arctable_pref", Callback = function(v) s.Shooting.ArcTablePref = v end })
+
+if getgenv().HoopzArcCfg.Mode ~= "High Arc" and getgenv().HoopzArcCfg.Mode ~= "Low Arc" then
+    getgenv().HoopzArcCfg.Mode = getgenv().HoopzArcCfg.High and "High Arc" or "Low Arc"
+end
+getgenv().HoopzArcCfg.High = getgenv().HoopzArcCfg.Mode == "High Arc"
+
+local arcModeSection = AutoPowerPage:AddSection({ Title = "Arc Mode", Side = "Right" })
+arcModeSection:AddDropdown({
+    Name = "Arc Mode",
+    Values = { "Low Arc", "High Arc" },
+    Default = (getgenv().HoopzArcCfg.Mode == "High Arc"
+        or (getgenv().HoopzArcCfg.Mode == nil and getgenv().HoopzArcCfg.High)) and "High Arc" or "Low Arc",
+    Flag = "hoopz_arcmode",
+    Callback = function(v)
+        getgenv().HoopzArcCfg.Mode = v
+        getgenv().HoopzArcCfg.High = (v == "High Arc")
+    end,
+})
+
+
+-- ════════════════════════════════════════════════════════════════
+-- PAGE 4 · RELEASE TIMING
+-- ════════════════════════════════════════════════════════════════
+local ReleasePage = OffenseTab:AddPage({ Name = "Release Timing" })
+
+local releaseSection = ReleasePage:AddSection({ Title = "Perfect Release", Side = "Left" })
+releaseSection:AddToggle({ Name = "Perfect release", Default = s.Release.Perfect, Flag = "release_perfect", Callback = function(v) s.Release.Perfect = v end })
+releaseSection:AddToggle({ Name = "Self-calibrate release", Default = s.Release.AutoCalibrate, Flag = "release_autocal", Callback = function(v) s.Release.AutoCalibrate = v end })
+releaseSection:AddToggle({ Name = "Precision spin (exact release frame)", Default = s.Release.PrecisionSpin, Flag = "release_spin", Callback = function(v) s.Release.PrecisionSpin = v end })
+releaseSection:AddToggle({ Name = "Ping compensation", Default = s.Release.PingCompensation, Flag = "release_pingcomp", Callback = function(v) s.Release.PingCompensation = v end })
+releaseSection:AddSlider({ Name = "Release base delay", Min = 0.15, Max = 0.45, Default = s.Release.Base, Increment = 0.0005, Suffix = "s", Flag = "release_base", Callback = function(v) s.Release.Base = v end })
+
+local pingAdaptiveSection = ReleasePage:AddSection({ Title = "Ping Adaptive", Side = "Right" })
+pingAdaptiveSection:AddToggle({ Name = "Ping-adaptive release", Default = s.Release.PingAdaptive, Flag = "release_pingadaptive", Callback = function(v) s.Release.PingAdaptive = v end })
+pingAdaptiveSection:AddSlider({ Name = "Baseline ping", Min = 0, Max = 300, Default = s.Release.PingBaseline, Increment = 1, Suffix = "ms", Flag = "release_pingbase", Callback = function(v) s.Release.PingBaseline = v end })
+pingAdaptiveSection:AddSlider({ Name = "Ping strength", Min = 0, Max = 3, Default = s.Release.PingStrength, Increment = 0.05, Flag = "release_pingstrength", Callback = function(v) s.Release.PingStrength = v end })
+pingAdaptiveSection:AddSlider({ Name = "Max ping lead", Min = 0, Max = 500, Default = s.Release.PingMaxLead, Increment = 5, Suffix = "ms", Flag = "release_pingmax", Callback = function(v) s.Release.PingMaxLead = v end })
+pingAdaptiveSection:AddButton({ Name = "Release stats", Text = "Show", Callback = function()
+    local st = getReleaseStats()
+    notify("Release: " .. tostring(st.Last), string.format("%d/%d perfect (%.0f%%) | streak %d (best %d) | base %.4fs%s | ping %.0fms +%.0fms lead", st.Hits, st.Attempts, st.Accuracy, st.Streak, st.Best, st.Base, st.Locked and " locked" or "", st.Ping, st.Lead * 1000), "info", 5)
+end })
+pingAdaptiveSection:AddButton({ Name = "Reset release calibration", Text = "Reset", Callback = function()
+    resetReleaseCalibration()
+    notify("Release", "Calibration reset to the base delay slider.", "info", 3)
+end })
+
+
+-- ════════════════════════════════════════════════════════════════
+-- PAGE 5 · SELF PASS
+-- ════════════════════════════════════════════════════════════════
+local SelfPassPage = OffenseTab:AddPage({ Name = "Self Pass" })
+
+local selfPassSection = SelfPassPage:AddSection({ Title = "Self Pass", Side = "Left" })
+selfPassSection:AddToggle({
+    Name = "Enable Self Pass",
+    Default = s.SelfPass.Enabled,
+    Flag = "selfpass_toggle",
+    Keybind = {
+        Default = Enum.KeyCode[s.SelfPass.Keybind] or Enum.KeyCode.T,
+        Mode = "Press",
+        OnPress = function()
+            if s.SelfPass.Enabled then task.spawn(performSelfPass) end
+        end,
+    },
+    Callback = function(value) s.SelfPass.Enabled = value end,
+})
+selfPassSection:AddSlider({ Name = "Pass Power", Min = 10, Max = 85, Default = s.SelfPass.Power, Increment = 1, Flag = "selfpass_power", Callback = function(v) s.SelfPass.Power = v end })
+selfPassSection:AddSlider({ Name = "Pass Distance", Min = 10, Max = 100, Default = s.SelfPass.Distance, Increment = 1, Flag = "selfpass_distance", Callback = function(v) s.SelfPass.Distance = v end })
+selfPassSection:AddSlider({ Name = "Pass Angle", Min = 90, Max = 180, Default = s.SelfPass.Angle, Increment = 1, Flag = "selfpass_angle", Callback = function(v) s.SelfPass.Angle = v end })
+selfPassSection:AddToggle({ Name = "Self Pass Button", Default = s.SelfPass.SelfPassButton or false, Flag = "selfpass_mobilebutton", Callback = function(v) s.SelfPass.SelfPassButton = v end })
+
+
+-- ════════════════════════════════════════════════════════════════
+-- PAGE 6 · AUTO DIME
+-- ════════════════════════════════════════════════════════════════
+local AutoDimePage = OffenseTab:AddPage({ Name = "Auto Dime" })
+
+local autoDimeSection = AutoDimePage:AddSection({ Title = "Auto Dime", Side = "Left" })
+autoDimeSection:AddToggle({
+    Name = "Enable Auto Dime",
+    Default = s.AutoDime.Enabled,
+    Flag = "autodime_toggle",
+    Keybind = { Default = Enum.KeyCode.G, Mode = "Toggle" },
+    Callback = function(value)
+        s.AutoDime.Enabled = value
+        if value then enableAutoDime() else disableAutoDime() end
+    end
+})
+autoDimeSection:AddSlider({ Name = "Pass Power", Min = 60, Max = 85, Default = s.AutoDime.PassPower, Increment = 5, Flag = "autodime_power", Callback = function(v) s.AutoDime.PassPower = v end })
+autoDimeSection:AddToggle({ Name = "Jump Before Pass", Default = s.AutoDime.JumpBeforePass, Flag = "autodime_jump", Callback = function(v) s.AutoDime.JumpBeforePass = v end })
+autoDimeSection:AddSlider({ Name = "Jump Delay", Min = 0.05, Max = 0.5, Default = s.AutoDime.JumpDelay, Increment = 0.01, Suffix = "s", Flag = "autodime_jumpdelay", Callback = function(v) s.AutoDime.JumpDelay = v end })
+autoDimeSection:AddSlider({ Name = "Lead Multiplier", Min = 0, Max = 3, Default = s.AutoDime.LeadMultiplier, Increment = 0.05, Flag = "autodime_lead", Callback = function(v) s.AutoDime.LeadMultiplier = v end })
+
+local autoDimeKeysSection = AutoDimePage:AddSection({ Title = "Teammate Pass Keys", Side = "Right" })
+autoDimeKeysSection:AddKeybind({ Name = "Slot 1 Key", Default = Enum.KeyCode[s.AutoDime.Key1] or Enum.KeyCode.One, Mode = "None", Flag = "autodime_key1", Callback = function(kc) s.AutoDime.Key1 = kc and kc.Name or "One" end })
+autoDimeKeysSection:AddKeybind({ Name = "Slot 2 Key", Default = Enum.KeyCode[s.AutoDime.Key2] or Enum.KeyCode.Two, Mode = "None", Flag = "autodime_key2", Callback = function(kc) s.AutoDime.Key2 = kc and kc.Name or "Two" end })
+autoDimeKeysSection:AddKeybind({ Name = "Slot 3 Key", Default = Enum.KeyCode[s.AutoDime.Key3] or Enum.KeyCode.Three, Mode = "None", Flag = "autodime_key3", Callback = function(kc) s.AutoDime.Key3 = kc and kc.Name or "Three" end })
+autoDimeKeysSection:AddKeybind({ Name = "Slot 4 Key", Default = Enum.KeyCode[s.AutoDime.Key4] or Enum.KeyCode.Four, Mode = "None", Flag = "autodime_key4", Callback = function(kc) s.AutoDime.Key4 = kc and kc.Name or "Four" end })
+autoDimeKeysSection:AddKeybind({ Name = "Slot 5 Key", Default = Enum.KeyCode[s.AutoDime.Key5] or Enum.KeyCode.Five, Mode = "None", Flag = "autodime_key5", Callback = function(kc) s.AutoDime.Key5 = kc and kc.Name or "Five" end })
+
+
+    end
+
+    do
     local DefenseTab = Window:AddTab({ Name = "Defense", Icon = "shield" })
     local DefensePage = DefenseTab:AddPage({ Name = "Defense" })
 
@@ -16592,7 +17532,11 @@ do
         if s.Defending.AutoGuard then enableAutoGuard() end
     end })
     guardSec:AddSlider({ Name = "Guard range", Min = 10, Max = 60, Default = s.Defending.AutoGuardRange, Increment = 1, Flag = "defend_range", Callback = function(v) s.Defending.AutoGuardRange = v end })
-    guardSec:AddSlider({ Name = "Prediction strength", Min = 0.1, Max = 1.0, Default = s.Defending.GuardPrediction, Increment = 0.05, Flag = "defend_prediction", Callback = function(v) s.Defending.GuardPrediction = v end })
+    guardSec:AddSlider({ Name = "Prediction strength", Min = 0.1, Max = 1.5, Default = s.Defending.GuardPrediction, Increment = 0.05, Flag = "defend_prediction", Callback = function(v) s.Defending.GuardPrediction = v end })
+    guardSec:AddDropdown({ Name = "Guard style", Values = { "Contain", "Cutoff", "Smother" }, Default = s.Defending.GuardStyle or "Contain", Flag = "defend_style", Callback = function(v) s.Defending.GuardStyle = v end })
+    guardSec:AddSlider({ Name = "Defensive spacing", Min = 0.5, Max = 12, Default = s.Defending.SpacingDistance or 3, Increment = 0.25, Flag = "defend_spacing", Callback = function(v) s.Defending.SpacingDistance = v end })
+    guardSec:AddSlider({ Name = "Cutoff lead", Min = 0, Max = 12, Default = s.Defending.CutoffLead or 3, Increment = 0.25, Flag = "defend_cutofflead", Callback = function(v) s.Defending.CutoffLead = v end })
+    guardSec:AddSlider({ Name = "Reaction delay", Min = 0, Max = 0.75, Default = s.Defending.ReactionTime or 0, Increment = 0.05, Flag = "defend_reaction", Callback = function(v) s.Defending.ReactionTime = v end })
 
     local antiReachSec = DefensePage:AddSection({ Title = "Anti Reach", Side = "Left" })
     antiReachSec:AddToggle({ Name = "Enable Anti Reach", Default = s.AntiReach.Enabled, Flag = "antireach_toggle", Callback = function(value)
@@ -16694,8 +17638,75 @@ do
     end })
     speedSec:AddSlider({ Name = "Speed multiplier", Min = 1, Max = 2.5, Default = s.Player.WSvalue, Increment = 0.05, Flag = "player_wsvalue", Callback = function(v) s.Player.WSvalue = v end })
 
+    end
+
+    do
     local VisualizeTab = Window:AddTab({ Name = "Visualize", Icon = "eye" })
     local VisualizePage = VisualizeTab:AddPage({ Name = "Visuals" })
+
+	local courtSec = VisualizePage:AddSection({ Title = "Court Skin Spoofer", Side = "Left" })
+local courtOptions = CourtSpoofer:GetOptions()
+local courtDropdown
+courtDropdown = courtSec:AddDropdown({
+    Name = "Court skin",
+    Values = courtOptions,
+    Default = "CourtSkin_Default",
+    Flag = "courtskin_name",
+    Callback = function(v) CourtSpoofer:SetSkin(v) end,
+})
+courtSec:AddToggle({
+    Name = "Enable court skin preview",
+    Default = false,
+    Flag = "courtskin_enabled",
+    Callback = function(v) CourtSpoofer:SetEnabled(v) end,
+})
+courtSec:AddButton({
+    Name = "Refresh skin list",
+    Text = "Refresh",
+    Callback = function()
+        local opts = CourtSpoofer:GetOptions()
+        pcall(function() courtDropdown:SetValues(opts) end)
+    end,
+})
+
+local streakSec = VisualizePage:AddSection({ Title = "Streak Spoofer", Side = "Right" })
+streakSec:AddToggle({
+    Name = "Enable streak spoof",
+    Default = false,
+    Flag = "streak_enabled",
+    Callback = function(v) StreakSpoofer:SetEnabled(v) end,
+})
+streakSec:AddSlider({
+    Name = "Streak value",
+    Min = 0, Max = 500, Default = 25, Increment = 1,
+    Flag = "streak_value",
+    Callback = function(v) StreakSpoofer:SetValue(v) end,
+})
+streakSec:AddButton({
+    Name = "Apply now",
+    Text = "Apply",
+    Callback = function() StreakSpoofer:Apply() end,
+})
+
+local avatarSec = VisualizePage:AddSection({ Title = "Avatar Spoofer", Side = "Left" })
+avatarSec:AddToggle({
+    Name = "Headless",
+    Default = s.Visuals.HeadlessSpoof,
+    Flag = "visual_headless_spoof",
+    Callback = function(value)
+        s.Visuals.HeadlessSpoof = value == true
+        applyLocalAvatarSpoofs()
+    end,
+})
+avatarSec:AddToggle({
+    Name = "Korblox leg",
+    Default = s.Visuals.KorbloxSpoof,
+    Flag = "visual_korblox_spoof",
+    Callback = function(value)
+        s.Visuals.KorbloxSpoof = value == true
+        applyLocalAvatarSpoofs()
+    end,
+})
 
     local goalSec = VisualizePage:AddSection({ Title = "Goal Effect Changer", Side = "Left" })
     goalSec:AddDropdown({ Name = "Select effect", Values = #EffectNames > 0 and EffectNames or {"None"}, Default = s.Goal.SelectedEffect or "LightRay", Flag = "goal_effect_select", Callback = function(v)
@@ -16809,12 +17820,14 @@ do
                     if not rim or dist == math.huge then rim, dist = nearestrim(root.Position) end
                     if rim and dist then
                         local minDist = s.Shooting.ThreesOnly and 55 or FATAL_MIN_DIST
-                        if dist >= minDist and (dist <= AURAL_MAX_DIST or getTableShot(dist)) then inRange = true end
+                        local _, tablePower = getTableShot(dist)
+                        if dist >= minDist and (dist <= AURAL_MAX_DIST or tablePower) then inRange = true end
                     end
                 else
                     local goal, distance = nearestgoal(root)
                     local minDist = isMobile and 30 or AURAL_MIN_DIST
-                    if goal and distance >= minDist and distance <= AURAL_MAX_DIST then inRange = true end
+                    local _, tablePower = getTableShot(distance)
+                    if goal and distance >= minDist and (distance <= AURAL_MAX_DIST or tablePower) then inRange = true end
                 end
                 if inRange then
                     applyIndicatorColor()
@@ -16843,73 +17856,108 @@ do
         if v then startHideTags() else stopHideTags() end
     end })
 
-    local nameplateSec = VisualizePage:AddSection({ Title = "Nameplate & Title", Side = "Right" })
-    nameplateSec:AddToggle({ Name = "Hide my nameplate & tags", Default = s.Visuals.HideOwnNameplate, Flag = "vis_hideownnameplate", Callback = function(v)
-        s.Visuals.HideOwnNameplate = v; applyOwnNameplate()
-    end })
-    nameplateSec:AddTextBox({ Name = "Custom Username", Default = s.Visuals.CustomNameText or "", Placeholder = "e.g. Aural", Flag = "vis_customname_text", Callback = function(text)
-        s.Visuals.CustomNameText = text; s.Visuals.CustomName = (text ~= ""); applyOwnNameplate()
-    end })
-    nameplateSec:AddTextBox({ Name = "Custom Record / Stats", Default = s.Visuals.CustomRecordText or "", Placeholder = "e.g. 99-0", Flag = "vis_customrecord_text", Callback = function(text)
-        s.Visuals.CustomRecordText = text; s.Visuals.CustomRecord = (text ~= ""); applyOwnNameplate()
-    end })
-    nameplateSec:AddTextBox({ Name = "Custom Achievement", Default = s.Visuals.CustomTitleText or "", Placeholder = "e.g. Elite Shooter", Flag = "vis_customtitle_text", Callback = function(text)
-        s.Visuals.CustomTitleText = text; s.Visuals.CustomTitle = (text ~= ""); applyOwnNameplate()
-    end })
-    nameplateSec:AddToggle({ Name = "Custom rank", Default = s.Visuals.CustomRank, Flag = "vis_customrank", Callback = function(v)
-        s.Visuals.CustomRank = v
-        if v then LocalPlayer:SetAttribute("ELO", rankelo[s.Visuals.CustomRankChoice or "Rookie 1"]); applycustomrank() end
-    end })
-    nameplateSec:AddDropdown({ Name = "Custom rank choice", Values = {
-        "Rookie 1","Rookie 2","Rookie 3","Veteran 1","Veteran 2","Veteran 3",
-        "Elite 1","Elite 2","Elite 3","Pro 1","Pro 2","Pro 3",
-        "All-star 1","All-star 2","All-star 3","Superstar 1","Superstar 2","Superstar 3",
-        "Phenom 1","Phenom 2","Phenom 3","Legend 1","Legend 2","Legend 3",
-        "Mamba 1","Mamba 2","Mamba 3","HoF 1","HoF 2","HoF 3",
-        "G.O.A.T 1","G.O.A.T 2","G.O.A.T 3","Aura 1","Aura 2","Aura 3"
-    }, Default = s.Visuals.CustomRankChoice or "Rookie 1", Flag = "vis_customrankchoice", Callback = function(v)
-        s.Visuals.CustomRankChoice = v
-        if s.Visuals.CustomRank then LocalPlayer:SetAttribute("ELO", rankelo[v]); applycustomrank() end
-    end })
+        local uiSection1 = VisualizePage:AddSection({ Title = "Nameplate & Title", Side = "Right" })
+        uiSection1:AddToggle({ Name = "Hide my nameplate & tags", Default = s.Visuals.HideOwnNameplate, Flag = "vis_hideownnameplate", Callback = function(v)
+            s.Visuals.HideOwnNameplate = v; applyOwnNameplate()
+        end })
+        uiSection1:AddTextBox({ Name = "Custom Username", Default = s.Visuals.CustomNameText or "", Placeholder = "e.g. Aural", Flag = "vis_customname_text", Callback = function(text)
+            s.Visuals.CustomNameText = text; s.Visuals.CustomName = (text ~= ""); applyOwnNameplate()
+        end })
+        uiSection1:AddTextBox({ Name = "Custom Record / Stats", Default = s.Visuals.CustomRecordText or "", Placeholder = "e.g. 99-0", Flag = "vis_customrecord_text", Callback = function(text)
+            s.Visuals.CustomRecordText = text; s.Visuals.CustomRecord = (text ~= ""); applyOwnNameplate()
+        end })
+        uiSection1:AddTextBox({ Name = "Custom Achievement", Default = s.Visuals.CustomTitleText or "", Placeholder = "e.g. Elite Shooter", Flag = "vis_customtitle_text", Callback = function(text)
+            s.Visuals.CustomTitleText = text; s.Visuals.CustomTitle = (text ~= ""); applyOwnNameplate()
+        end })
+        uiSection1:AddToggle({ Name = "Custom rank", Default = s.Visuals.CustomRank, Flag = "vis_customrank", Callback = function(v)
+            s.Visuals.CustomRank = v
+            if v then LocalPlayer:SetAttribute("ELO", rankelo[s.Visuals.CustomRankChoice or "Rookie 1"]); applycustomrank() end
+        end })
+        uiSection1:AddDropdown({ Name = "Custom rank choice", Values = {
+            "Rookie 1","Rookie 2","Rookie 3","Veteran 1","Veteran 2","Veteran 3",
+            "Elite 1","Elite 2","Elite 3","Pro 1","Pro 2","Pro 3",
+            "All-star 1","All-star 2","All-star 3","Superstar 1","Superstar 2","Superstar 3",
+            "Phenom 1","Phenom 2","Phenom 3","Legend 1","Legend 2","Legend 3",
+            "Mamba 1","Mamba 2","Mamba 3","HoF 1","HoF 2","HoF 3",
+            "G.O.A.T 1","G.O.A.T 2","G.O.A.T 3","Aura 1","Aura 2","Aura 3"
+        }, Default = s.Visuals.CustomRankChoice or "Rookie 1", Flag = "vis_customrankchoice", Callback = function(v)
+            s.Visuals.CustomRankChoice = v
+            if s.Visuals.CustomRank then LocalPlayer:SetAttribute("ELO", rankelo[v]); applycustomrank() end
+        end })
 
-    local PrivacyTab = Window:AddTab({ Name = "Privacy", Icon = "user" })
+    end
+
+    do
+        local PrivacyTab = Window:AddTab({ Name = "Privacy", Icon = "user" })
     local PrivacyPage = PrivacyTab:AddPage({ Name = "Local Spoof" })
 
-    local anonSec = PrivacyPage:AddSection({ Title = "Local Anonymizer", Side = "Left" })
-    anonSec:AddToggle({ Name = "Enable anonymizer", Default = s.LocalAnonymizer.Enabled, Flag = "anon_toggle", Callback = function(v) s.LocalAnonymizer._Set(v, s.LocalAnonymizer.Alias) end })
-    anonSec:AddTextBox({ Name = "Alias", Default = s.LocalAnonymizer.Alias, Placeholder = "Aural V2", Flag = "anon_alias", Callback = function(text) s.LocalAnonymizer._Set(s.LocalAnonymizer.Enabled, text) end })
+    local uiSection2 = PrivacyPage:AddSection({ Title = "Local Anonymizer", Side = "Left" })
+        uiSection2:AddToggle({ Name = "Enable anonymizer", Default = s.LocalAnonymizer.Enabled, Flag = "anon_toggle", Callback = function(v) s.LocalAnonymizer._Set(v, s.LocalAnonymizer.Alias) end })
+        uiSection2:AddTextBox({ Name = "Alias", Default = s.LocalAnonymizer.Alias, Placeholder = "Aural V2", Flag = "anon_alias", Callback = function(text) s.LocalAnonymizer._Set(s.LocalAnonymizer.Enabled, text) end })
 
-    local clanSec = PrivacyPage:AddSection({ Title = "Clan Tag / Chat Tag", Side = "Left" })
-    clanSec:AddToggle({ Name = "Enable clan tag spoof", Default = s.ClanTag.Enabled, Flag = "clan_toggle", Callback = function(v) s.ClanTag.Enabled = v; s.ClanTag._Apply() end })
-    clanSec:AddTextBox({ Name = "Clan tag", Default = s.ClanTag.Tag, Placeholder = "GEH", Flag = "clan_tag", Callback = function(text) s.ClanTag.Tag = text; s.ClanTag._Apply() end })
-    clanSec:AddTextBox({ Name = "Color (#RRGGBB)", Default = s.ClanTag.Color, Placeholder = "#FF3BD5", Flag = "clan_color", Callback = function(text) s.ClanTag.Color = text; s.ClanTag._Apply() end })
-    clanSec:AddToggle({ Name = "Enable chat tag spoof", Default = s.ChatTag.Enabled, Flag = "chattag_toggle", Callback = function(v) s.ChatTag.Enabled = v; s.ClanTag._Apply() end })
+    local uiSection3 = PrivacyPage:AddSection({ Title = "Clan Tag / Chat Tag", Side = "Left" })
+        uiSection3:AddToggle({ Name = "Enable clan tag spoof", Default = s.ClanTag.Enabled, Flag = "clan_toggle", Callback = function(v) s.ClanTag.Enabled = v; s.ClanTag._Apply() end })
+        uiSection3:AddTextBox({ Name = "Clan tag", Default = s.ClanTag.Tag, Placeholder = "GEH", Flag = "clan_tag", Callback = function(text) s.ClanTag.Tag = text; s.ClanTag._Apply() end })
+        uiSection3:AddTextBox({ Name = "Color (#RRGGBB)", Default = s.ClanTag.Color, Placeholder = "#FF3BD5", Flag = "clan_color", Callback = function(text) s.ClanTag.Color = text; s.ClanTag._Apply() end })
+        uiSection3:AddToggle({ Name = "Enable chat tag spoof", Default = s.ChatTag.Enabled, Flag = "chattag_toggle", Callback = function(v) s.ChatTag.Enabled = v; s.ClanTag._Apply() end })
 
-    local logoSec = PrivacyPage:AddSection({ Title = "Logo Badges", Side = "Right" })
-    logoSec:AddToggle({ Name = "VIP", Default = s.LogoBadges.VIP, Flag = "logo_vip", Callback = function(v) s.LogoBadges.VIP = v end })
-    logoSec:AddToggle({ Name = "YouTube", Default = s.LogoBadges.Youtuber, Flag = "logo_yt", Callback = function(v) s.LogoBadges.Youtuber = v end })
-    logoSec:AddToggle({ Name = "Twitch", Default = s.LogoBadges.Twitch, Flag = "logo_twitch", Callback = function(v) s.LogoBadges.Twitch = v end })
-    logoSec:AddToggle({ Name = "Booster", Default = s.LogoBadges.Booster, Flag = "logo_booster", Callback = function(v) s.LogoBadges.Booster = v end })
-    logoSec:AddToggle({ Name = "Tester", Default = s.LogoBadges.Tester, Flag = "logo_tester", Callback = function(v) s.LogoBadges.Tester = v end })
-    logoSec:AddToggle({ Name = "Staff", Default = s.LogoBadges.Staff, Flag = "logo_staff", Callback = function(v) s.LogoBadges.Staff = v end })
-    logoSec:AddTextBox({ Name = "Custom asset IDs (comma-separated)", Default = table.concat(s.LogoBadges.CustomIds, ","), Placeholder = "12345,67890", Flag = "logo_custom_ids", Callback = function(text)
-        local ids = {}
-        for n in string.gmatch(text, "%d+") do table.insert(ids, tonumber(n)) end
-        s.LogoBadges.CustomIds = ids
-    end })
+    local uiSection4 = PrivacyPage:AddSection({ Title = "Logo Badges", Side = "Right" })
+        uiSection4:AddToggle({ Name = "VIP", Default = s.LogoBadges.VIP, Flag = "logo_vip", Callback = function(v) s.LogoBadges.VIP = v end })
+        uiSection4:AddToggle({ Name = "YouTube", Default = s.LogoBadges.Youtuber, Flag = "logo_yt", Callback = function(v) s.LogoBadges.Youtuber = v end })
+        uiSection4:AddToggle({ Name = "Twitch", Default = s.LogoBadges.Twitch, Flag = "logo_twitch", Callback = function(v) s.LogoBadges.Twitch = v end })
+        uiSection4:AddToggle({ Name = "Booster", Default = s.LogoBadges.Booster, Flag = "logo_booster", Callback = function(v) s.LogoBadges.Booster = v end })
+        uiSection4:AddToggle({ Name = "Tester", Default = s.LogoBadges.Tester, Flag = "logo_tester", Callback = function(v) s.LogoBadges.Tester = v end })
+        uiSection4:AddToggle({ Name = "Staff", Default = s.LogoBadges.Staff, Flag = "logo_staff", Callback = function(v) s.LogoBadges.Staff = v end })
+        uiSection4:AddTextBox({ Name = "Custom asset IDs (comma-separated)", Default = table.concat(s.LogoBadges.CustomIds, ","), Placeholder = "12345,67890", Flag = "logo_custom_ids", Callback = function(text)
+            local ids = {}
+            for n in string.gmatch(text, "%d+") do table.insert(ids, tonumber(n)) end
+            s.LogoBadges.CustomIds = ids
+        end })
 
-    local walletSec = PrivacyPage:AddSection({ Title = "Wallet Spoof", Side = "Right" })
-    walletSec:AddToggle({ Name = "Enable wallet spoof", Default = s.WalletSpoof.Enabled, Flag = "wallet_toggle", Callback = function(v) s.WalletSpoof.Enabled = v; s.WalletSpoof._Apply() end })
-    walletSec:AddSlider({ Name = "Money", Min = 0, Max = 100000000, Default = s.WalletSpoof.Money, Increment = 1000, Flag = "wallet_money", Callback = function(v) s.WalletSpoof.Money = v end })
-    walletSec:AddSlider({ Name = "Spins", Min = 0, Max = 9999, Default = s.WalletSpoof.Spins, Increment = 1, Flag = "wallet_spins", Callback = function(v) s.WalletSpoof.Spins = v end })
-    walletSec:AddSlider({ Name = "Crates", Min = 0, Max = 9999, Default = s.WalletSpoof.Crates, Increment = 1, Flag = "wallet_crates", Callback = function(v) s.WalletSpoof.Crates = v end })
-    walletSec:AddSlider({ Name = "Boosts", Min = 0, Max = 9999, Default = s.WalletSpoof.Boosts, Increment = 1, Flag = "wallet_boosts", Callback = function(v) s.WalletSpoof.Boosts = v end })
-    walletSec:AddSlider({ Name = "Clan coins", Min = 0, Max = 100000000, Default = s.WalletSpoof.ClanCoins, Increment = 1000, Flag = "wallet_clancoins", Callback = function(v) s.WalletSpoof.ClanCoins = v end })
-    walletSec:AddSlider({ Name = "Event currency", Min = 0, Max = 1000000, Default = s.WalletSpoof.EventCurrency, Increment = 100, Flag = "wallet_event", Callback = function(v) s.WalletSpoof.EventCurrency = v end })
-    walletSec:AddSlider({ Name = "Battlepass level", Min = 0, Max = 200, Default = s.WalletSpoof.BattlepassLevel, Increment = 1, Flag = "wallet_bp", Callback = function(v) s.WalletSpoof.BattlepassLevel = v end })
+    local uiSection5 = PrivacyPage:AddSection({ Title = "Wallet Spoof", Side = "Right" })
+        uiSection5:AddToggle({ Name = "Enable wallet spoof", Default = s.WalletSpoof.Enabled, Flag = "wallet_toggle", Callback = function(v) s.WalletSpoof.Enabled = v; s.WalletSpoof._Apply() end })
+        uiSection5:AddSlider({ Name = "Money", Min = 0, Max = 100000000, Default = s.WalletSpoof.Money, Increment = 1000, Flag = "wallet_money", Callback = function(v) s.WalletSpoof.Money = v end })
+        uiSection5:AddSlider({ Name = "Spins", Min = 0, Max = 9999, Default = s.WalletSpoof.Spins, Increment = 1, Flag = "wallet_spins", Callback = function(v) s.WalletSpoof.Spins = v end })
+        uiSection5:AddSlider({ Name = "Crates", Min = 0, Max = 9999, Default = s.WalletSpoof.Crates, Increment = 1, Flag = "wallet_crates", Callback = function(v) s.WalletSpoof.Crates = v end })
+        uiSection5:AddSlider({ Name = "Boosts", Min = 0, Max = 9999, Default = s.WalletSpoof.Boosts, Increment = 1, Flag = "wallet_boosts", Callback = function(v) s.WalletSpoof.Boosts = v end })
+        uiSection5:AddSlider({ Name = "Clan coins", Min = 0, Max = 100000000, Default = s.WalletSpoof.ClanCoins, Increment = 1000, Flag = "wallet_clancoins", Callback = function(v) s.WalletSpoof.ClanCoins = v end })
+        uiSection5:AddSlider({ Name = "Event currency", Min = 0, Max = 1000000, Default = s.WalletSpoof.EventCurrency, Increment = 100, Flag = "wallet_event", Callback = function(v) s.WalletSpoof.EventCurrency = v end })
+        uiSection5:AddSlider({ Name = "Battlepass level", Min = 0, Max = 200, Default = s.WalletSpoof.BattlepassLevel, Increment = 1, Flag = "wallet_bp", Callback = function(v) s.WalletSpoof.BattlepassLevel = v end })
+    end
 
+    do
     local UtilityTab = Window:AddTab({ Name = "Utility", Icon = "list" })
     local UtilityPage = UtilityTab:AddPage({ Name = "Utility" })
+
+	local perfSec = UtilityPage:AddSection({ Title = "Auto Performance", Side = "Left" })
+perfSec:AddToggle({
+    Name = "Auto performance mode",
+    Default = false,
+    Flag = "autoperf_enabled",
+    Callback = function(v) AutoPerf:SetEnabled(v) end,
+})
+perfSec:AddSlider({
+    Name = "Reduce below FPS",
+    Min = 10, Max = 120, Default = 38, Increment = 1,
+    Flag = "autoperf_low",
+    Callback = function(v) AutoPerf:SetThresholds(v, nil) end,
+})
+perfSec:AddSlider({
+    Name = "Restore above FPS",
+    Min = 30, Max = 240, Default = 52, Increment = 1,
+    Flag = "autoperf_restore",
+    Callback = function(v) AutoPerf:SetThresholds(nil, v) end,
+})
+perfSec:AddButton({
+    Name = "Force performance now",
+    Text = "Apply",
+    Callback = function() AutoPerf:Apply() end,
+})
+perfSec:AddButton({
+    Name = "Restore graphics",
+    Text = "Restore",
+    Callback = function() AutoPerf:Restore() end,
+})
 
     local autoSec = UtilityPage:AddSection({ Title = "Auto Queue", Side = "Left" })
     autoSec:AddToggle({ Name = "Auto queue", Default = s.Automatics.AutoQueue, Flag = "auto_queue", Callback = function(v)
@@ -16995,7 +18043,7 @@ do
     end })
     miscSec:AddToggle({ Name = "Device spoofer", Default = s.Misc.DeviceSpoofer, Flag = "misc_devspoof", Callback = function(v) s.Misc.DeviceSpoofer = v; SpoofDevice() end })
     miscSec:AddDropdown({ Name = "Device", Values = { "PC", "Mobile", "Gamepad" }, Default = s.Misc.Device, Flag = "misc_device", Callback = function(v) s.Misc.Device = v; SpoofDevice() end })
-    miscSec:AddToggle({ Name = "Anti Travel Hook", Default = s.AntiTravelHook.Enabled, Flag = "misc_antitravelhook", Callback = function(v) s.AntiTravelHook.Enabled = v end })
+    miscSec:AddToggle({ Name = "Anti Travel", Default = s.AntiTravelHook.Enabled, Flag = "misc_antitravelhook", Callback = function(v) s.AntiTravelHook.Enabled = v end })
     miscSec:AddToggle({ Name = "FPS Cap", Default = s.FPSCap.Enabled, Flag = "misc_fpscap", Callback = function(v) s.FPSCap.Enabled = v; SetAuralFPSCap(v, s.FPSCap.Value) end })
     miscSec:AddSlider({ Name = "FPS limit", Min = 15, Max = 360, Default = s.FPSCap.Value, Increment = 1, Flag = "misc_fpscapvalue", Callback = function(v) s.FPSCap.Value = v; if s.FPSCap.Enabled then SetAuralFPSCap(true, v) end end })
 
@@ -17026,11 +18074,15 @@ do
     end })
 
 
+    end
+
+    do
     local ConfigsTab = Window:AddTab({ Name = "Configs", Icon = "settings" })
     Window:AddConfigSections(ConfigsTab)
 
     Window:Notify({ Title = "Aural V2 loaded", Text = "have fun!", Type = "success", Duration = 3 })
     Window:LoadAutoConfig()
+    end
 end
 
 J:Add(function()
