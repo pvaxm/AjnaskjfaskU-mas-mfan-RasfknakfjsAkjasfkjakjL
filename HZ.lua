@@ -1,3 +1,13 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+if not getgenv then getfenv().getgenv = function() return _G end end
+if getgenv().aural then
+    game:GetService("Players").LocalPlayer:Kick("please do not execute twice, this will break aural.")
+end
+getgenv().aural = true
+
+task.wait(1)
+
 for _, actor in pairs(getactors()) do
     run_on_actor(actor, [[
         local reporter = filtergc("table", {
@@ -7208,19 +7218,10 @@ end
 
 return AuralV2
 end)()
-if not getgenv then getfenv().getgenv = function() return _G end end
-if getgenv().aural then
-    game:GetService("Players").LocalPlayer:Kick("please do not execute twice, this will break aural.")
-end
-getgenv().aural = true
-
-task.wait(0.5)
 
 local startTime = os.clock()
 local syn = rawget(_G, "syn")
 local fluxus = rawget(_G, "fluxus")
-if not game:IsLoaded() then game.Loaded:Wait() end
-task.wait(1)
 
 local Janitor = (function()
     local Janitor = {}
@@ -17307,6 +17308,82 @@ do
         Resizable = true
     })
 
+local isMobileDevice = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+if isMobileDevice then
+    local ToggleScreenGui = Instance.new("ScreenGui")
+    ToggleScreenGui.Name = "ToggleGui"
+    ToggleScreenGui.ResetOnSpawn = false
+    ToggleScreenGui.DisplayOrder = 101
+    ToggleScreenGui.Parent = (typeof(gethui) == "function" and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
+    J:Add(ToggleScreenGui)
+
+    local ToggleButton = Instance.new("ImageButton")
+    ToggleButton.Name = "ToggleButton"
+    ToggleButton.Size = UDim2.fromOffset(55, 55)
+    ToggleButton.Position = UDim2.new(0, 20, 0.5, -27)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    ToggleButton.Image = "rbxassetid://85594717889924"
+    ToggleButton.ScaleType = Enum.ScaleType.Fit
+    ToggleButton.Parent = ToggleScreenGui
+
+    local ToggleCorner = Instance.new("UICorner")
+    ToggleCorner.CornerRadius = UDim.new(0, 12)
+    ToggleCorner.Parent = ToggleButton
+
+    local ToggleStroke = Instance.new("UIStroke")
+    ToggleStroke.Thickness = 1.5
+    ToggleStroke.Transparency = 0.2
+    ToggleStroke.Parent = ToggleButton
+
+    local DRAG_THRESHOLD = 8
+    local activeInput, dragStart, startPosition, moved = nil, nil, nil, false
+
+    local function updateVisual()
+        ToggleButton.BackgroundColor3 = BlossomWindow.Visible
+            and Color3.fromRGB(60, 60, 60) or Color3.fromRGB(35, 35, 35)
+    end
+    updateVisual()
+
+    task.spawn(function()
+        while ToggleScreenGui.Parent do
+            updateVisual()
+            task.wait(0.2)
+        end
+    end)
+
+    ToggleButton.InputBegan:Connect(function(input)
+        if activeInput then return end
+        if input.UserInputType ~= Enum.UserInputType.Touch
+            and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        activeInput = input
+        moved = false
+        dragStart = input.Position
+        startPosition = ToggleButton.Position
+    end)
+
+    J:Connect(UserInputService.InputChanged, function(input)
+        if input ~= activeInput then return end
+        local delta = input.Position - dragStart
+        if not moved and delta.Magnitude >= DRAG_THRESHOLD then moved = true end
+        if moved then
+            ToggleButton.Position = UDim2.new(
+                startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    J:Connect(UserInputService.InputEnded, function(input)
+        if input ~= activeInput then return end
+        activeInput = nil
+        if not moved then
+            BlossomWindow:Toggle()
+            updateVisual()
+        end
+    end)
+end
+
     local Window = { _window = BlossomWindow, _categories = {} }
 
     local function wrapDropdown(control)
@@ -17855,7 +17932,7 @@ streakSec:AddToggle({
 })
 streakSec:AddSlider({
     Name = "Streak value",
-    Min = 0, Max = 500, Default = 25, Increment = 1,
+    Min = 0, Max = 999999, Default = 25, Increment = 1,
     Flag = "streak_value",
     Callback = function(v) StreakSpoofer:SetValue(v) end,
 })
@@ -18150,16 +18227,16 @@ perfSec:AddButton({
     end })
 
     local travelingSec = UtilityPage:AddSection({ Title = "Traveling", Side = "Left" })
-    travelingSec:AddButton({ Name = "Teleport to 2s", Text = "Go", Callback = function()
+    travelingSec:AddButton({ Name = "Teleport to 2s", Text = "Teleport to 2s", Callback = function()
         local c = LocalPlayer.Character; if c then c:PivotTo(CFrame.new(391, 55, -459)) end
     end })
-    travelingSec:AddButton({ Name = "Teleport to 3s", Text = "Go", Callback = function()
+    travelingSec:AddButton({ Name = "Teleport to 3s", Text = "Teleport to 3s", Callback = function()
         local c = LocalPlayer.Character; if c then c:PivotTo(CFrame.new(6, 58, -736)) end
     end })
-    travelingSec:AddButton({ Name = "Teleport to Practice", Text = "Go", Callback = function()
+    travelingSec:AddButton({ Name = "Teleport to Practice", Text = "Teleport to Practice", Callback = function()
         local c = LocalPlayer.Character; if c then c:PivotTo(CFrame.new(392, 54, -981)) end
     end })
-    travelingSec:AddButton({ Name = "Teleport to Spawn", Text = "Go", Callback = function()
+    travelingSec:AddButton({ Name = "Teleport to Spawn", Text = "Teleport to Spawn", Callback = function()
         local c = LocalPlayer.Character; if c then c:PivotTo(CFrame.new(387, 40, -736)) end
     end })
 
