@@ -17294,14 +17294,191 @@ end
 end
 
 do
-    local Window = AuralV2:CreateWindow({
-        Name = "Aural V2",
-        Icon = "105577669304412",
-        Accent = Color3.fromRGB(179, 165, 255),
-        Configs = { Folder = "AuralV2/configs", AutoLoad = true }
+    local Blossom = loadstring(game:HttpGet("https://raw.githubusercontent.com/concurrentccu/mystudies/refs/heads/main/Blossom.luau"))()
+    local BlossomWindow = Blossom.new({
+        Title = "Aural V2",
+        Script = "AuralV2",
+        Build = "Hoopz",
+		Logo = "rbxassetid://123751656579481",
+        Theme = "Obsidian",
+        MenuKey = Enum.KeyCode.LeftControl,
+        Size = Vector2.new(760, 590),
+        MinSize = Vector2.new(560, 420),
+        Resizable = true
     })
+
+    local Window = { _window = BlossomWindow, _categories = {} }
+
+    local function wrapDropdown(control)
+        function control:Refresh(values)
+            self:SetOptions(values or {})
+        end
+        function control:SetValues(values)
+            self:SetOptions(values or {})
+        end
+        function control:GetOptions()
+            return self.Options
+        end
+        return control
+    end
+
+    local function wrapSection(section)
+        local wrapper = { _section = section }
+        function wrapper:AddToggle(options)
+            local key = options.Keybind
+            local mapped = {
+                Name = options.Name,
+                Default = options.Default,
+                Flag = options.Flag,
+                Callback = options.Callback,
+                Color = options.Color,
+                ColorCallback = options.ColorCallback
+            }
+            if type(key) == "table" then
+                mapped.Keybind = key.Default
+                mapped.KeybindMode = key.Mode or "Toggle"
+            elseif typeof(key) == "EnumItem" then
+                mapped.Keybind = key
+            end
+            return section:Toggle(mapped)
+        end
+        function wrapper:AddSlider(options)
+            local increment = options.Increment
+            local decimals = options.Decimals
+            if decimals == nil and type(increment) == "number" and increment > 0 then
+                local asText = string.format("%.8f", increment):gsub("0+$", "")
+                decimals = math.max(0, #(asText:match("%.(%d+)") or ""))
+            end
+            local control
+            local function changed(value)
+                if type(increment) == "number" and increment > 0 then
+                    local minimum = options.Min or 0
+                    local snapped = minimum + math.floor((value - minimum) / increment + 0.5) * increment
+                    local precision = decimals or 0
+                    local factor = 10 ^ precision
+                    snapped = math.floor(snapped * factor + 0.5) / factor
+                    if control and math.abs(snapped - value) > 0.0000001 then
+                        control:Set(snapped, true)
+                    end
+                    value = snapped
+                end
+                if options.Callback then options.Callback(value) end
+            end
+            control = section:Slider({
+                Name = options.Name,
+                Min = options.Min,
+                Max = options.Max,
+                Default = options.Default,
+                Decimals = decimals or 0,
+                Suffix = options.Suffix,
+                Flag = options.Flag,
+                Callback = changed
+            })
+            return control
+        end
+        function wrapper:AddDropdown(options)
+            return wrapDropdown(section:Dropdown({
+                Name = options.Name,
+                Options = options.Values or options.Options or {},
+                Default = options.Default,
+                Multi = options.Multi == true,
+                Flag = options.Flag,
+                Callback = options.Callback,
+                MaxRows = options.MaxRows,
+                Empty = options.Empty
+            }))
+        end
+        function wrapper:AddButton(options)
+            return section:Button({
+                Name = options.Text or options.Name,
+                Callback = options.Callback
+            })
+        end
+        function wrapper:AddTextBox(options)
+            return section:Textbox({
+                Name = options.Name,
+                Default = options.Default,
+                Placeholder = options.Placeholder,
+                Flag = options.Flag,
+                Callback = options.Callback
+            })
+        end
+        function wrapper:AddColorPicker(options)
+            return section:Colorpicker({
+                Name = options.Name,
+                Default = options.Default,
+                Flag = options.Flag,
+                Callback = options.Callback
+            })
+        end
+        function wrapper:AddKeybind(options)
+            return section:Keybind({
+                Name = options.Name,
+                Default = options.Default,
+                Mode = options.Mode,
+                Flag = options.Flag,
+                Callback = options.Callback
+            })
+        end
+        return wrapper
+    end
+
+    function Window:AddTab(options)
+        local categoryName = options.Name or "Main"
+        if not self._categories[categoryName] then
+            self._window:Category(categoryName)
+            self._categories[categoryName] = true
+        end
+        local tabWrapper = { _window = self, _name = categoryName, _icon = options.Icon }
+        local sharedPageWrapper
+        function tabWrapper:AddPage(pageOptions)
+            if categoryName == "Offense" and sharedPageWrapper then
+                return sharedPageWrapper
+            end
+
+            local rawTab = self._window._window:Tab({
+                Name = categoryName == "Offense" and "Offense" or (pageOptions.Name or self._name),
+                Icon = self._icon or "grid"
+            })
+            local pageWrapper = { _tab = rawTab }
+            function pageWrapper:AddSection(sectionOptions)
+                local side = sectionOptions.Side == "Right" and 2 or 1
+                local rawSection = rawTab:Section({
+                    Name = sectionOptions.Title or sectionOptions.Name or "Section",
+                    Icon = sectionOptions.Icon or "cube",
+                    Description = sectionOptions.Description,
+                    Side = side
+                })
+                return wrapSection(rawSection)
+            end
+
+            if categoryName == "Offense" then
+                sharedPageWrapper = pageWrapper
+            end
+            return pageWrapper
+        end
+        return tabWrapper
+    end
+
+    function Window:AddConfigSections(tab)
+        if tab and tab.AddPage then
+            local settingsPage = tab:AddPage({ Name = "Settings" })
+            self._window:BuildSettings(settingsPage._tab)
+        end
+    end
+
+    function Window:LoadAutoConfig()
+        return true
+    end
+
+    function Window:Notify(options)
+        return self._window:Notify(options)
+    end
+
     local function notify(title, text, typ, dur)
-        pcall(function() Window:Notify({ Title = title, Text = text, Type = typ or "info", Duration = dur or 3 }) end)
+        pcall(function()
+            Window:Notify({ Title = title, Text = text, Type = typ or "info", Duration = dur or 3 })
+        end)
     end
 
     local trash = { "Xeno", "Solara", "Nexomia" }
@@ -17314,7 +17491,7 @@ do
     end
 
     do
-    local OffenseTab = Window:AddTab({ Name = "Offense", Icon = "swords" })
+    local OffenseTab = Window:AddTab({ Name = "Offense", Icon = "target" })
 
 -- ════════════════════════════════════════════════════════════════
 -- PAGE 1 · SILENT AIM
@@ -17500,7 +17677,7 @@ autoDimeKeysSection:AddKeybind({ Name = "Slot 5 Key", Default = Enum.KeyCode[s.A
     end
 
     do
-    local DefenseTab = Window:AddTab({ Name = "Defense", Icon = "shield" })
+    local DefenseTab = Window:AddTab({ Name = "Defense", Icon = "bullet" })
     local DefensePage = DefenseTab:AddPage({ Name = "Defense" })
 
     local guardSec = DefensePage:AddSection({ Title = "Auto Guard", Side = "Left" })
@@ -17641,7 +17818,7 @@ autoDimeKeysSection:AddKeybind({ Name = "Slot 5 Key", Default = Enum.KeyCode[s.A
     end
 
     do
-    local VisualizeTab = Window:AddTab({ Name = "Visualize", Icon = "eye" })
+    local VisualizeTab = Window:AddTab({ Name = "Visualize", Icon = "globe" })
     local VisualizePage = VisualizeTab:AddPage({ Name = "Visuals" })
 
 	local courtSec = VisualizePage:AddSection({ Title = "Court Skin Spoofer", Side = "Left" })
@@ -17926,7 +18103,7 @@ avatarSec:AddToggle({
     end
 
     do
-    local UtilityTab = Window:AddTab({ Name = "Utility", Icon = "list" })
+    local UtilityTab = Window:AddTab({ Name = "Utility", Icon = "wrench" })
     local UtilityPage = UtilityTab:AddPage({ Name = "Utility" })
 
 	local perfSec = UtilityPage:AddSection({ Title = "Auto Performance", Side = "Left" })
@@ -18077,7 +18254,7 @@ perfSec:AddButton({
     end
 
     do
-    local ConfigsTab = Window:AddTab({ Name = "Configs", Icon = "settings" })
+    local ConfigsTab = Window:AddTab({ Name = "Configs", Icon = "gear" })
     Window:AddConfigSections(ConfigsTab)
 
     Window:Notify({ Title = "Aural V2 loaded", Text = "have fun!", Type = "success", Duration = 3 })
