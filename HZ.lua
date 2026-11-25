@@ -3,6 +3,7 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 if not getgenv then getfenv().getgenv = function() return _G end end
 if getgenv().aural then
     game:GetService("Players").LocalPlayer:Kick("please do not execute twice, this will break aural.")
+		return
 end
 getgenv().aural = true
 
@@ -38,6 +39,41 @@ for _, actor in pairs(getactors()) do
         end);
     ]]);
 end;
+
+for _, actor in pairs(getactors()) do
+	run_on_actor(actor, [=[
+		local players = game:GetService("Players")
+		local player = players.LocalPlayer
+		local char = player.Character or player.CharacterAdded:Wait()
+		local hum = char:WaitForChild("Humanoid")
+
+		local conns = getconnections(hum.MoveToFinished)
+		local conns2 = getconnections(hum.Changed)
+		--print("Connection count:", #conns)
+		--print("Connection count:", #conns2)
+
+		for i, conn in conns do
+			--print(i, conn.State, conn.Function)
+			if conn.Function then
+				local src, line = debug.info(conn.Function, "sl")
+				--print("Script:", src, "Line:", line)
+				conn:Disable()
+				--print("disabled")
+			end
+		end
+
+		for i, conn in conns2 do
+			if conn.Function then
+            --print(conn.Function)
+            local src, line = debug.info(conn.Function, "sl")
+				--print("Script:", src, "Line:", line)
+				conn:Disable()
+				--print("more disabled")
+			end
+		end
+	]=])
+end
+
 
 local AuralV2 = (function()
 
@@ -1247,12 +1283,19 @@ function Section:AddToggle(o)
 	if obj.Keybind then
 		local keybind = obj.Keybind
 		keybind.Triggered:Connect(function(active)
-			if keybindAction then
-				task.spawn(keybindAction)
-				return
-			end
-			if obj.Keybind.Mode == "Hold" then obj:Set(active) else obj:Toggle() end
-		end)
+    if keybindAction then
+        if active then
+            task.spawn(keybindAction)
+        end
+        return
+    end
+
+    if obj.Keybind.Mode == "Hold" then
+        obj:Set(active)
+    else
+        obj:Toggle()
+    end
+end)
 	end
 	if o.Callback then obj.Changed:Connect(o.Callback) end
 	attachCommon(obj, row, o)
@@ -8861,13 +8904,13 @@ do
 end
 
 local indicator = Instance.new("Highlight")
-indicator.Name = "RangeIndicatorHighlight"
+indicator.Name = "rangeindicator"
 indicator.FillTransparency = 0.7
 indicator.OutlineTransparency = 0
 indicator.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 indicator.FillColor = Color3.fromRGB(60, 150, 255)
 indicator.OutlineColor = Color3.fromRGB(60, 150, 255)
-indicator.Parent = nil
+indicator.Parent = gethui()
 
 IndicatorColors = {
     Blue     = Color3.fromRGB(60, 150, 255),
@@ -17295,7 +17338,7 @@ end
 end
 
 do
-    local Blossom = loadstring(game:HttpGet("https://raw.githubusercontent.com/concurrentccu/mystudies/refs/heads/main/Blossom.luau"))()
+    local Blossom = loadstring(game:HttpGet("https://raw.githubusercontent.com/concurrentccu/mystudies/refs/heads/main/new.luau"))()
     local BlossomWindow = Blossom.new({
         Title = "Aural V2",
         Script = "AuralV2",
@@ -17703,18 +17746,24 @@ end })
 local SelfPassPage = OffenseTab:AddPage({ Name = "Self Pass" })
 
 local selfPassSection = SelfPassPage:AddSection({ Title = "Self Pass", Side = "Left" })
-selfPassSection:AddToggle({
+local selfPassToggle = selfPassSection:AddToggle({
     Name = "Enable Self Pass",
     Default = s.SelfPass.Enabled,
     Flag = "selfpass_toggle",
-    Keybind = {
-        Default = Enum.KeyCode[s.SelfPass.Keybind] or Enum.KeyCode.T,
-        Mode = "Press",
-        OnPress = function()
-            if s.SelfPass.Enabled then task.spawn(performSelfPass) end
-        end,
-    },
-    Callback = function(value) s.SelfPass.Enabled = value end,
+    Callback = function(value)
+        s.SelfPass.Enabled = value
+    end,
+})
+
+local selfPassKey = selfPassSection:AddKeybind({
+    Name = "Self Pass Key",
+    Default = Enum.KeyCode[s.SelfPass.Keybind] or Enum.KeyCode.T,
+    Mode = "Press",
+    Callback = function()
+        if s.SelfPass.Enabled then
+            task.spawn(fireMobileSelfPass)
+        end
+    end,
 })
 selfPassSection:AddSlider({ Name = "Pass Power", Min = 10, Max = 85, Default = s.SelfPass.Power, Increment = 1, Flag = "selfpass_power", Callback = function(v) s.SelfPass.Power = v end })
 selfPassSection:AddSlider({ Name = "Pass Distance", Min = 10, Max = 100, Default = s.SelfPass.Distance, Increment = 1, Flag = "selfpass_distance", Callback = function(v) s.SelfPass.Distance = v end })
