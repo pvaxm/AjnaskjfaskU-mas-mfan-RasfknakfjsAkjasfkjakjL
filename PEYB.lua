@@ -28,6 +28,9 @@ local Aural = {
 		AutoAnkleBreaker = false,
 		AnkleBreakRange = 8,
 		AnkleBreakerMove = "Crossover",
+		Macros = false,
+		ComboMoves = {},
+		ComboDelay = 0.05,
 	},
 
 	Defense = {
@@ -7313,7 +7316,6 @@ end
 return AuralV2
 end)()
 
-
 -- // Library (AuralV2 UI, replacing ZeroUI)
 -- AuralV2 compatibility bridge: exposes the same API surface ZeroUI provided
 -- so the feature code below doesn't need rewriting.
@@ -7612,7 +7614,6 @@ local Library = (function()
     return lib
 end)()
 
-
 -- // Game
 -- Everything is read from instances; nothing in the game is required, so Xeno and Solara run the same code.
 local RemoteServices = ReplicatedStorage:WaitForChild("Aero"):WaitForChild("AeroRemoteServices")
@@ -7667,6 +7668,15 @@ local MoveCombos = {
 	["Switch Hand"] = { "H", "H" },
 }
 local MoveNames = { "Crossover", "Hesitation", "Double Crossover", "Tween", "Behind Back", "Spin", "Breakdown", "Step Back", "Snatch Back", "Half Spin", "Double Behind Back", "Combo", "Switch Hand" }
+
+local PresetMacros = {
+	{ Name = "Cross Behind Back", Moves = { "Crossover", "Behind Back" } },
+	{ Name = "Hesi Cross", Moves = { "Hesitation", "Crossover" } },
+	{ Name = "Snatch Step Back", Moves = { "Snatch Back", "Step Back" } },
+	{ Name = "Double Cross Spin", Moves = { "Double Crossover", "Spin" } },
+	{ Name = "Breakdown Half Spin", Moves = { "Breakdown", "Half Spin" } },
+	{ Name = "Tween Behind Back", Moves = { "Tween", "Behind Back" } },
+}
 
 local MeterTypes = { "Vertical", "Rocket", "Bat", "Funnel", "Hoop", "Roblox", "None" }
 
@@ -7796,6 +7806,38 @@ local function GetMoveDirection()
 	return Vector3.zero
 end
 
+local ComboRunning = false
+
+local function DoMove(Move)
+	local Character = GetCharacter()
+	if not Character then return end
+	local Combo = MoveCombos[Move]
+	if not Combo then return end
+	local Hand = Character:GetAttribute("Hand")
+	local ComboString = (Hand == "R") and Combo[2] or Combo[1]
+	local IsSprinting = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+	Fire(Remotes.Dribble, ComboString, IsSprinting, GetMoveDirection())
+end
+
+local function RunCombo(Moves, Delay)
+	if ComboRunning then return end
+	ComboRunning = true
+	local Character = GetCharacter()
+	if not Character then
+		ComboRunning = false
+		return
+	end
+	for _, Move in ipairs(Moves) do
+		if not Running then break end
+		while Running and Character:GetAttribute("Action") == "Dribbling" do
+			task.wait()
+		end
+		if not Running then break end
+		DoMove(Move)
+		task.wait(0.25 + (Aural.Dribbling.ComboDelay or 0))
+	end
+	ComboRunning = false
+end
 -- // Window
 Library.Folder = "Aural"
 
@@ -7809,7 +7851,6 @@ local Icons = Library.Icons
 local function Notify(Title, Content)
 	Window:Notify({ Title = Title, Text = Content, Duration = 4 })
 end
-
 
 -- Tabs (flat — no categories)
 local ShootingTab = Window:CreateCategory(""):CreateTab({ Title = "Shooting",  Icon = Icons.Timer })
@@ -7985,6 +8026,43 @@ do
 	Ankle:AddSlider({ Title = "Ankle Break Range", Description = "How close a defender has to be", Min = 3, Max = 20, Default = Aural.Dribbling.AnkleBreakRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "AnkleBreakRange", Callback = function(V) Aural.Dribbling.AnkleBreakRange = V end })
 	Ankle:AddDropdown({ Title = "Move", Options = MoveNames, Default = Aural.Dribbling.AnkleBreakerMove, Flag = "AnkleBreakerMove", Callback = function(V) Aural.Dribbling.AnkleBreakerMove = V or "Crossover" end })
 
+end
+
+do -- // Dribble Macros Tab
+	local MacrosTab = Window:CreateCategory(""):CreateTab({ Title = "Dribble Macros", Icon = Icons.Combos })
+	local MacrosSection = MacrosTab:CreateSection({ Title = "Macros" })
+	MacrosSection:AddToggle({
+		Name = "Enable Macros",
+		Default = Aural.Dribbling.Macros,
+		Callback = function(Value)
+			Aural.Dribbling.Macros = Value
+		end,
+	})
+	local PresetsSection = MacrosTab:CreateSection({ Title = "Presets" })
+	for _, Preset in ipairs(PresetMacros) do
+		local CaptureName = Preset.Name
+		local CaptureMoves = Preset.Moves
+		PresetsSection:AddButton({
+			Name = CaptureName,
+			Callback = function()
+				if not Aural.Dribbling.Macros then return end
+				task.spawn(RunCombo, CaptureMoves, Aural.Dribbling.ComboDelay)
+			end,
+		})
+	end
+	local KeybindsSection = MacrosTab:CreateSection({ Title = "Keybinds" })
+	for _, Preset in ipairs(PresetMacros) do
+		local CaptureName = Preset.Name
+		local CaptureMoves = Preset.Moves
+		KeybindsSection:AddKeybind({
+			Name = CaptureName,
+			Default = Enum.KeyCode.Unknown,
+			Callback = function()
+				if not Aural.Dribbling.Macros then return end
+				task.spawn(RunCombo, CaptureMoves, Aural.Dribbling.ComboDelay)
+			end,
+		})
+	end
 end
 
 -- ╔══════════════════════════════╗
@@ -8198,7 +8276,6 @@ end
 
 -- Auto-load config on start (AuralV2 built-in: loads whichever config was set as autoload)
 pcall(function() Window:LoadAutoConfig() end)
-
 
 -- // Shot Tracking & Perfect Timing
 do
