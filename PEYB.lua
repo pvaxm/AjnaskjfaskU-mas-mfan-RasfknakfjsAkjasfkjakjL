@@ -28,9 +28,6 @@ local Aural = {
 		AutoAnkleBreaker = false,
 		AnkleBreakRange = 8,
 		AnkleBreakerMove = "Crossover",
-		Macros = false,
-		ComboMoves = {},
-		ComboDelay = 0.05,
 	},
 
 	Defense = {
@@ -7316,6 +7313,7 @@ end
 return AuralV2
 end)()
 
+
 -- // Library (AuralV2 UI, replacing ZeroUI)
 -- AuralV2 compatibility bridge: exposes the same API surface ZeroUI provided
 -- so the feature code below doesn't need rewriting.
@@ -7614,6 +7612,7 @@ local Library = (function()
     return lib
 end)()
 
+
 -- // Game
 -- Everything is read from instances; nothing in the game is required, so Xeno and Solara run the same code.
 local RemoteServices = ReplicatedStorage:WaitForChild("Aero"):WaitForChild("AeroRemoteServices")
@@ -7669,16 +7668,7 @@ local MoveCombos = {
 }
 local MoveNames = { "Crossover", "Hesitation", "Double Crossover", "Tween", "Behind Back", "Spin", "Breakdown", "Step Back", "Snatch Back", "Half Spin", "Double Behind Back", "Combo", "Switch Hand" }
 
-local PresetMacros = {
-	{ Name = "Cross Behind Back", Moves = { "Crossover", "Behind Back" } },
-	{ Name = "Hesi Cross", Moves = { "Hesitation", "Crossover" } },
-	{ Name = "Snatch Step Back", Moves = { "Snatch Back", "Step Back" } },
-	{ Name = "Double Cross Spin", Moves = { "Double Crossover", "Spin" } },
-	{ Name = "Breakdown Half Spin", Moves = { "Breakdown", "Half Spin" } },
-	{ Name = "Tween Behind Back", Moves = { "Tween", "Behind Back" } },
-}
-
-local MeterTypes = { "Vertical", "Rocket", "Bat", "Hoop", "Roblox", "None" }
+local MeterTypes = { "Vertical", "Rocket", "Bat", "Funnel", "Hoop", "Roblox", "None" }
 
 -- Actions the game puts a player in on purpose. CanMove switching off during anything else is treated as a stun.
 local OwnActions = {
@@ -7806,38 +7796,6 @@ local function GetMoveDirection()
 	return Vector3.zero
 end
 
-local ComboRunning = false
-
-local function DoMove(Move)
-	local Character = GetCharacter()
-	if not Character then return end
-	local Combo = MoveCombos[Move]
-	if not Combo then return end
-	local Hand = Character:GetAttribute("Hand")
-	local ComboString = (Hand == "R") and Combo[2] or Combo[1]
-	local IsSprinting = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-	Fire(Remotes.Dribble, ComboString, IsSprinting, GetMoveDirection())
-end
-
-local function RunCombo(Moves, Delay)
-	if ComboRunning then return end
-	ComboRunning = true
-	local Character = GetCharacter()
-	if not Character then
-		ComboRunning = false
-		return
-	end
-	for _, Move in ipairs(Moves) do
-		if not Running then break end
-		while Running and Character:GetAttribute("Action") == "Dribbling" do
-			task.wait()
-		end
-		if not Running then break end
-		DoMove(Move)
-		task.wait(0.25 + (Aural.Dribbling.ComboDelay or 0))
-	end
-	ComboRunning = false
-end
 -- // Window
 Library.Folder = "Aural"
 
@@ -7851,6 +7809,7 @@ local Icons = Library.Icons
 local function Notify(Title, Content)
 	Window:Notify({ Title = Title, Text = Content, Duration = 4 })
 end
+
 
 -- Tabs (flat — no categories)
 local ShootingTab = Window:CreateCategory(""):CreateTab({ Title = "Shooting",  Icon = Icons.Timer })
@@ -8026,170 +7985,6 @@ do
 	Ankle:AddSlider({ Title = "Ankle Break Range", Description = "How close a defender has to be", Min = 3, Max = 20, Default = Aural.Dribbling.AnkleBreakRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "AnkleBreakRange", Callback = function(V) Aural.Dribbling.AnkleBreakRange = V end })
 	Ankle:AddDropdown({ Title = "Move", Options = MoveNames, Default = Aural.Dribbling.AnkleBreakerMove, Flag = "AnkleBreakerMove", Callback = function(V) Aural.Dribbling.AnkleBreakerMove = V or "Crossover" end })
 
-end
-
-do -- // Dribble Macros Tab
-
-	-- ── Mobile quick-button system ───────────────────────────────────────
-	-- One draggable CoreGui TextButton per preset, spawned when Macros is
-	-- toggled on and destroyed when toggled off.  Buttons are arranged in
-	-- a vertical stack on the right edge of the screen and can be dragged
-	-- independently.
-
-	local MobileButtons = {}   -- { gui=ScreenGui, label=TextButton }
-
-	local function MakeDraggable(Button)
-		local Dragging  = false
-		local DragStart = Vector2.zero
-		local StartPos  = UDim2.new()
-
-		Button.InputBegan:Connect(function(Input)
-			if Input.UserInputType == Enum.UserInputType.Touch
-				or Input.UserInputType == Enum.UserInputType.MouseButton1 then
-				Dragging  = true
-				DragStart = Input.Position
-				StartPos  = Button.Position
-			end
-		end)
-
-		Button.InputChanged:Connect(function(Input)
-			if not Dragging then return end
-			if Input.UserInputType == Enum.UserInputType.Touch
-				or Input.UserInputType == Enum.UserInputType.MouseMovement then
-				local Delta = Input.Position - DragStart
-				Button.Position = UDim2.new(
-					StartPos.X.Scale,
-					StartPos.X.Offset + Delta.X,
-					StartPos.Y.Scale,
-					StartPos.Y.Offset + Delta.Y
-				)
-			end
-		end)
-
-		Button.InputEnded:Connect(function(Input)
-			if Input.UserInputType == Enum.UserInputType.Touch
-				or Input.UserInputType == Enum.UserInputType.MouseButton1 then
-				Dragging = false
-			end
-		end)
-	end
-
-	local function DestroyMobileButtons()
-		for _, Entry in ipairs(MobileButtons) do
-			pcall(function() Entry.gui:Destroy() end)
-		end
-		table.clear(MobileButtons)
-	end
-
-	local function SpawnMobileButtons()
-		if not game:GetService("UserInputService").TouchEnabled then return end
-		DestroyMobileButtons()
-
-		local CoreGui     = game:GetService("CoreGui")
-		local ScreenSize  = workspace.CurrentCamera.ViewportSize
-		local BtnW, BtnH  = 120, 44
-		local Padding     = 8
-		local StartX      = ScreenSize.X - BtnW - 12
-		local StartY      = math.floor(ScreenSize.Y * 0.25)
-
-		for i, Preset in ipairs(PresetMacros) do
-			local CaptureMoves = Preset.Moves
-			local Y = StartY + (i - 1) * (BtnH + Padding)
-
-			local Gui = Instance.new("ScreenGui")
-			Gui.Name            = "AuralMacroBtn_" .. i
-			Gui.ResetOnSpawn    = false
-			Gui.IgnoreGuiInset  = true
-			Gui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
-			Gui.Parent          = CoreGui
-
-			local Btn = Instance.new("TextButton")
-			Btn.Name            = "MacroButton"
-			Btn.Size            = UDim2.fromOffset(BtnW, BtnH)
-			Btn.Position        = UDim2.fromOffset(StartX, Y)
-			Btn.AnchorPoint     = Vector2.new(0, 0)
-			Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-			Btn.BorderSizePixel = 0
-			Btn.Text            = Preset.Name
-			Btn.TextColor3      = Color3.fromRGB(220, 220, 255)
-			Btn.TextSize        = 13
-			Btn.Font            = Enum.Font.GothamMedium
-			Btn.TextWrapped     = true
-			Btn.AutoButtonColor = false
-			Btn.Parent          = Gui
-
-			-- Rounded corners
-			local Corner = Instance.new("UICorner")
-			Corner.CornerRadius = UDim.new(0, 8)
-			Corner.Parent       = Btn
-
-			-- Subtle border
-			local Stroke = Instance.new("UIStroke")
-			Stroke.Color     = Color3.fromRGB(80, 80, 140)
-			Stroke.Thickness = 1.5
-			Stroke.Parent    = Btn
-
-			-- Press flash feedback
-			Btn.MouseButton1Down:Connect(function()
-				Btn.BackgroundColor3 = Color3.fromRGB(55, 55, 90)
-			end)
-			Btn.MouseButton1Up:Connect(function()
-				Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-				if Aural.Dribbling.Macros then
-					task.spawn(RunCombo, CaptureMoves, Aural.Dribbling.ComboDelay)
-				end
-			end)
-
-			MakeDraggable(Btn)
-			table.insert(MobileButtons, { gui = Gui, btn = Btn })
-		end
-	end
-
-	-- ── UI ───────────────────────────────────────────────────────────────
-	local MacrosTab = Window:CreateCategory(""):CreateTab({ Title = "Dribble Macros", Icon = Icons.Combos })
-	local MacrosSection = MacrosTab:CreateSection({ Title = "Macros" })
-	MacrosSection:AddToggle({
-		Name = "Enable Macros",
-		Default = Aural.Dribbling.Macros,
-		Callback = function(Value)
-			Aural.Dribbling.Macros = Value
-			if Value then
-				SpawnMobileButtons()
-			else
-				DestroyMobileButtons()
-			end
-		end,
-	})
-	local PresetsSection = MacrosTab:CreateSection({ Title = "Presets" })
-	for _, Preset in ipairs(PresetMacros) do
-		local CaptureName = Preset.Name
-		local CaptureMoves = Preset.Moves
-		PresetsSection:AddButton({
-			Name = CaptureName,
-			Callback = function()
-				if not Aural.Dribbling.Macros then return end
-				task.spawn(RunCombo, CaptureMoves, Aural.Dribbling.ComboDelay)
-			end,
-		})
-	end
-	local KeybindsSection = MacrosTab:CreateSection({ Title = "Keybinds" })
-	for _, Preset in ipairs(PresetMacros) do
-		local CaptureName = Preset.Name
-		local CaptureMoves = Preset.Moves
-		KeybindsSection:AddKeybind({
-			Name = CaptureName,
-			Default = Enum.KeyCode.Unknown,
-			Callback = function()
-				if not Aural.Dribbling.Macros then return end
-				task.spawn(RunCombo, CaptureMoves, Aural.Dribbling.ComboDelay)
-			end,
-		})
-	end
-
-	-- Spawn buttons immediately if Macros was already on when the script loaded
-	if Aural.Dribbling.Macros then
-		SpawnMobileButtons()
-	end
 end
 
 -- ╔══════════════════════════════╗
@@ -8404,6 +8199,7 @@ end
 -- Auto-load config on start (AuralV2 built-in: loads whichever config was set as autoload)
 pcall(function() Window:LoadAutoConfig() end)
 
+
 -- // Shot Tracking & Perfect Timing
 do
 	-- Progress (0 to 1) from the meter offset the server writes on your character.
@@ -8434,73 +8230,15 @@ do
 		Fadeaway = false,
 		Distance = 22,
 		Generation = 0,
-		-- Shot type for per-type calibration: "Normal", "Fadeaway", "PostHook", "PostFade", "StandingDunk", "ReverseDunk"
-		ShotType = "Normal",
 	}
-
-	-- Actions the game sets during post/dunk shot types
-	local PostHookActions  = { PostHook = true, TurnAroundHook = true }
-	local PostFadeActions  = { PostFade = true, TurnAroundFade = true, Fadeaway = true }
-	local StandingDunkActions = { StandingDunk = true, TwoHandDunk = true }
-	local ReverseDunkActions  = { ReverseDunk = true }
-
-	local function GetShotType(Character, Fadeaway)
-		local Action = Character and Character:GetAttribute("Action")
-		if PostHookActions[Action]  then return "PostHook"      end
-		if PostFadeActions[Action]  then return "PostFade"      end
-		if StandingDunkActions[Action] then return "StandingDunk" end
-		if ReverseDunkActions[Action]  then return "ReverseDunk"  end
-		if Fadeaway then return "Fadeaway" end
-		return "Normal"
-	end
 	local AutoPending = 0
 	local Calibration = 0
-	-- Auto Green: meter point (0 to 1) that grades Perfect, learned per meter+shottype key from shot feedback.
-	-- Keys are "{MeterType}_{ShotType}" so post hooks, post fades, standing/reverse dunks each calibrate independently.
+	-- Auto Green: meter point (0 to 1) that grades Perfect, learned per meter type from shot feedback.
 	local GreenTargets = {}
 	-- Meters whose server green window is the meter position where the green ends (from the game's Config.Meters).
 	local DirectGreen = {} -- disabled: the server green value is not confirmed to be a meter position, it released far too early
-	local GreenOffsets = {} -- per-meter+shottype nudge learned from shot feedback, on top of the real green edge
+	local GreenOffsets = {} -- per-meter nudge learned from shot feedback, on top of the real green edge
 	local GreenMargin = 0.012 -- aim just inside the top edge of the green
-
-	-- Per-meter seed targets: observed green window centers for each meter type in Hoopz.
-	-- AutoGreen starts from these instead of the user's ReleasePoint slider, so it's in the
-	-- right ballpark immediately on every meter type rather than wandering in cold.
-	-- Learned values overwrite these after the first few shots.
-	local MeterSeedTargets = {
-		Vertical = 0.920,  -- standard upward bar, green near the top
-		Funnel   = 0.920,  -- same mapping as Vertical
-		Rocket   = 0.900,  -- clean linear rise, green slightly lower
-		Bat      = 0.900,  -- same mapping as Rocket
-		Hoop     = 0.080,  -- Y is inverted on Hoop: green is near 0, not 1
-		Roblox   = 0.880,  -- X-axis meter, green zone slightly left of max
-		None     = 0.900,  -- fallback for unmapped meters
-	}
-
-	-- ShotType nudge on top of the meter seed: post/dunk shots have an earlier green window.
-	local ShotTypeSeedNudge = {
-		Normal       =  0.000,
-		Fadeaway     = -0.005,
-		PostHook     = -0.015,
-		PostFade     = -0.012,
-		StandingDunk = -0.030,
-		ReverseDunk  = -0.030,
-	}
-
-	local function ShotKey()
-		return Shot.Meter .. "_" .. Shot.ShotType
-	end
-
-	-- Returns the initial green target for the current meter+shottype combination.
-	-- Used by GetEffectiveTarget when AutoGreen is on but no learned value exists yet.
-	local function GetSeedTarget()
-		local Base = MeterSeedTargets[Shot.Meter] or 0.900
-		local Nudge = ShotTypeSeedNudge[Shot.ShotType] or 0
-		-- Hoop meter is Y-inverted: green is near 0, not 1 — allow the low range.
-		local Lo = (Shot.Meter == "Hoop") and 0.02 or 0.5
-		local Hi = (Shot.Meter == "Hoop") and 0.25 or 1.08
-		return math.clamp(Base + Nudge, Lo, Hi)
-	end
 
 	local function CleanEdge(Value)
 		Value = tonumber(Value)
@@ -8513,7 +8251,6 @@ do
 	local function UsesRealGreen()
 		return Aural.Shooting.AutoGreen and DirectGreen[Shot.Meter] == true and type(Shot.GreenEdge) == "number"
 	end
-
 	local LastAutoShot = 0
 	local DunkHold, DunkSeen, LastDunk = nil, false, 0
 	local DunkLastPos, DunkLastTime = nil, 0
@@ -8552,38 +8289,15 @@ do
 		end
 	end
 
-	-- Per-shot-type fill time scaling: post moves and dunks have notably different meter speeds
-	local ShotTypeFillMult = {
-		Normal       = 1.00,
-		Fadeaway     = 1.00,
-		PostHook     = 0.88,  -- post hooks fill faster
-		PostFade     = 0.88,
-		StandingDunk = 0.80,  -- standing dunk meter is short and fast
-		ReverseDunk  = 0.80,
-	}
-
-	local function GetDistanceFillTimeForShot(Distance)
-		local Base = GetDistanceFillTime(Distance)
-		return Base * (ShotTypeFillMult[Shot.ShotType] or 1.0)
-	end
-
-	-- On 3-pointers, the release point must be clean and high to clear the front iron.
-	-- Post hooks, post fades and dunks each have their own green target learned separately via ShotKey.
+	-- On 3-pointers, the release point must be clean and high to clear the front iron
 	local function GetEffectiveTarget(Distance)
-		local Key = ShotKey()
 		local BaseTarget = Aural.Shooting.ReleasePoint / 100
 		if UsesRealGreen() then
 			-- Real green edge from the server, aimed just inside it, plus what feedback taught us.
-			return math.clamp(Shot.GreenEdge - GreenMargin + (GreenOffsets[Key] or 0), 0.5, 1.1)
+			return math.clamp(Shot.GreenEdge - GreenMargin + (GreenOffsets[Shot.Meter] or 0), 0.5, 1.1)
 		end
-		if Aural.Shooting.AutoGreen then
-			-- Use learned value if we have one; otherwise seed from the per-meter defaults
-			-- so AutoGreen starts in the right ballpark on every meter type immediately.
-			BaseTarget = GreenTargets[Key] or GetSeedTarget()
-		end
-		-- Hoop meter: Y-inverted, no distance arc boost applies (green is near 0, not 1)
-		if Shot.Meter == "Hoop" then
-			return BaseTarget
+		if Aural.Shooting.AutoGreen and GreenTargets[Shot.Meter] then
+			BaseTarget = GreenTargets[Shot.Meter]
 		end
 		if not Aural.Shooting.DistanceScaling or not Distance then
 			return BaseTarget
@@ -8692,17 +8406,10 @@ do
 		local Target = GetEffectiveTarget(Shot.Distance)
 		local Shift = (Aural.Shooting.TimingOffset / 1000) + Calibration - GetLead()
 
-		-- Per-shot-type timing compensation.
-		-- Moving fadeaways drift slightly; post hooks/fades and dunks release notably earlier relative to fill.
-		local ShotTypeShift = {
-			Normal       =  0.000,
-			Fadeaway     = -0.008, -- same as original drift compensation
-			PostHook     = -0.012, -- post hooks commit fast; trim the window slightly
-			PostFade     = -0.010,
-			StandingDunk = -0.018, -- dunk meter is short, need to be ahead of it
-			ReverseDunk  = -0.018,
-		}
-		Shift = Shift + (ShotTypeShift[Shot.ShotType] or 0)
+		-- Adaptive moving/fadeaway compensation
+		if Shot.Fadeaway then
+			Shift = Shift - 0.008
+		end
 
 		if MeterMaps[Shot.Meter] then
 			local Slope, Intercept = Fit()
@@ -8715,8 +8422,7 @@ do
 
 		-- Distance-aware progressive fallback: If regression hasn't stabilized yet or meter isn't mapped,
 		-- fall back to calibrated distance-fill timing so 3s release with dead-on accuracy.
-		-- Use per-shot-type fill time so post moves and dunks don't overshoot on the fallback.
-		local FillTime = GetDistanceFillTimeForShot(Shot.Distance)
+		local FillTime = GetDistanceFillTime(Shot.Distance)
 		return Shot.Start + (FillTime * Target) + Shift
 	end
 
@@ -8801,19 +8507,17 @@ do
 		Shot.Auto = (os.clock() - AutoPending < 0.6) or (DunkHold ~= nil and os.clock() - DunkHold < 2.5)
 		AutoPending = 0
 
-		-- Distance, fadeaway, and shot-type calculations for per-type green calibration
+		-- Distance & fadeaway calculations for clean 3-point arcs
 		local Character = GetCharacter()
 		local Root, Goal = GetRoot(Character), GetGoal(Character)
 		if Character and Root and Goal then
 			Shot.Distance = Flat(Goal - Root.Position).Magnitude
 			local Vel = Root.AssemblyLinearVelocity or Vector3.zero
 			Shot.Fadeaway = (Flat(Vel).Magnitude > 2) or (Character:GetAttribute("Sprinting") == true)
-			Shot.ShotType = GetShotType(Character, Shot.Fadeaway)
 			AlignToBasket(Character)
 		else
 			Shot.Distance = 22
 			Shot.Fadeaway = false
-			Shot.ShotType = "Normal"
 		end
 
 		UpdatePrediction()
@@ -8857,20 +8561,16 @@ do
 		Change = math.clamp(Change * 0.5, -0.015, 0.015)
 		if Aural.Shooting.AutoGreen then
 			-- Auto Green: move the meter point itself toward the green instead of shifting time.
-			local Key = ShotKey()
 			if UsesRealGreen() then
 				local RealSlope = (Shot.Slope and Shot.Slope > 0) and Shot.Slope or (1 / GetDistanceFillTime(Shot.Distance))
-				GreenOffsets[Key] = math.clamp((GreenOffsets[Key] or 0) + Change * RealSlope, -0.05, 0.02)
-				CalibrationLabel:Update(string.format("[%s] green edge %.1f%%, offset %+.1f%%", Shot.ShotType, Shot.GreenEdge * 100, GreenOffsets[Key] * 100))
+				GreenOffsets[Shot.Meter] = math.clamp((GreenOffsets[Shot.Meter] or 0) + Change * RealSlope, -0.05, 0.02)
+				CalibrationLabel:Update(string.format("green edge %.1f%%, offset %+.1f%%", Shot.GreenEdge * 100, GreenOffsets[Shot.Meter] * 100))
 				return
 			end
 			local Slope = (Shot.Slope and Shot.Slope > 0) and Shot.Slope or (1 / GetDistanceFillTime(Shot.Distance))
-			local Current = GreenTargets[Key] or GetSeedTarget()
-			-- Hoop meter's green sits near 0 (Y-inverted), so its valid learn range is different.
-			local MinTarget = (Shot.Meter == "Hoop") and 0.02 or 0.85
-			local MaxTarget = (Shot.Meter == "Hoop") and 0.25 or 1.08
-			GreenTargets[Key] = math.clamp(Current + Change * Slope, MinTarget, MaxTarget)
-			CalibrationLabel:Update(string.format("[%s] green point: %.1f%%", Shot.ShotType, GreenTargets[Key] * 100))
+			local Current = GreenTargets[Shot.Meter] or (Aural.Shooting.ReleasePoint / 100)
+			GreenTargets[Shot.Meter] = math.clamp(Current + Change * Slope, 0.85, 1.08)
+			CalibrationLabel:Update(string.format("green point: %.1f%%", GreenTargets[Shot.Meter] * 100))
 			return
 		end
 		Calibration = math.clamp(Calibration + Change, -0.15, 0.15)
