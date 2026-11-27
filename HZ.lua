@@ -8441,6 +8441,8 @@ getgenv().Settings = {
         Cooldown = 0.75,
         Key1 = "One", Key2 = "Two", Key3 = "Three", Key4 = "Four", Key5 = "Five",
         LeadMultiplier = 1.0,
+        AutoLead = true,
+        LeadPing = true,
     },
     Defending = {
         AutoGuard = false, OnlyGuardInMatch = false, AutoGuardButton = false, AutoGuardNearest = false, AutoGuardKeybind = "K",
@@ -10620,6 +10622,102 @@ do
         return currentPos + velocity * leadTime, distanceToTarget
     end
 
+    -- Auto Lead: the lead is worked out from how the receiver is really moving, your ping and the moment
+    -- of release, instead of one fixed number. Same lead table as above, so the baseline feels the same.
+    local LEAD_BAKED_DELAY = 0.25
+    local LEAD_MAX_SPEED = 24
+    local LEAD_MAX_TIME = 2.6
+    local leadHistory = setmetatable({}, { __mode = "k" })
+    local leadTargets = {}
+    local leadTargetsAt = 0
+    local leadConnection = nil
+
+    local function flatten(vector)
+        return Vector3.new(vector.X, 0, vector.Z)
+    end
+
+    local function sampleLeadHistory()
+        local now = os.clock()
+        if now - leadTargetsAt > 1 then
+            leadTargetsAt = now
+            local ok, list = pcall(getAllPassTargets)
+            leadTargets = ok and list or {}
+        end
+        for _, tm in ipairs(leadTargets) do
+            local hrp = tm.Character and tm.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local history = leadHistory[tm]
+                if not history then
+                    history = {}
+                    leadHistory[tm] = history
+                end
+                history[#history + 1] = { t = now, p = hrp.Position }
+                while #history > 2 and now - history[1].t > 0.5 do
+                    table.remove(history, 1)
+                end
+            end
+        end
+    end
+
+    -- measured velocity (last ~0.15s) and how fast it is changing; falls back to the engine velocity
+    local function measuredMotion(tm, hrp)
+        local fallback = flatten(hrp.AssemblyLinearVelocity)
+        local history = leadHistory[tm]
+        if not history or #history < 4 then return fallback, Vector3.zero end
+        local last = history[#history]
+        if os.clock() - last.t > 0.25 then return fallback, Vector3.zero end
+        local mid = nil
+        for i = #history, 1, -1 do
+            if last.t - history[i].t >= 0.15 then
+                mid = i
+                break
+            end
+        end
+        if not mid then return fallback, Vector3.zero end
+        local dt1 = last.t - history[mid].t
+        local v1 = flatten(last.p - history[mid].p) / dt1
+        local accel = Vector3.zero
+        local dt0 = history[mid].t - history[1].t
+        if mid > 1 and dt0 >= 0.1 then
+            local v0 = flatten(history[mid].p - history[1].p) / dt0
+            accel = (v1 - v0) / ((dt1 + dt0) / 2)
+        end
+        return v1, accel
+    end
+
+    local function getPingSeconds()
+        local ok, ms = pcall(function() return dataping:GetValue() end)
+        if not ok or type(ms) ~= "number" then return 0 end
+        return math.clamp(ms, 0, 400) / 1000
+    end
+
+    local function getAutoLeadPosition(teammate)
+        local character = teammate.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp or not myHRP then return nil end
+        local currentPos = hrp.Position
+        local velocity, accel = measuredMotion(teammate, hrp)
+        if velocity.Magnitude < 1.2 then
+            velocity = Vector3.zero
+        elseif accel.Magnitude > 0.1 then
+            -- speeding up or slowing down: nudge the velocity, but never past a sprint
+            local nudge = accel.Magnitude > 60 and accel.Unit * 60 or accel
+            velocity = velocity + nudge * 0.15
+        end
+        if velocity.Magnitude > LEAD_MAX_SPEED then velocity = velocity.Unit * LEAD_MAX_SPEED end
+        -- same distance measure the lead table was tuned on (where they will be in half a second)
+        local roughPos = currentPos + velocity * 0.5
+        local roughDist = (roughPos - myHRP.Position).Magnitude
+        local flight = math.max(roughDist * getLeadMultiplier(roughDist) - LEAD_BAKED_DELAY, 0)
+        flight = math.min(flight * (s.AutoDime.LeadMultiplier or 1.0), LEAD_MAX_TIME)
+        local leadTime = flight
+        if s.AutoDime.LeadPing then
+            leadTime = leadTime + getPingSeconds() * 0.5
+        end
+        return currentPos + velocity * leadTime, roughDist
+    end
+
     local function getHeightOffset(distance)
         local t = math.clamp((distance - HEIGHT_CLOSE_DISTANCE) / (HEIGHT_FAR_DISTANCE - HEIGHT_CLOSE_DISTANCE), 0, 1)
         return MAX_HEIGHT_OFFSET - t * (MAX_HEIGHT_OFFSET - MIN_HEIGHT_OFFSET)
@@ -10752,6 +10850,12 @@ do
             autoDimeLock = false
             return false
         end
+        if s.AutoDime.AutoLead then
+            local freshPos, freshDistance = getAutoLeadPosition(target)
+            if freshPos then
+                predictedPos, distanceToDot = freshPos, freshDistance
+            end
+        end
         local heightOffset = getHeightOffset(distanceToDot)
         local jumpHeight = getGroundDisplacement()
         local jumpAdjustment = getJumpAimAdjustment(jumpHeight, distanceToDot)
@@ -10796,6 +10900,10 @@ do
                 end
             end
         end)
+        if leadConnection then leadConnection:Disconnect(); leadConnection = nil end
+        leadConnection = RunService.Heartbeat:Connect(function()
+            pcall(sampleLeadHistory)
+        end)
         task.spawn(function()
             while s.AutoDime.Enabled do
                 updatePassLabels()
@@ -10806,6 +10914,8 @@ do
 
     function disableAutoDime()
         if autoDimeConnection then autoDimeConnection:Disconnect(); autoDimeConnection = nil end
+        if leadConnection then leadConnection:Disconnect(); leadConnection = nil end
+        table.clear(leadHistory)
         autoDimeLock = false
         clearPassLabels()
     end
@@ -17791,6 +17901,8 @@ autoDimeSection:AddSlider({ Name = "Pass Power", Min = 60, Max = 85, Default = s
 autoDimeSection:AddToggle({ Name = "Jump Before Pass", Default = s.AutoDime.JumpBeforePass, Flag = "autodime_jump", Callback = function(v) s.AutoDime.JumpBeforePass = v end })
 autoDimeSection:AddSlider({ Name = "Jump Delay", Min = 0.05, Max = 0.5, Default = s.AutoDime.JumpDelay, Increment = 0.01, Suffix = "s", Flag = "autodime_jumpdelay", Callback = function(v) s.AutoDime.JumpDelay = v end })
 autoDimeSection:AddSlider({ Name = "Lead Multiplier", Min = 0, Max = 3, Default = s.AutoDime.LeadMultiplier, Increment = 0.05, Flag = "autodime_lead", Callback = function(v) s.AutoDime.LeadMultiplier = v end })
+autoDimeSection:AddToggle({ Name = "Auto Lead", Default = s.AutoDime.AutoLead, Flag = "autodime_autolead", Callback = function(v) s.AutoDime.AutoLead = v end })
+autoDimeSection:AddToggle({ Name = "Lead Ping Compensation", Default = s.AutoDime.LeadPing, Flag = "autodime_leadping", Callback = function(v) s.AutoDime.LeadPing = v end })
 
 local autoDimeKeysSection = AutoDimePage:AddSection({ Title = "Teammate Pass Keys", Side = "Right" })
 autoDimeKeysSection:AddKeybind({ Name = "Slot 1 Key", Default = Enum.KeyCode[s.AutoDime.Key1] or Enum.KeyCode.One, Mode = "None", Flag = "autodime_key1", Callback = function(kc) s.AutoDime.Key1 = kc and kc.Name or "One" end })
