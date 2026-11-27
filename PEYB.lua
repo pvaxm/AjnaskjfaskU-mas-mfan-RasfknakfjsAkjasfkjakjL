@@ -7,6 +7,7 @@ local Aural = {
 		ReleasePoint = 97,
 		TimingOffset = -5,
 		AutoGreen = true,
+		AutoCalibrate = false,
 		ShotGlide = false,
 		ShotGlideSpeed = 10,
 		ShotGlideTime = 300,
@@ -28,6 +29,122 @@ local Aural = {
 		RangeCircleColor = Color3.fromRGB(255, 92, 146),
 	},
 
+	Plus = {
+		Shot = {
+			MeterTiming = {},
+			SelfLob = false,
+			LobRange = 15,
+			ShotGlide = false,
+			ShotGlideSpeed = 20,
+			AntiContest = false,
+			ContestRange = 12,
+			MaxContest = 10,
+			ShowContestPercent = false,
+			ShowContest = false,
+			SmartJelly = false,
+			JellyRange = 8,
+		},
+		Dribble = {
+			GatherGlide = false,
+			GatherGlideSpeed = 20,
+			LoopCombo = false,
+		},
+		Pass = {
+			Link = false,
+			Target = nil,
+			PassType = "Chest",
+		},
+		Defense = {
+			SwatAway = false,
+			AutoRebound = false,
+			ReboundRange = 25,
+			Magnet = false,
+			MagnetReach = 10,
+			MagnetSteal = true,
+			MagnetBlock = true,
+			MagnetRebound = true,
+			AutoHoldG = false,
+			StanceDelay = 0,
+			IgnoreSlow = false,
+			SlowSpeed = 8,
+			CreepDistance = 25,
+			ReactionTime = 0,
+			Smoothness = 0,
+			Mistakes = 0,
+			GetCrossed = 0,
+			HoldGround = false,
+			BlockShots = "All Shots",
+			RimBlockDelay = 0,
+			BlockLunge = false,
+			BlockChase = false,
+			GuardMode = "Blatant",
+			ShowCoverage = false,
+		},
+		Player = {
+			DunkHeight = false,
+			DunkHeightValue = 40,
+			ShotHeight = false,
+			ShotHeightValue = 10,
+		},
+		Play = {
+			Enabled = false,
+			AnyTime = false,
+			Spots = { "Top 3" },
+			ThreeDistance = 24,
+			ThreeChance = 100,
+			ShootOpen = true,
+			ShotRange = 6,
+			OpenSpace = 8,
+			RimRun = true,
+			Dunks = true,
+			Midranges = true,
+			PassTeammates = true,
+			BreakAnkles = true,
+			AnkleMoves = { "Crossover", "Hesitation", "Spin" },
+			UseMyCombo = false,
+			PostUp = false,
+			PostChance = 40,
+			PostFade = true,
+			PostFadeChance = 50,
+			AntiSteal = true,
+			AutoDefense = true,
+			ManDefense = false,
+			AutoSteal = false,
+			AntiAfk = false,
+			SidelineMargin = 4,
+			FinishWith = "Mix",
+			RimGathers = {},
+			PostHopStep = false,
+		},
+		Spots = {
+			AutoSteal = false,
+		},
+		Farm = {
+			Enabled = false,
+			Mode = "1v1",
+			AnyRegion = false,
+			PlayGames = true,
+			LeaveAfter = 5,
+			WebhookUrl = "",
+			SendResults = false,
+			QueueOnTeleport = false,
+			LoaderScript = "",
+		},
+		World = {
+			Logo = "None",
+			CustomLogo = "",
+		},
+		Rec = {
+			AutoReady = false,
+			AutoLeave = false,
+			LeaveAfter = 5,
+			AutoJumpBall = false,
+			ServerHop = false,
+			HopAfter = 120,
+			WebhookUrl = "",
+			SendResults = false,
+		},
+	},
 	Reflex = {
 		AutoGreen = false,
 		GreenOffset = 0,
@@ -53,6 +170,11 @@ local Aural = {
 	Dribbling = {
 		DribbleGlide = false,
 		GlideSpeed = 25,
+		Macros = true,
+		MobileButtons = false,
+		ButtonMoves = { "Crossover", "Hesitation", "Step Back" },
+		ButtonSize = 64,
+		ButtonLock = false,
 
 		AutoAnkleBreaker = false,
 		AnkleBreakRange = 8,
@@ -7458,6 +7580,7 @@ local Library = (function()
                         out.Desc       = o.Description
                         out.SearchText = o.Description
                         out.Flag       = o.Flag
+                        out.Save       = o.Save
                         -- Slider
                         out.Min        = o.Min
                         out.Max        = o.Max
@@ -7503,10 +7626,14 @@ local Library = (function()
                         local x = xlat(o)
                         local el = sec:AddDropdown(x)
                         if o and o.Flag then lib.Elements[o.Flag] = el end
-                        el.Update = function(self2, v) self2:Set(v) end
+                        el.Update = function(self2, v, silent) self2:Set(v, silent) end
                         -- Add Refresh method for dynamic option lists
                         el.Refresh = function(self2, newOptions)
-                            self2.Values = newOptions or {}
+                            if self2.SetValues then
+                                self2:SetValues(newOptions or {})
+                            else
+                                self2.Values = newOptions or {}
+                            end
                         end
                         return el
                     end
@@ -7715,10 +7842,12 @@ local MoveCombos = {
 	["Double Behind Back"] = { "XZ", "XZ" },
 	["Combo"] = { "VV", "VV" },
 	["Switch Hand"] = { "H", "H" },
+	["Breakdown Left"] = { "VZ", "VZ" },
+	["Breakdown Right"] = { "VC", "VC" },
 }
-local MoveNames = { "Crossover", "Hesitation", "Double Crossover", "Tween", "Behind Back", "Spin", "Breakdown", "Step Back", "Snatch Back", "Half Spin", "Double Behind Back", "Combo", "Switch Hand" }
+local MoveNames = { "Crossover", "Hesitation", "Double Crossover", "Tween", "Behind Back", "Spin", "Breakdown", "Step Back", "Snatch Back", "Half Spin", "Double Behind Back", "Combo", "Switch Hand", "Breakdown Left", "Breakdown Right" }
 
-local MeterTypes = { "Vertical", "Rocket", "Bat", "Funnel", "Hoop", "Roblox", "None" }
+local MeterTypes = { "Vertical", "Rocket", "Bat", "Funnel", "Hoop", "Roblox", "Funnel2", "Pill", "Arrow", "Tube", "Diamond", "None" }
 
 -- Actions the game puts a player in on purpose. CanMove switching off during anything else is treated as a stun.
 local OwnActions = {
@@ -7866,9 +7995,7 @@ local ShootingTab = Window:CreateCategory(""):CreateTab({ Title = "Shooting",  I
 local OffenseTab  = Window:CreateCategory(""):CreateTab({ Title = "Offense",   Icon = Icons.Dribble })
 local DefenseTab  = Window:CreateCategory(""):CreateTab({ Title = "Defense",   Icon = Icons.Shield })
 local CharacterTab= Window:CreateCategory(""):CreateTab({ Title = "Character", Icon = Icons.Person })
-local PetsTab     = Window:CreateCategory(""):CreateTab({ Title = "Pets",      Icon = "heart" })
 local VisualsTab  = Window:CreateCategory(""):CreateTab({ Title = "Visuals",   Icon = Icons.Sun })
-local SettingsTab = Window:CreateCategory(""):CreateTab({ Title = "Settings",  Icon = Icons.Settings })
 
 -- Forward-declared labels and lists used in logic below
 local PingLabel
@@ -7878,6 +8005,32 @@ local function SetCurrentMeter(...) end
 local function SetDebounce(...) end
 local function ApplyEffects() end
 local function RefreshCosmetics() end
+
+-- // Aural+ shared hooks (the Aural+ port fills these in)
+local Ext = {
+	GuardPosition = function(Target) return Target.Root.Position end,
+	GuardAdjust = function() end,
+	GuardState = { Spot = nil, At = 0 },
+	Contested = function() return false end,
+	MarkAutoShot = function() end,
+	Calibration = 0,
+	CustomMascotSources = {},
+	CustomMascotIds = {
+		["Tung Tung Sahur"] = 142279604105350,
+		["IShowSpeed"] = 223776659736269,
+		["SpongeBob"] = 191690491163088,
+		["Patrick"] = 131230686895922,
+		["Iron Man"] = 92529068873026,
+		["Spider-Man"] = 150574496814013,
+		["Monkey"] = 244448945895139,
+		["Ronaldo"] = 199926548281199,
+		["Sun Man"] = 191207971903334,
+		["Skeleton"] = 295,
+		["Anime Girl"] = 337240,
+	},
+	CustomMascotOrder = { "Tung Tung Sahur", "IShowSpeed", "SpongeBob", "Patrick", "Iron Man", "Spider-Man", "Monkey", "Ronaldo", "Sun Man", "Skeleton", "Anime Girl" },
+}
+
 
 -- Option lists for the cosmetic and effect changers
 local Accessories = ReplicatedStorage:WaitForChild("Accessories", 10)
@@ -7914,6 +8067,10 @@ if Accessories then
 	for Index, Mascot in Accessories.Mascots:GetChildren() do
 		table.insert(MascotOptions, Mascot.Name)
 	end
+end
+
+for Index, Name in Ext.CustomMascotOrder do
+	table.insert(MascotOptions, Name)
 end
 
 for Index, Effect in (EffectAssets:FindFirstChild("Goal") or EffectAssets):GetChildren() do
@@ -7963,39 +8120,39 @@ local ComboLabel
 -- // Auto Time / Auto Green  [Shooting tab]
 do
 	local Timing = ShootingTab:CreateSection({ Title = "Auto Time", Icon = Icons.Timer })
-	local PerfTimingToggle = Timing:AddToggle({ Title = "Auto Time", Description = "Releases every shot at the top of the meter", Flag = "PerfectTiming", Default = Aural.Shooting.PerfectTiming, Callback = function(V) Aural.Shooting.PerfectTiming = V end })
+	local PerfTimingToggle = Timing:AddToggle({ Title = "Auto Time", Description = "Releases at the top of the meter", Flag = "PerfectTiming", Default = Aural.Shooting.PerfectTiming, Callback = function(V) Aural.Shooting.PerfectTiming = V end })
 	Timing:AddKeybind({ Title = "Auto Time keybind", Flag = "PerfectTimingKey", Callback = function()
 		local newVal = PerfTimingToggle and not PerfTimingToggle:Get() or not Aural.Shooting.PerfectTiming
 		if PerfTimingToggle then pcall(function() PerfTimingToggle:Set(newVal) end) end
 		Aural.Shooting.PerfectTiming = newVal
 		Notify("Auto Time", newVal and "On" or "Off")
 	end })
-	local AutoGreenToggle = Timing:AddToggle({ Title = "Auto Green", Description = "Jump with the ball and it shoots for you, then releases at the Release Point (green)", Flag = "AutoGreen", Default = Aural.Shooting.AutoGreen, Callback = function(V) Aural.Shooting.AutoGreen = V end })
+	local AutoGreenToggle = Timing:AddToggle({ Title = "Auto Green", Description = "Jump and it shoots for you", Flag = "AutoGreen", Default = Aural.Shooting.AutoGreen, Callback = function(V) Aural.Shooting.AutoGreen = V end })
 	Timing:AddKeybind({ Title = "Auto Green keybind", Flag = "AutoGreenKey", Callback = function()
 		local newVal = AutoGreenToggle and not AutoGreenToggle:Get() or not Aural.Shooting.AutoGreen
 		if AutoGreenToggle then pcall(function() AutoGreenToggle:Set(newVal) end) end
 		Aural.Shooting.AutoGreen = newVal
 		Notify("Auto Green", newVal and "On" or "Off")
 	end })
-	Timing:AddSlider({ Title = "Release Point", Description = "How full the meter is when the release lands", Min = 90, Max = 100, Default = Aural.Shooting.ReleasePoint, Step = 0.5, Decimals = 1, Suffix = "%", Flag = "ReleasePoint", Callback = function(V) Aural.Shooting.ReleasePoint = V end })
-	Timing:AddToggle({ Title = "Auto Align", Description = "Squares up directly facing the hoop to eliminate drift and angle penalties", Flag = "AutoAlign", Default = Aural.Shooting.AutoAlign, Callback = function(V) Aural.Shooting.AutoAlign = V end })
-	Timing:AddToggle({ Title = "Distance Scaling", Description = "Dynamically scales meter timing and optimal arc for 3s and deep shots", Flag = "DistanceScaling", Default = Aural.Shooting.DistanceScaling, Callback = function(V) Aural.Shooting.DistanceScaling = V end })
+	Timing:AddSlider({ Title = "Release Point", Description = "Meter fill at release", Min = 90, Max = 100, Default = Aural.Shooting.ReleasePoint, Step = 0.5, Decimals = 1, Suffix = "%", Flag = "ReleasePoint", Callback = function(V) Aural.Shooting.ReleasePoint = V end })
+	Timing:AddToggle({ Title = "Auto Align", Description = "Faces the hoop before you shoot", Flag = "AutoAlign", Default = Aural.Shooting.AutoAlign, Callback = function(V) Aural.Shooting.AutoAlign = V end })
+	Timing:AddToggle({ Title = "Distance Scaling", Description = "Adjusts timing for 3s and deep", Flag = "DistanceScaling", Default = Aural.Shooting.DistanceScaling, Callback = function(V) Aural.Shooting.DistanceScaling = V end })
 
 	local Ping = ShootingTab:CreateSection({ Title = "Consistency", Icon = Icons.Ping })
 	PingLabel = Ping:AddLabel("ping: 0ms")
-	Ping:AddToggle({ Title = "Ping Compensation", Description = "Releases early by your ping so the Release Point is the real meter fill on any server", Flag = "PingCompensation", Default = Aural.Shooting.PingCompensation, Callback = function(V) Aural.Shooting.PingCompensation = V end })
-	Ping:AddSlider({ Title = "Latency Compensation", Description = "How much of your ping to compensate for (100% = full ping)", Min = 0, Max = 150, Default = Aural.Shooting.PingMultiplier, Suffix = "%", Flag = "PingMultiplier", Callback = function(V) Aural.Shooting.PingMultiplier = V end })
-	Ping:AddSlider({ Title = "Timing Offset", Description = "Fine-tune: negative releases earlier, positive later", Min = -60, Max = 60, Default = Aural.Shooting.TimingOffset, Suffix = "ms", Flag = "TimingOffset", Callback = function(V) Aural.Shooting.TimingOffset = V end })
+	Ping:AddToggle({ Title = "Ping Compensation", Description = "Releases early to match your ping", Flag = "PingCompensation", Default = Aural.Shooting.PingCompensation, Callback = function(V) Aural.Shooting.PingCompensation = V end })
+	Ping:AddSlider({ Title = "Latency Compensation", Description = "How much ping to cover", Min = 0, Max = 150, Default = Aural.Shooting.PingMultiplier, Suffix = "%", Flag = "PingMultiplier", Callback = function(V) Aural.Shooting.PingMultiplier = V end })
+	Ping:AddSlider({ Title = "Timing Offset", Description = "Negative = earlier", Min = -60, Max = 60, Default = Aural.Shooting.TimingOffset, Suffix = "ms", Flag = "TimingOffset", Callback = function(V) Aural.Shooting.TimingOffset = V end })
 
 	local Meter = ShootingTab:CreateSection({ Title = "Custom Meter", Icon = Icons.Meter })
-	Meter:AddToggle({ Title = "Customize Meter", Description = "Appearance controls are separate from Auto Green", Flag = "RfxCustomMeter", Default = Aural.Reflex.CustomMeter, Callback = function(V) Aural.Reflex.CustomMeter = V end })
-	Meter:AddDropdown({ Title = "Meter Shape", Description = "Equipped keeps your own meter, any other shape swaps it", Options = { "Equipped", "Vertical", "Bat", "Rocket", "Funnel", "Funnel2", "Pill", "Arrow", "Hoop", "Roblox", "Tube", "Diamond" }, Default = Aural.Reflex.MeterShape, Flag = "RfxMeterShape", Callback = function(V) Aural.Reflex.MeterShape = V or "Equipped" end })
+	Meter:AddToggle({ Title = "Customize Meter", Description = "Change how the meter looks", Flag = "RfxCustomMeter", Default = Aural.Reflex.CustomMeter, Callback = function(V) Aural.Reflex.CustomMeter = V end })
+	Meter:AddDropdown({ Title = "Meter Shape", Description = "Swap your meter style", Options = { "Equipped", "Vertical", "Bat", "Rocket", "Funnel", "Funnel2", "Pill", "Arrow", "Hoop", "Roblox", "Tube", "Diamond" }, Default = Aural.Reflex.MeterShape, Flag = "RfxMeterShape", Callback = function(V) Aural.Reflex.MeterShape = V or "Equipped" end })
 	Meter:AddSlider({ Title = "Meter Size", Description = "Scales the meter", Min = 0.4, Max = 3, Default = Aural.Reflex.MeterSize, Step = 0.1, Decimals = 1, Suffix = "x", Flag = "RfxMeterSize", Callback = function(V) Aural.Reflex.MeterSize = V end })
-	Meter:AddToggle({ Title = "Custom Fill Color", Description = "Tints the meter fill with the color below", Flag = "RfxMeterCustomColor", Default = Aural.Reflex.MeterCustomColor, Callback = function(V) Aural.Reflex.MeterCustomColor = V end })
+	Meter:AddToggle({ Title = "Custom Fill Color", Description = "Tints the meter fill", Flag = "RfxMeterCustomColor", Default = Aural.Reflex.MeterCustomColor, Callback = function(V) Aural.Reflex.MeterCustomColor = V end })
 	Meter:AddColorPicker({ Title = "Fill Color", Default = Aural.Reflex.MeterColor, Flag = "RfxMeterColor", Callback = function(V) Aural.Reflex.MeterColor = V end })
 
 	local GreenV2 = ShootingTab:CreateSection({ Title = "Auto Green V2", Icon = Icons.Timer })
-	GreenV2:AddToggle({ Title = "Auto Green V2", Description = "Automatic release with ping compensation and self-calibration. Shoot with your normal shoot key", Flag = "RfxAutoGreen", Default = Aural.Reflex.AutoGreen, Callback = function(V)
+	GreenV2:AddToggle({ Title = "Auto Green V2", Description = "Releases for you. Shoot as normal", Flag = "RfxAutoGreen", Default = Aural.Reflex.AutoGreen, Callback = function(V)
 		Aural.Reflex.AutoGreen = V
 		if V and (Aural.Shooting.PerfectTiming or Aural.Shooting.AutoGreen) then
 			Aural.Shooting.PerfectTiming = false
@@ -8006,18 +8163,18 @@ do
 		end
 	end })
 	Aural.ReflexStatus = GreenV2:AddLabel("status: off")
-	GreenV2:AddSlider({ Title = "Release Timing", Description = "Negative releases earlier, positive releases later", Min = -60, Max = 60, Default = Aural.Reflex.GreenOffset, Suffix = " ms", Flag = "RfxGreenOffset", Callback = function(V) Aural.Reflex.GreenOffset = V end })
-	GreenV2:AddToggle({ Title = "Tap To Shoot", Description = "A quick tap on shoot becomes a full held shot", Flag = "RfxTapShoot", Default = Aural.Reflex.TapShoot, Callback = function(V) Aural.Reflex.TapShoot = V end })
+	GreenV2:AddSlider({ Title = "Release Timing", Description = "Negative = earlier", Min = -60, Max = 60, Default = Aural.Reflex.GreenOffset, Suffix = " ms", Flag = "RfxGreenOffset", Callback = function(V) Aural.Reflex.GreenOffset = V end })
+	GreenV2:AddToggle({ Title = "Tap To Shoot", Description = "Tap shoot for a full shot", Flag = "RfxTapShoot", Default = Aural.Reflex.TapShoot, Callback = function(V) Aural.Reflex.TapShoot = V end })
 
 	local ContestUI = ShootingTab:CreateSection({ Title = "Open Contest", Icon = Icons.Target })
-	ContestUI:AddToggle({ Title = "Open Contest", Description = "Green: open. Amber: pressure. Red: covered", Flag = "RfxContestOn", Default = Aural.Reflex.ContestOn, Callback = function(V) Aural.Reflex.ContestOn = V end })
+	ContestUI:AddToggle({ Title = "Open Contest", Description = "Green open, red covered", Flag = "RfxContestOn", Default = Aural.Reflex.ContestOn, Callback = function(V) Aural.Reflex.ContestOn = V end })
 	ContestUI:AddToggle({ Title = "Number Above Head", Description = "Contest label over each player", Flag = "RfxContestHead", Default = Aural.Reflex.ContestHead, Callback = function(V) Aural.Reflex.ContestHead = V end })
 	ContestUI:AddToggle({ Title = "Color On Player", Description = "Glows the player with the contest color", Flag = "RfxContestGlow", Default = Aural.Reflex.ContestGlow, Callback = function(V) Aural.Reflex.ContestGlow = V end })
-	ContestUI:AddToggle({ Title = "Ground Marker", Description = "Colored disc on the floor under the player", Flag = "RfxContestGround", Default = Aural.Reflex.ContestGround, Callback = function(V) Aural.Reflex.ContestGround = V end })
+	ContestUI:AddToggle({ Title = "Ground Marker", Description = "Colored disc under the player", Flag = "RfxContestGround", Default = Aural.Reflex.ContestGround, Callback = function(V) Aural.Reflex.ContestGround = V end })
 	ContestUI:AddToggle({ Title = "Show On Opponents", Description = "Also shows the contest on your opponents", Flag = "RfxContestFoes", Default = Aural.Reflex.ContestFoes, Callback = function(V) Aural.Reflex.ContestFoes = V end })
-	ContestUI:AddToggle({ Title = "Only While Holding Ball", Description = "Hides the contest unless that player has the ball", Flag = "RfxContestOnlyBall", Default = Aural.Reflex.ContestOnlyBall, Callback = function(V) Aural.Reflex.ContestOnlyBall = V end })
-	ContestUI:AddSlider({ Title = "Label Height", Description = "How high the label sits above the player", Min = 1, Max = 8, Default = Aural.Reflex.ContestHeight, Step = 0.1, Decimals = 1, Suffix = " studs", Flag = "RfxContestHeight", Callback = function(V) Aural.Reflex.ContestHeight = V end })
-	ContestUI:AddSlider({ Title = "Contest Distance", Description = "How close a defender has to be to count", Min = 3, Max = 15, Default = Aural.Reflex.ContestRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "RfxContestRange", Callback = function(V) Aural.Reflex.ContestRange = V end })
+	ContestUI:AddToggle({ Title = "Only While Holding Ball", Description = "Only for the ball handler", Flag = "RfxContestOnlyBall", Default = Aural.Reflex.ContestOnlyBall, Callback = function(V) Aural.Reflex.ContestOnlyBall = V end })
+	ContestUI:AddSlider({ Title = "Label Height", Description = "Label height above head", Min = 1, Max = 8, Default = Aural.Reflex.ContestHeight, Step = 0.1, Decimals = 1, Suffix = " studs", Flag = "RfxContestHeight", Callback = function(V) Aural.Reflex.ContestHeight = V end })
+	ContestUI:AddSlider({ Title = "Contest Distance", Description = "How close counts", Min = 3, Max = 15, Default = Aural.Reflex.ContestRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "RfxContestRange", Callback = function(V) Aural.Reflex.ContestRange = V end })
 	ContestUI:AddSlider({ Title = "Player Color Strength", Description = "How strong the glow is", Min = 10, Max = 100, Default = Aural.Reflex.GlowStrength, Suffix = "%", Flag = "RfxGlowStrength", Callback = function(V) Aural.Reflex.GlowStrength = V end })
 end
 
@@ -12002,22 +12159,22 @@ end)
 -- // Auto Shoot  [Shooting tab]
 do
 	local Shoot = ShootingTab:CreateSection({ Title = "Auto Shoot", Icon = Icons.Target })
-	local AutoShootToggle = Shoot:AddToggle({ Title = "Auto Shoot", Description = "Shoots once when in range, perfect timing releases", Flag = "AutoShoot", Default = Aural.Shooting.AutoShoot, Callback = function(V) Aural.Shooting.AutoShoot = V end })
+	local AutoShootToggle = Shoot:AddToggle({ Title = "Auto Shoot", Description = "Shoots when in range", Flag = "AutoShoot", Default = Aural.Shooting.AutoShoot, Callback = function(V) Aural.Shooting.AutoShoot = V end })
 	Shoot:AddKeybind({ Title = "Auto Shoot Keybind", Flag = "AutoShootKey", Callback = function()
 		local newVal = AutoShootToggle and not AutoShootToggle:Get() or not Aural.Shooting.AutoShoot
 		if AutoShootToggle then pcall(function() AutoShootToggle:Set(newVal) end) end
 		Aural.Shooting.AutoShoot = newVal
 	end })
-	Shoot:AddSlider({ Title = "Shoot Range", Description = "Max distance from the hoop to shoot", Min = 5, Max = 45, Default = Aural.Shooting.ShootRange, Suffix = " studs", Flag = "ShootRange", Callback = function(V) Aural.Shooting.ShootRange = V end })
-	Shoot:AddToggle({ Title = "3-Point Only", Description = "Auto shoot only fires when positioned behind the 3-point line (21.5+ studs)", Flag = "ThreePointOnly", Default = Aural.Shooting.ThreePointOnly, Callback = function(V) Aural.Shooting.ThreePointOnly = V end })
+	Shoot:AddSlider({ Title = "Shoot Range", Description = "Max distance to shoot", Min = 5, Max = 45, Default = Aural.Shooting.ShootRange, Suffix = " studs", Flag = "ShootRange", Callback = function(V) Aural.Shooting.ShootRange = V end })
+	Shoot:AddToggle({ Title = "3-Point Only", Description = "Only shoots behind the 3 line", Flag = "ThreePointOnly", Default = Aural.Shooting.ThreePointOnly, Callback = function(V) Aural.Shooting.ThreePointOnly = V end })
 
 	-- Auto Dunk (own box)
 	local Dunk = ShootingTab:CreateSection({ Title = "Auto Dunk", Icon = Icons.Target })
-	Dunk:AddToggle({ Title = "Auto Dunk", Description = "Holds space like you do when you run at the rim with the ball", Flag = "AutoDunk", Default = Aural.Shooting.AutoDunk, Callback = function(V) Aural.Shooting.AutoDunk = V end })
-	Dunk:AddSlider({ Title = "Dunk Range", Description = "How close to the hoop before it holds space", Min = 5, Max = 25, Default = Aural.Shooting.DunkRange, Suffix = " studs", Flag = "DunkRange", Callback = function(V) Aural.Shooting.DunkRange = V end })
+	Dunk:AddToggle({ Title = "Auto Dunk", Description = "Holds jump near the rim", Flag = "AutoDunk", Default = Aural.Shooting.AutoDunk, Callback = function(V) Aural.Shooting.AutoDunk = V end })
+	Dunk:AddSlider({ Title = "Dunk Range", Description = "Distance to the hoop", Min = 5, Max = 25, Default = Aural.Shooting.DunkRange, Suffix = " studs", Flag = "DunkRange", Callback = function(V) Aural.Shooting.DunkRange = V end })
 
 	local Circle = ShootingTab:CreateSection({ Title = "Range Circle", Icon = Icons.Target })
-	Circle:AddToggle({ Title = "Show Range", Description = "Draws the shoot range around the hoop you attack", Flag = "RangeCircle", Default = Aural.Shooting.RangeCircle, Callback = function(V) Aural.Shooting.RangeCircle = V end })
+	Circle:AddToggle({ Title = "Show Range", Description = "Draws the shoot range", Flag = "RangeCircle", Default = Aural.Shooting.RangeCircle, Callback = function(V) Aural.Shooting.RangeCircle = V end })
 	Circle:AddColorPicker({ Title = "Circle Color", Default = Aural.Shooting.RangeCircleColor, Flag = "RangeCircleColor", Callback = function(V) Aural.Shooting.RangeCircleColor = V end })
 end
 
@@ -12030,59 +12187,59 @@ do
 		if GlideToggle then pcall(function() GlideToggle:Set(newVal) end) end
 		Aural.Dribbling.DribbleGlide = newVal
 	end })
-	Glide:AddSlider({ Title = "Glide Speed", Description = "Extra speed on every dribble move", Min = 0, Max = 100, Default = Aural.Dribbling.GlideSpeed, Suffix = "%", Flag = "GlideSpeed", Callback = function(V) Aural.Dribbling.GlideSpeed = V end })
+	Glide:AddSlider({ Title = "Glide Speed", Description = "Extra dribble speed", Min = 0, Max = 100, Default = Aural.Dribbling.GlideSpeed, Suffix = "%", Flag = "GlideSpeed", Callback = function(V) Aural.Dribbling.GlideSpeed = V end })
 
 -- // Shot Glide & Gather Glide  [Offense tab]
 do
 	local GlideSection = OffenseTab:CreateSection({ Title = "Shot & Gather Glide", Icon = Icons.Speed })
-	GlideSection:AddToggle({ Title = "Shot Glide", Description = "Carries your momentum forward during Shooting action", Flag = "ShotGlide", Default = Aural.Shooting.ShotGlide, Callback = function(V)
+	GlideSection:AddToggle({ Title = "Shot Glide", Description = "Keeps momentum when shooting", Flag = "ShotGlide", Default = Aural.Shooting.ShotGlide, Callback = function(V)
 		Aural.Shooting.ShotGlide = V
 	end })
-	GlideSection:AddSlider({ Title = "Shot Glide Speed", Description = "Top speed during the shot glide carry (studs/s)", Min = 2, Max = 30, Default = Aural.Shooting.ShotGlideSpeed, Suffix = " studs/s", Flag = "ShotGlideSpeed", Callback = function(V)
+	GlideSection:AddSlider({ Title = "Shot Glide Speed", Description = "Top glide speed", Min = 2, Max = 30, Default = Aural.Shooting.ShotGlideSpeed, Suffix = " studs/s", Flag = "ShotGlideSpeed", Callback = function(V)
 		Aural.Shooting.ShotGlideSpeed = V
 	end })
-	GlideSection:AddSlider({ Title = "Shot Glide Duration", Description = "Max duration of the shot glide in ms", Min = 50, Max = 500, Default = Aural.Shooting.ShotGlideTime, Suffix = " ms", Flag = "ShotGlideTime", Callback = function(V)
+	GlideSection:AddSlider({ Title = "Shot Glide Duration", Description = "Glide time in ms", Min = 50, Max = 500, Default = Aural.Shooting.ShotGlideTime, Suffix = " ms", Flag = "ShotGlideTime", Callback = function(V)
 		Aural.Shooting.ShotGlideTime = V
 	end })
-	GlideSection:AddSlider({ Title = "Shot Glide Strength", Description = "How much the glide blends toward target speed (100 = full)", Min = 10, Max = 100, Default = Aural.Shooting.ShotGlideStrength, Suffix = "%", Flag = "ShotGlideStrength", Callback = function(V)
+	GlideSection:AddSlider({ Title = "Shot Glide Strength", Description = "How strong the glide is", Min = 10, Max = 100, Default = Aural.Shooting.ShotGlideStrength, Suffix = "%", Flag = "ShotGlideStrength", Callback = function(V)
 		Aural.Shooting.ShotGlideStrength = V
 	end })
-	GlideSection:AddToggle({ Title = "Gather Glide", Description = "Carries your momentum forward during Gathering action", Flag = "GatherGlide", Default = Aural.Shooting.GatherGlide, Callback = function(V)
+	GlideSection:AddToggle({ Title = "Gather Glide", Description = "Keeps momentum when gathering", Flag = "GatherGlide", Default = Aural.Shooting.GatherGlide, Callback = function(V)
 		Aural.Shooting.GatherGlide = V
 	end })
-	GlideSection:AddSlider({ Title = "Gather Glide Speed", Description = "Top speed during the gather glide carry (studs/s)", Min = 2, Max = 30, Default = Aural.Shooting.GatherGlideSpeed, Suffix = " studs/s", Flag = "GatherGlideSpeed", Callback = function(V)
+	GlideSection:AddSlider({ Title = "Gather Glide Speed", Description = "Top glide speed", Min = 2, Max = 30, Default = Aural.Shooting.GatherGlideSpeed, Suffix = " studs/s", Flag = "GatherGlideSpeed", Callback = function(V)
 		Aural.Shooting.GatherGlideSpeed = V
 	end })
-	GlideSection:AddSlider({ Title = "Gather Glide Duration", Description = "Max duration of the gather glide in ms", Min = 50, Max = 600, Default = Aural.Shooting.GatherGlideTime, Suffix = " ms", Flag = "GatherGlideTime", Callback = function(V)
+	GlideSection:AddSlider({ Title = "Gather Glide Duration", Description = "Glide time in ms", Min = 50, Max = 600, Default = Aural.Shooting.GatherGlideTime, Suffix = " ms", Flag = "GatherGlideTime", Callback = function(V)
 		Aural.Shooting.GatherGlideTime = V
 	end })
-	GlideSection:AddSlider({ Title = "Gather Glide Strength", Description = "How much the glide blends toward target speed (100 = full)", Min = 10, Max = 100, Default = Aural.Shooting.GatherGlideStrength, Suffix = "%", Flag = "GatherGlideStrength", Callback = function(V)
+	GlideSection:AddSlider({ Title = "Gather Glide Strength", Description = "How strong the glide is", Min = 10, Max = 100, Default = Aural.Shooting.GatherGlideStrength, Suffix = "%", Flag = "GatherGlideStrength", Callback = function(V)
 		Aural.Shooting.GatherGlideStrength = V
 	end })
 end
 
 	local Ankle = OffenseTab:CreateSection({ Title = "Auto Ankle Breaker", Icon = Icons.Ankle })
-	local AnkleToggle = Ankle:AddToggle({ Title = "Auto Ankle Breaker", Description = "Fires an escape move when a defender closes in", Flag = "AutoAnkleBreaker", Default = Aural.Dribbling.AutoAnkleBreaker, Callback = function(V) Aural.Dribbling.AutoAnkleBreaker = V end })
+	local AnkleToggle = Ankle:AddToggle({ Title = "Auto Ankle Breaker", Description = "Escape move when guarded", Flag = "AutoAnkleBreaker", Default = Aural.Dribbling.AutoAnkleBreaker, Callback = function(V) Aural.Dribbling.AutoAnkleBreaker = V end })
 	Ankle:AddKeybind({ Title = "Ankle Breaker Keybind", Flag = "AutoAnkleBreakerKey", Callback = function()
 		local newVal = AnkleToggle and not AnkleToggle:Get() or not Aural.Dribbling.AutoAnkleBreaker
 		if AnkleToggle then pcall(function() AnkleToggle:Set(newVal) end) end
 		Aural.Dribbling.AutoAnkleBreaker = newVal
 	end })
-	Ankle:AddSlider({ Title = "Ankle Break Range", Description = "How close a defender has to be", Min = 3, Max = 20, Default = Aural.Dribbling.AnkleBreakRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "AnkleBreakRange", Callback = function(V) Aural.Dribbling.AnkleBreakRange = V end })
+	Ankle:AddSlider({ Title = "Ankle Break Range", Description = "How close a defender is", Min = 3, Max = 20, Default = Aural.Dribbling.AnkleBreakRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "AnkleBreakRange", Callback = function(V) Aural.Dribbling.AnkleBreakRange = V end })
 	Ankle:AddDropdown({ Title = "Move", Options = MoveNames, Default = Aural.Dribbling.AnkleBreakerMove, Flag = "AnkleBreakerMove", Callback = function(V) Aural.Dribbling.AnkleBreakerMove = V or "Crossover" end })
 
 	local Combos = OffenseTab:CreateSection({ Title = "Dribble Combos", Icon = Icons.Combos })
-	Combos:AddDropdown({ Title = "Moves", Description = "Every selected move plays in order", Options = MoveNames, Multi = true, Default = Aural.Dribbling.ComboMoves, Flag = "ComboMoves", Callback = function(V)
+	Combos:AddDropdown({ Title = "Moves", Description = "Moves to play in order", Options = MoveNames, Multi = true, Default = Aural.Dribbling.ComboMoves, Flag = "ComboMoves", Callback = function(V)
 		Aural.Dribbling.ComboMoves = type(V) == "table" and V or {}
 	end })
-	Combos:AddKeybind({ Title = "Play Combo Keybind", Description = "Runs the whole selection once", Flag = "ComboKey", Callback = function() PlayDribbleCombo() end })
-	Combos:AddSlider({ Title = "Delay Between Moves", Description = "Raise this if the game eats a move", Min = 0.05, Max = 1, Default = Aural.Dribbling.ComboDelay, Step = 0.01, Decimals = 2, Suffix = "s", Flag = "ComboDelay", Callback = function(V) Aural.Dribbling.ComboDelay = V end })
-	Combos:AddDropdown({ Title = "Direction", Description = "Where the combo carries you", Options = { "Move Input", "Camera", "Toward Hoop", "Away From Defender" }, Default = Aural.Dribbling.ComboDirection, Flag = "ComboDirection", Callback = function(V) Aural.Dribbling.ComboDirection = V or "Move Input" end })
-	Combos:AddSlider({ Title = "Repeats", Description = "How many times the whole sequence plays", Min = 1, Max = 5, Default = Aural.Dribbling.ComboRepeats, Step = 1, Flag = "ComboRepeats", Callback = function(V) Aural.Dribbling.ComboRepeats = V end })
+	Combos:AddKeybind({ Title = "Play Combo Keybind", Description = "Plays the combo once", Flag = "ComboKey", Callback = function() PlayDribbleCombo() end })
+	Combos:AddSlider({ Title = "Delay Between Moves", Description = "Raise if moves skip", Min = 0.05, Max = 1, Default = Aural.Dribbling.ComboDelay, Step = 0.01, Decimals = 2, Suffix = "s", Flag = "ComboDelay", Callback = function(V) Aural.Dribbling.ComboDelay = V end })
+	Combos:AddDropdown({ Title = "Direction", Description = "Where the combo goes", Options = { "Move Input", "Camera", "Toward Hoop", "Away From Defender" }, Default = Aural.Dribbling.ComboDirection, Flag = "ComboDirection", Callback = function(V) Aural.Dribbling.ComboDirection = V or "Move Input" end })
+	Combos:AddSlider({ Title = "Repeats", Description = "Times to repeat", Min = 1, Max = 5, Default = Aural.Dribbling.ComboRepeats, Step = 1, Flag = "ComboRepeats", Callback = function(V) Aural.Dribbling.ComboRepeats = V end })
 	Combos:AddToggle({ Title = "Random Order", Description = "Shuffles the selection every time", Flag = "ComboRandom", Default = Aural.Dribbling.ComboRandom, Callback = function(V) Aural.Dribbling.ComboRandom = V end })
 	Combos:AddToggle({ Title = "End With Switch Hand", Description = "Finishes on a hand switch", Flag = "ComboSwitchEnd", Default = Aural.Dribbling.ComboSwitchEnd, Callback = function(V) Aural.Dribbling.ComboSwitchEnd = V end })
 	Combos:AddToggle({ Title = "Stop If Ball Lost", Flag = "ComboStopOnLose", Default = Aural.Dribbling.ComboStopOnLose, Callback = function(V) Aural.Dribbling.ComboStopOnLose = V end })
-	Combos:AddToggle({ Title = "Only While Dribbling", Description = "Aborts if you get pulled into another action", Flag = "ComboOnlyDribbling", Default = Aural.Dribbling.ComboOnlyDribbling, Callback = function(V) Aural.Dribbling.ComboOnlyDribbling = V end })
+	Combos:AddToggle({ Title = "Only While Dribbling", Description = "Stops if you stop dribbling", Flag = "ComboOnlyDribbling", Default = Aural.Dribbling.ComboOnlyDribbling, Callback = function(V) Aural.Dribbling.ComboOnlyDribbling = V end })
 	ComboLabel = Combos:AddLabel("last combo: none")
 	Combos:AddButton({ Title = "Play Combo Once", Callback = function() PlayDribbleCombo() end })
 
@@ -12101,45 +12258,45 @@ do
 		if BlockToggle then pcall(function() BlockToggle:Set(newVal) end) end
 		Aural.Defense.AutoBlock = newVal
 	end })
-	Block:AddSlider({ Title = "Block Range", Description = "How far away a shot triggers the block", Min = 3, Max = 30, Default = Aural.Defense.BlockRange, Suffix = " studs", Flag = "BlockRange", Callback = function(V) Aural.Defense.BlockRange = V end })
-	Block:AddSlider({ Title = "Block Delay", Description = "Waits this long before jumping — filters pump fakes", Min = 0, Max = 500, Default = Aural.Defense.BlockDelay, Step = 10, Suffix = "ms", Flag = "BlockDelay", Callback = function(V) Aural.Defense.BlockDelay = V end })
+	Block:AddSlider({ Title = "Block Range", Description = "Distance to block", Min = 3, Max = 30, Default = Aural.Defense.BlockRange, Suffix = " studs", Flag = "BlockRange", Callback = function(V) Aural.Defense.BlockRange = V end })
+	Block:AddSlider({ Title = "Block Delay", Description = "Wait before jumping", Min = 0, Max = 500, Default = Aural.Defense.BlockDelay, Step = 10, Suffix = "ms", Flag = "BlockDelay", Callback = function(V) Aural.Defense.BlockDelay = V end })
 	Block:AddToggle({ Title = "Team Check", Description = "Never blocks a teammate", Flag = "BlockTeamCheck", Default = Aural.Defense.BlockTeamCheck, Callback = function(V) Aural.Defense.BlockTeamCheck = V end })
 end
 
 -- // Auto Guard
 do
 	local Guard = DefenseTab:CreateSection({ Title = "Auto Guard", Icon = Icons.Guard })
-	local GuardToggle = Guard:AddToggle({ Title = "Auto Guard", Description = "Holds guard and stays between your man and the hoop", Flag = "AutoGuard", Default = Aural.Defense.AutoGuard, Callback = function(V) Aural.Defense.AutoGuard = V end })
+	local GuardToggle = Guard:AddToggle({ Title = "Auto Guard", Description = "Stays between man and hoop", Flag = "AutoGuard", Default = Aural.Defense.AutoGuard, Callback = function(V) Aural.Defense.AutoGuard = V end })
 	Guard:AddKeybind({ Title = "Auto Guard Keybind", Flag = "AutoGuardKey", Callback = function()
 		local newVal = GuardToggle and not GuardToggle:Get() or not Aural.Defense.AutoGuard
 		if GuardToggle then pcall(function() GuardToggle:Set(newVal) end) end
 		Aural.Defense.AutoGuard = newVal
 	end })
-	Guard:AddToggle({ Title = "Guard Sprint", Description = "Sprints to keep up when your man gets ahead", Flag = "GuardSprint", Default = Aural.Defense.GuardSprint, Callback = function(V) Aural.Defense.GuardSprint = V end })
+	Guard:AddToggle({ Title = "Guard Sprint", Description = "Sprints to keep up", Flag = "GuardSprint", Default = Aural.Defense.GuardSprint, Callback = function(V) Aural.Defense.GuardSprint = V end })
 	Guard:AddToggle({ Title = "Team Check", Description = "Never guards your own teammates", Flag = "TeamCheck", Default = Aural.Defense.TeamCheck, Callback = function(V) Aural.Defense.TeamCheck = V end })
 	Guard:AddToggle({ Title = "Ball Handler Only", Description = "Only guards the player with the ball", Flag = "BallHandlerOnly", Default = Aural.Defense.BallHandlerOnly, Callback = function(V) Aural.Defense.BallHandlerOnly = V end })
-	Guard:AddSlider({ Title = "Guard Distance", Description = "How tight to play your man — lower is closer", Min = 1, Max = 10, Default = Aural.Defense.GuardDistance, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "GuardDistance", Callback = function(V) Aural.Defense.GuardDistance = V end })
-	Guard:AddSlider({ Title = "Guard Strength", Description = "How aggressively it corrects your position", Min = 10, Max = 100, Default = Aural.Defense.GuardStrength, Suffix = "%", Flag = "GuardStrength", Callback = function(V) Aural.Defense.GuardStrength = V end })
-	Guard:AddSlider({ Title = "Guard Range", Description = "Max distance from your man before guard kicks in", Min = 10, Max = 80, Default = Aural.Defense.GuardRange, Suffix = " studs", Flag = "GuardRange", Callback = function(V) Aural.Defense.GuardRange = V end })
+	Guard:AddSlider({ Title = "Guard Distance", Description = "Lower = tighter", Min = 1, Max = 10, Default = Aural.Defense.GuardDistance, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "GuardDistance", Callback = function(V) Aural.Defense.GuardDistance = V end })
+	Guard:AddSlider({ Title = "Guard Strength", Description = "How hard it corrects", Min = 10, Max = 100, Default = Aural.Defense.GuardStrength, Suffix = "%", Flag = "GuardStrength", Callback = function(V) Aural.Defense.GuardStrength = V end })
+	Guard:AddSlider({ Title = "Guard Range", Description = "Distance to start guard", Min = 10, Max = 80, Default = Aural.Defense.GuardRange, Suffix = " studs", Flag = "GuardRange", Callback = function(V) Aural.Defense.GuardRange = V end })
 	GuardStatus = Guard:AddLabel("guarding: none")
 end
 
 -- // Auto Steal  [Defense tab]
 do
 	local Steal = DefenseTab:CreateSection({ Title = "Auto Steal", Icon = Icons.Target })
-	Steal:AddToggle({ Title = "Auto Steal", Description = "Automatically fires the steal input when in range of the ball handler", Flag = "AutoSteal", Default = Aural.Defense.AutoSteal, Callback = function(V)
+	Steal:AddToggle({ Title = "Auto Steal", Description = "Steals when in range", Flag = "AutoSteal", Default = Aural.Defense.AutoSteal, Callback = function(V)
 		Aural.Defense.AutoSteal = V
 	end })
-	Steal:AddSlider({ Title = "Steal Range", Description = "Max distance to trigger the steal attempt", Min = 2, Max = 20, Default = Aural.Defense.StealRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "StealRange", Callback = function(V)
+	Steal:AddSlider({ Title = "Steal Range", Description = "Distance to steal", Min = 2, Max = 20, Default = Aural.Defense.StealRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "StealRange", Callback = function(V)
 		Aural.Defense.StealRange = V
 	end })
-	Steal:AddToggle({ Title = "Only When Facing", Description = "Only steals when you are looking toward the ball handler", Flag = "StealFacing", Default = Aural.Defense.StealFacing, Callback = function(V)
+	Steal:AddToggle({ Title = "Only When Facing", Description = "Only steals when facing", Flag = "StealFacing", Default = Aural.Defense.StealFacing, Callback = function(V)
 		Aural.Defense.StealFacing = V
 	end })
-	Steal:AddToggle({ Title = "Steal Always (Moving)", Description = "Attempts steal even when the handler is moving (checks predicted position)", Flag = "StealAlways", Default = Aural.Defense.StealAlways, Callback = function(V)
+	Steal:AddToggle({ Title = "Steal Always (Moving)", Description = "Steals even if they move", Flag = "StealAlways", Default = Aural.Defense.StealAlways, Callback = function(V)
 		Aural.Defense.StealAlways = V
 	end })
-	Steal:AddToggle({ Title = "Avoid Fouls", Description = "Skips stealing when the handler is shooting, gathering, or facing away", Flag = "AvoidFouls", Default = Aural.Defense.AvoidFouls, Callback = function(V)
+	Steal:AddToggle({ Title = "Avoid Fouls", Description = "Skips risky steals", Flag = "AvoidFouls", Default = Aural.Defense.AvoidFouls, Callback = function(V)
 		Aural.Defense.AvoidFouls = V
 	end })
 end
@@ -12147,10 +12304,10 @@ end
 -- // Ball Magnets
 do
 	local Magnets = DefenseTab:CreateSection({ Title = "Ball Magnets", Icon = Icons.Target })
-	Magnets:AddToggle({ Title = "Ball Magnets", Description = "Goes after loose balls and rebounds near you", Flag = "BallMagnets", Default = Aural.Ball.Magnets, Callback = function(V) Aural.Ball.Magnets = V end })
-	Magnets:AddSlider({ Title = "Magnet Range", Description = "Radius around you that triggers the magnet", Min = 3, Max = 40, Default = Aural.Ball.MagnetRange, Suffix = " studs", Flag = "MagnetRange", Callback = function(V) Aural.Ball.MagnetRange = V end })
-	Magnets:AddDropdown({ Title = "Magnet Mode", Description = "Pull glides the ball in, Teleport snaps it instantly", Options = { "Pull", "Teleport" }, Default = Aural.Ball.MagnetMode, Flag = "MagnetMode", Callback = function(V) Aural.Ball.MagnetMode = V or "Pull" end })
-	Magnets:AddSlider({ Title = "Pull Speed", Description = "How fast the ball slides toward you in Pull mode", Min = 10, Max = 60, Default = Aural.Ball.MagnetSpeed, Suffix = " studs/s", Flag = "MagnetSpeed", Callback = function(V) Aural.Ball.MagnetSpeed = V end })
+	Magnets:AddToggle({ Title = "Ball Magnets", Description = "Grabs loose balls near you", Flag = "BallMagnets", Default = Aural.Ball.Magnets, Callback = function(V) Aural.Ball.Magnets = V end })
+	Magnets:AddSlider({ Title = "Magnet Range", Description = "Distance to grab", Min = 3, Max = 40, Default = Aural.Ball.MagnetRange, Suffix = " studs", Flag = "MagnetRange", Callback = function(V) Aural.Ball.MagnetRange = V end })
+	Magnets:AddDropdown({ Title = "Magnet Mode", Description = "Pull or Teleport", Options = { "Pull", "Teleport" }, Default = Aural.Ball.MagnetMode, Flag = "MagnetMode", Callback = function(V) Aural.Ball.MagnetMode = V or "Pull" end })
+	Magnets:AddSlider({ Title = "Pull Speed", Description = "How fast the ball comes", Min = 10, Max = 60, Default = Aural.Ball.MagnetSpeed, Suffix = " studs/s", Flag = "MagnetSpeed", Callback = function(V) Aural.Ball.MagnetSpeed = V end })
 	Magnets:AddToggle({ Title = "Ignore Shots", Description = "Leaves balls still in the air on a shot", Flag = "MagnetSkipShots", Default = Aural.Ball.SkipShots, Callback = function(V) Aural.Ball.SkipShots = V end })
 	Magnets:AddToggle({ Title = "Show Range", Description = "Draws the magnet range around you", Flag = "MagnetShowRange", Default = Aural.Ball.ShowRange, Callback = function(V) Aural.Ball.ShowRange = V end })
 end
@@ -12169,20 +12326,20 @@ do
 		Aural.Player.SpeedBoost = newVal
 	end })
 	Movement:AddSlider({ Title = "Speed", Description = "Normal 14, sprint 17.35", Min = 14, Max = 30, Default = Aural.Player.Speed, Step = 0.5, Decimals = 1, Flag = "Speed", Callback = function(V) Aural.Player.Speed = V end })
-	local CFrameToggle = Movement:AddToggle({ Title = "CFrame Speed", Description = "Moves you forward each frame on top of normal movement", Flag = "CframeSpeed", Default = Aural.Player.CframeSpeed, Callback = function(V) Aural.Player.CframeSpeed = V end })
+	local CFrameToggle = Movement:AddToggle({ Title = "CFrame Speed", Description = "Extra push while moving", Flag = "CframeSpeed", Default = Aural.Player.CframeSpeed, Callback = function(V) Aural.Player.CframeSpeed = V end })
 	Movement:AddKeybind({ Title = "CFrame Speed Keybind", Flag = "CframeSpeedKey", Callback = function()
 		local newVal = CFrameToggle and not CFrameToggle:Get() or not Aural.Player.CframeSpeed
 		if CFrameToggle then pcall(function() CFrameToggle:Set(newVal) end) end
 		Aural.Player.CframeSpeed = newVal
 	end })
-	Movement:AddSlider({ Title = "CFrame Amount", Description = "Extra studs added per frame while moving", Min = 1, Max = 30, Default = Aural.Player.CframeSpeedValue, Step = 0.5, Decimals = 1, Flag = "CframeSpeedValue", Callback = function(V) Aural.Player.CframeSpeedValue = V end })
-	Movement:AddToggle({ Title = "Auto Sprint", Description = "Holds sprint automatically so you never slow down", Flag = "AutoSprint", Default = Aural.Player.AutoSprint, Callback = function(V) Aural.Player.AutoSprint = V end })
-	Movement:AddToggle({ Title = "No Stun", Description = "Keeps you moving through stumbles and ankle breaks", Flag = "NoStun", Default = Aural.Player.NoStun, Callback = function(V) Aural.Player.NoStun = V end })
-	Movement:AddToggle({ Title = "Infinite Stamina", Description = "Stops your stamina bar from ever running out", Flag = "InfiniteStamina", Default = Aural.Player.InfiniteStamina, Callback = function(V) Aural.Player.InfiniteStamina = V end })
+	Movement:AddSlider({ Title = "CFrame Amount", Description = "Extra push per frame", Min = 1, Max = 30, Default = Aural.Player.CframeSpeedValue, Step = 0.5, Decimals = 1, Flag = "CframeSpeedValue", Callback = function(V) Aural.Player.CframeSpeedValue = V end })
+	Movement:AddToggle({ Title = "Auto Sprint", Description = "Always sprints", Flag = "AutoSprint", Default = Aural.Player.AutoSprint, Callback = function(V) Aural.Player.AutoSprint = V end })
+	Movement:AddToggle({ Title = "No Stun", Description = "No stumbles or ankle breaks", Flag = "NoStun", Default = Aural.Player.NoStun, Callback = function(V) Aural.Player.NoStun = V end })
+	Movement:AddToggle({ Title = "Infinite Stamina", Description = "Never run out of stamina", Flag = "InfiniteStamina", Default = Aural.Player.InfiniteStamina, Callback = function(V) Aural.Player.InfiniteStamina = V end })
 
 	local State = CharacterTab:CreateSection({ Title = "State", Icon = Icons.Person })
-	State:AddToggle({ Title = "Auto Takeover", Description = "Activates your takeover the moment it fills up", Flag = "AutoTakeover", Default = Aural.Player.AutoTakeover, Callback = function(V) Aural.Player.AutoTakeover = V end })
-	State:AddToggle({ Title = "No Cold Zone", Description = "Removes the penalty for shooting from your cold spots", Flag = "NoColdZone", Default = Aural.Player.NoColdZone, Callback = function(V) Aural.Player.NoColdZone = V end })
+	State:AddToggle({ Title = "Auto Takeover", Description = "Uses takeover when full", Flag = "AutoTakeover", Default = Aural.Player.AutoTakeover, Callback = function(V) Aural.Player.AutoTakeover = V end })
+	State:AddToggle({ Title = "No Cold Zone", Description = "No cold spot penalty", Flag = "NoColdZone", Default = Aural.Player.NoColdZone, Callback = function(V) Aural.Player.NoColdZone = V end })
 	State:AddToggle({ Title = "No Debounce", Description = "Removes shoot and dribble input delay", Flag = "NoDebounce", Default = Aural.Player.NoDebounce, Callback = function(V)
 		Aural.Player.NoDebounce = V
 		SetDebounce(V)
@@ -12196,21 +12353,21 @@ end
 -- // World / Camera / Spectate
 do
 	local World = VisualsTab:CreateSection({ Title = "World", Icon = Icons.Sun })
-	World:AddToggle({ Title = "Remove Post Effects", Description = "Strips blur, bloom and color grading for a cleaner view", Flag = "RemovePostEffects", Default = Aural.Visuals.RemovePostEffects, Callback = function(V) Aural.Visuals.RemovePostEffects = V end })
-	World:AddToggle({ Title = "Fullbright", Description = "Forces max brightness so dark courts are fully visible", Flag = "Fullbright", Default = Aural.Visuals.Fullbright, Callback = function(V) Aural.Visuals.Fullbright = V end })
+	World:AddToggle({ Title = "Remove Post Effects", Description = "Removes blur and bloom", Flag = "RemovePostEffects", Default = Aural.Visuals.RemovePostEffects, Callback = function(V) Aural.Visuals.RemovePostEffects = V end })
+	World:AddToggle({ Title = "Fullbright", Description = "Max brightness", Flag = "Fullbright", Default = Aural.Visuals.Fullbright, Callback = function(V) Aural.Visuals.Fullbright = V end })
 
 	local Camera = VisualsTab:CreateSection({ Title = "Camera", Icon = Icons.Target })
 	Camera:AddToggle({ Title = "Custom FOV", Description = "Enables the FOV slider below", Flag = "CustomFov", Default = Aural.Visuals.CustomFov, Callback = function(V) Aural.Visuals.CustomFov = V end })
-	Camera:AddSlider({ Title = "FOV", Description = "Camera field of view — default Roblox is 70", Min = 30, Max = 120, Default = Aural.Visuals.Fov, Flag = "Fov", Callback = function(V) Aural.Visuals.Fov = V end })
+	Camera:AddSlider({ Title = "FOV", Description = "Default is 70", Min = 30, Max = 120, Default = Aural.Visuals.Fov, Flag = "Fov", Callback = function(V) Aural.Visuals.Fov = V end })
 
 	local Spectate = VisualsTab:CreateSection({ Title = "Spectate", Icon = Icons.Person })
-	local SpectToggle = Spectate:AddToggle({ Title = "Spectate Player", Description = "Locks your camera onto the selected player", Flag = "Spectate", Save = false, Default = false, Callback = function(V) Aural.Visuals.Spectate = V end })
+	local SpectToggle = Spectate:AddToggle({ Title = "Spectate Player", Description = "Camera follows that player", Flag = "Spectate", Save = false, Default = false, Callback = function(V) Aural.Visuals.Spectate = V end })
 	Spectate:AddKeybind({ Title = "Spectate Keybind", Flag = "SpectateKey", Callback = function()
 		local newVal = SpectToggle and not SpectToggle:Get() or not Aural.Visuals.Spectate
 		if SpectToggle then pcall(function() SpectToggle:Set(newVal) end) end
 		Aural.Visuals.Spectate = newVal
 	end })
-	SpectateList = Spectate:AddDropdown({ Title = "Player", Description = "Who to follow — list updates as players join/leave", Options = {}, Flag = "SpectateTarget", Save = false, MaxRows = 8, Callback = function(V) Aural.Visuals.SpectateTarget = V end })
+	SpectateList = Spectate:AddDropdown({ Title = "Player", Description = "Who to watch", Options = {}, Flag = "SpectateTarget", Save = false, MaxRows = 8, Callback = function(V) Aural.Visuals.SpectateTarget = V end })
 
 	local function RefreshPlayers()
 		local Names = {}
@@ -12271,7 +12428,7 @@ do
 		Aural.Effects.GoalEffectName = V or Aural.Effects.GoalEffectName
 		ApplyEffects()
 	end })
-	Goal:AddToggle({ Title = "Ball Trail Too", Description = "Also applies the effect to the ball's trail", Flag = "GoalEffectTrail", Default = Aural.Effects.IncludeTrail, Callback = function(V)
+	Goal:AddToggle({ Title = "Ball Trail Too", Description = "Also adds it to the ball", Flag = "GoalEffectTrail", Default = Aural.Effects.IncludeTrail, Callback = function(V)
 		Aural.Effects.IncludeTrail = V
 		ApplyEffects()
 	end })
@@ -12283,630 +12440,2903 @@ do
 		if CelebToggle then pcall(function() CelebToggle:Set(newVal) end) end
 		Aural.Effects.AutoCelebrate = newVal
 	end })
-	Celebrate:AddDropdown({ Title = "2PT Celebration", Description = "Animation played after a green 2-pointer", Options = Celebrations["2PT"], Default = Aural.Effects.Celebration2, Flag = "Celebration2", Callback = function(V) Aural.Effects.Celebration2 = V or Aural.Effects.Celebration2 end })
-	Celebrate:AddDropdown({ Title = "3PT Celebration", Description = "Animation played after a green 3-pointer", Options = Celebrations["3PT"], Default = Aural.Effects.Celebration3, Flag = "Celebration3", Callback = function(V) Aural.Effects.Celebration3 = V or Aural.Effects.Celebration3 end })
-	Celebrate:AddDropdown({ Title = "Finisher", Description = "Animation played after a dunk or layup green", Options = Celebrations.Finisher, Default = Aural.Effects.Finisher, Flag = "CelebrationFinisher", Callback = function(V) Aural.Effects.Finisher = V or Aural.Effects.Finisher end })
-	Celebrate:AddSlider({ Title = "Celebration Delay", Description = "How long after the green before the animation fires", Min = 0, Max = 1, Default = Aural.Effects.CelebrateDelay, Step = 0.05, Decimals = 2, Suffix = "s", Flag = "CelebrateDelay", Callback = function(V) Aural.Effects.CelebrateDelay = V end })
+	Celebrate:AddDropdown({ Title = "2PT Celebration", Description = "After a green 2", Options = Celebrations["2PT"], Default = Aural.Effects.Celebration2, Flag = "Celebration2", Callback = function(V) Aural.Effects.Celebration2 = V or Aural.Effects.Celebration2 end })
+	Celebrate:AddDropdown({ Title = "3PT Celebration", Description = "After a green 3", Options = Celebrations["3PT"], Default = Aural.Effects.Celebration3, Flag = "Celebration3", Callback = function(V) Aural.Effects.Celebration3 = V or Aural.Effects.Celebration3 end })
+	Celebrate:AddDropdown({ Title = "Finisher", Description = "After a dunk or layup", Options = Celebrations.Finisher, Default = Aural.Effects.Finisher, Flag = "CelebrationFinisher", Callback = function(V) Aural.Effects.Finisher = V or Aural.Effects.Finisher end })
+	Celebrate:AddSlider({ Title = "Celebration Delay", Description = "Wait after the green", Min = 0, Max = 1, Default = Aural.Effects.CelebrateDelay, Step = 0.05, Decimals = 2, Suffix = "s", Flag = "CelebrateDelay", Callback = function(V) Aural.Effects.CelebrateDelay = V end })
 end
 
--- // Pets
--- Client-side companions: only you can see them. They trail you, dance / do emotes
--- and type chat bubbles to you. All characters are original designs built from parts.
+-- // Aural+ port  [Shot Extras, Pass Link, Defense+, Guard Tuning, Heights, Auto Play, Rec, Spots, Badge Farm, Mascots, Logos]
+-- Logic is the Aural+ script's own code; only the shared hooks below are adapted to this hub.
 do
-	local ok, err = pcall(function()
-		local RunSvc = game:GetService("RunService")
-		local sin, cos, abs, rad, pi = math.sin, math.cos, math.abs, math.rad, math.pi
-		local function Ang(x, y, z) return CFrame.Angles(x or 0, y or 0, z or 0) end
-		local function RGB(r, g, b) return Color3.fromRGB(r, g, b) end
-		local V3 = Vector3.new
-
-		local P = {
-			Enabled = false,
-			Slots = { "Blobby", "None", "None" },
-			Scale = 1,
-			Distance = 6,
-			AutoEmote = true,
-			Chat = true,
-			ChatEvery = 14,
-			EmoteName = "Dance",
-			List = {},
+task.spawn(function()
+	local PlusOk, PlusErr = pcall(function()
+		-- Tabs are merged into the main ones so the sidebar stays short: a table value is an existing tab,
+		-- a string is a shared new tab that gets created the first time something asks for it.
+		local MergeInto = {
+			["Meter Timing"] = ShootingTab, ["Shot Extras"] = ShootingTab,
+			["Moves"] = OffenseTab, ["Pass Link"] = OffenseTab,
+			["Defense+"] = DefenseTab, ["Guard Tuning"] = DefenseTab,
+			["Heights"] = CharacterTab,
+			["Mascots"] = VisualsTab, ["Logos"] = VisualsTab,
+			["Auto Play"] = "Auto Play", ["Spots & Moves"] = "Auto Play",
+			["Rec"] = "Rec", ["Spots"] = "Rec", ["Badge Farm"] = "Rec",
 		}
-		local Folder = Instance.new("Folder")
-		Folder.Name = "ArurHubPets"
-		Folder.Parent = workspace
-
-		-- ═════════════ PET DESIGNS (all original) ═════════════
-		-- add(shape, size, color, cframe, opts)   shape: "ball" | "block" | "cyl"
-		-- opts: tag = "head" | "armL" | "armR" | "tail", pivot = joint position, mat, tr
-		local function eyes(add, y, z, gap, sz, pupil, eyeColor, pv)
-			for _, sx in ipairs({ -1, 1 }) do
-				add("ball", V3(sz, sz * 1.15, sz * 0.5), eyeColor or RGB(255, 255, 255), CFrame.new(sx * gap, y, z), { tag = "head", pivot = pv })
-				add("ball", V3(pupil, pupil * 1.2, pupil * 0.5), RGB(20, 20, 24), CFrame.new(sx * gap, y, z - sz * 0.18), { tag = "head", pivot = pv })
+		local SharedTabs = {}
+		local function MergedCategory(Name)
+			local Real = Window:CreateCategory(Name)
+			local Category = {}
+			function Category:CreateTab(Options)
+				local Target = MergeInto[Options.Title]
+				if type(Target) == "table" then
+					return Target
+				elseif type(Target) == "string" then
+					if not SharedTabs[Target] then
+						SharedTabs[Target] = Real:CreateTab({ Title = Target, Icon = Options.Icon })
+					end
+					return SharedTabs[Target]
+				end
+				return Real:CreateTab(Options)
 			end
+			return Category
+		end
+		local OffenseCategory = MergedCategory("Offense")
+		local DefenseCategory = MergedCategory("Defense")
+		local PlayerCategory = MergedCategory("Player")
+		local VisualsCategory = MergedCategory("Visuals")
+		local CustomMascotIds = Ext.CustomMascotIds
+		local GuardState = Ext.GuardState
+		local GuardPosition = Ext.GuardPosition
+		local GuardAdjust = Ext.GuardAdjust
+
+		local function MarkAutoShot()
+			Ext.MarkAutoShot()
 		end
 
-		local Defs = {}
-
-		Defs.Blobby = {
-			Name = "Blobby", Accent = RGB(120, 230, 140), Top = 2.6, Float = 0,
-			Lines = {
-				"Boing! Boing! Watch me bounce, %s!",
-				"I'm made of 100%% jelly and 100%% hype.",
-				"Splish splosh, that's a bucket!",
-				"I wobble when I'm happy. Wobbling now.",
-				"Can jelly play point guard? Asking for me.",
-			},
-			Build = function(add)
-				add("ball", V3(2.5, 2.1, 2.5), RGB(110, 225, 130), CFrame.new(0, 1.15, 0), { tag = "head", pivot = V3(0, 0.3, 0) })
-				add("ball", V3(1.6, 0.9, 1.6), RGB(160, 245, 175), CFrame.new(0, 1.55, -0.55), { tag = "head", pivot = V3(0, 0.3, 0), tr = 0.35 })
-				eyes(add, 1.45, -1.05, 0.5, 0.62, 0.3, nil, V3(0, 0.3, 0))
-				add("block", V3(0.7, 0.14, 0.1), RGB(40, 90, 55), CFrame.new(0, 0.95, -1.14), { tag = "head", pivot = V3(0, 0.3, 0) })
-				add("cyl", V3(0.5, 0.18, 0.18), RGB(60, 170, 90), CFrame.new(0, 2.4, 0) * Ang(0, 0, pi / 2), { tag = "head", pivot = V3(0, 0.3, 0) })
-				add("ball", V3(0.55, 0.3, 0.55), RGB(60, 170, 90), CFrame.new(0.2, 2.65, 0), { tag = "head", pivot = V3(0, 0.3, 0) })
-				add("ball", V3(0.6, 0.6, 0.6), RGB(95, 205, 115), CFrame.new(1.35, 1.1, 0), { tag = "armR", pivot = V3(1.1, 1.1, 0) })
-				add("ball", V3(0.6, 0.6, 0.6), RGB(95, 205, 115), CFrame.new(-1.35, 1.1, 0), { tag = "armL", pivot = V3(-1.1, 1.1, 0) })
-				add("ball", V3(0.8, 0.4, 0.9), RGB(80, 190, 105), CFrame.new(0.55, 0.2, -0.1))
-				add("ball", V3(0.8, 0.4, 0.9), RGB(80, 190, 105), CFrame.new(-0.55, 0.2, -0.1))
-			end,
-		}
-
-		Defs.Whiskers = {
-			Name = "Whiskers", Accent = RGB(255, 170, 90), Top = 3.5, Float = 0,
-			Lines = {
-				"Meow-ve it, %s! Dribble like you mean it.",
-				"I knocked the ball off the table. Sorry. Not sorry.",
-				"Purrfect form on that last shot.",
-				"Nine lives, zero turnovers.",
-				"Feed me a pass and I'll feed you a bucket.",
-			},
-			Build = function(add)
-				local pv = V3(0, 1.7, 0)
-				add("ball", V3(1.9, 1.8, 1.9), RGB(250, 160, 80), CFrame.new(0, 1.0, 0))
-				add("ball", V3(1.2, 1.0, 0.5), RGB(255, 235, 210), CFrame.new(0, 0.95, -0.8))
-				add("ball", V3(1.8, 1.6, 1.8), RGB(250, 160, 80), CFrame.new(0, 2.3, -0.1), { tag = "head", pivot = pv })
-				for _, sx in ipairs({ -1, 1 }) do
-					add("block", V3(0.55, 0.75, 0.22), RGB(235, 130, 60), CFrame.new(sx * 0.62, 3.2, -0.1) * Ang(0, 0, -sx * 0.35), { tag = "head", pivot = pv })
-					add("block", V3(0.28, 0.4, 0.1), RGB(255, 170, 190), CFrame.new(sx * 0.62, 3.15, -0.2) * Ang(0, 0, -sx * 0.35), { tag = "head", pivot = pv })
-				end
-				eyes(add, 2.4, -0.82, 0.42, 0.5, 0.26, RGB(190, 255, 120), pv)
-				add("ball", V3(0.28, 0.2, 0.2), RGB(255, 130, 150), CFrame.new(0, 2.15, -0.92), { tag = "head", pivot = pv })
-				for _, sx in ipairs({ -1, 1 }) do
-					for k = -1, 1, 2 do
-						add("block", V3(0.7, 0.04, 0.04), RGB(255, 255, 255), CFrame.new(sx * 0.75, 2.1 + k * 0.08, -0.85) * Ang(0, sx * 0.2, k * 0.15), { tag = "head", pivot = pv })
+		-- // Contest estimate: the real contest is rolled on the server, this is a distance and position model of it
+		local function ContestEstimate(Character, Root)
+			local Range = Aural.Plus.Shot.ContestRange
+			local Goal = GetGoal(Character)
+			local ToGoal = Goal and Flat(Goal - Root.Position) or Vector3.zero
+			ToGoal = ToGoal.Magnitude > 0.01 and ToGoal.Unit or Vector3.zero
+			local Highest = 0
+			for Index, Other in next, GetOthers(Character) do
+				if IsOpponent(Other.Model, Character, true) then
+					local Offset = Flat(Other.Root.Position - Root.Position)
+					local Distance = Offset.Magnitude
+					if Distance < Range then
+						local Amount = (1 - Distance / Range) * 100
+						if Distance > 0.01 and Offset.Unit:Dot(ToGoal) < 0 then
+							Amount *= 0.5
+						end
+						if Other.Model:GetAttribute("Action") == "Blocking" then
+							Amount *= 1.25
+						end
+						Highest = math.max(Highest, Amount)
 					end
 				end
-				add("block", V3(0.3, 1.7, 0.3), RGB(235, 130, 60), CFrame.new(0, 1.7, 0.95) * Ang(0.5, 0, 0), { tag = "tail", pivot = V3(0, 0.8, 0.8) })
-				add("ball", V3(0.5, 0.5, 0.5), RGB(250, 160, 80), CFrame.new(1.0, 1.0, -0.4), { tag = "armR", pivot = V3(0.9, 1.5, -0.3) })
-				add("ball", V3(0.5, 0.5, 0.5), RGB(250, 160, 80), CFrame.new(-1.0, 1.0, -0.4), { tag = "armL", pivot = V3(-0.9, 1.5, -0.3) })
-				add("ball", V3(0.7, 0.35, 0.9), RGB(235, 130, 60), CFrame.new(0.5, 0.18, -0.15))
-				add("ball", V3(0.7, 0.35, 0.9), RGB(235, 130, 60), CFrame.new(-0.5, 0.18, -0.15))
-			end,
-		}
-
-		Defs.Bolt = {
-			Name = "Bolt", Accent = RGB(90, 220, 240), Top = 4.1, Float = 0,
-			Lines = {
-				"BEEP. Shot accuracy: excellent, %s.",
-				"Calculating the best pass... done: to me.",
-				"My battery is 98%% and my vibes are 100%%.",
-				"Initiating victory dance.exe",
-				"Error 404: missed shot not found.",
-			},
-			Build = function(add)
-				local pv = V3(0, 1.95, 0)
-				add("block", V3(1.9, 1.8, 1.4), RGB(150, 165, 185), CFrame.new(0, 1.3, 0), { mat = Enum.Material.Metal })
-				add("block", V3(1.0, 0.6, 0.12), RGB(40, 50, 65), CFrame.new(0, 1.3, -0.72))
-				add("block", V3(0.4, 0.12, 0.12), RGB(90, 220, 240), CFrame.new(0, 1.3, -0.78), { mat = Enum.Material.Neon })
-				add("block", V3(1.6, 1.25, 1.35), RGB(175, 190, 210), CFrame.new(0, 2.65, 0), { tag = "head", pivot = pv, mat = Enum.Material.Metal })
-				add("block", V3(1.2, 0.55, 0.1), RGB(25, 30, 40), CFrame.new(0, 2.7, -0.7), { tag = "head", pivot = pv })
-				for _, sx in ipairs({ -1, 1 }) do
-					add("block", V3(0.26, 0.26, 0.1), RGB(90, 235, 255), CFrame.new(sx * 0.32, 2.7, -0.76), { tag = "head", pivot = pv, mat = Enum.Material.Neon })
-				end
-				add("cyl", V3(0.6, 0.1, 0.1), RGB(110, 120, 140), CFrame.new(0, 3.55, 0) * Ang(0, 0, pi / 2), { tag = "head", pivot = pv })
-				add("ball", V3(0.32, 0.32, 0.32), RGB(255, 90, 90), CFrame.new(0, 3.95, 0), { tag = "head", pivot = pv, mat = Enum.Material.Neon })
-				add("block", V3(0.45, 1.2, 0.45), RGB(120, 135, 155), CFrame.new(1.3, 1.25, 0), { tag = "armR", pivot = V3(1.2, 1.85, 0), mat = Enum.Material.Metal })
-				add("block", V3(0.45, 1.2, 0.45), RGB(120, 135, 155), CFrame.new(-1.3, 1.25, 0), { tag = "armL", pivot = V3(-1.2, 1.85, 0), mat = Enum.Material.Metal })
-				add("block", V3(0.6, 0.7, 0.6), RGB(100, 112, 130), CFrame.new(0.45, 0.35, 0))
-				add("block", V3(0.6, 0.7, 0.6), RGB(100, 112, 130), CFrame.new(-0.45, 0.35, 0))
-			end,
-		}
-
-		Defs.Hoops = {
-			Name = "Hoops", Accent = RGB(255, 140, 50), Top = 2.9, Float = 0,
-			Lines = {
-				"I'm a basketball with legs. Living the dream, %s.",
-				"Swish! That's my favorite sound.",
-				"Don't bounce me, I bounce myself!",
-				"Fun fact: I am 100%% inflated with confidence.",
-				"Triple-double? More like triple-DANCE.",
-			},
-			Build = function(add)
-				local pv = V3(0, 0.6, 0)
-				add("ball", V3(2.5, 2.5, 2.5), RGB(238, 125, 40), CFrame.new(0, 1.55, 0), { tag = "head", pivot = pv })
-				add("cyl", V3(0.32, 2.05, 2.05), RGB(255, 255, 255), CFrame.new(0, 2.35, 0) * Ang(0, 0, pi / 2), { tag = "head", pivot = pv })
-				eyes(add, 1.7, -1.1, 0.5, 0.6, 0.3, nil, pv)
-				add("block", V3(0.8, 0.14, 0.1), RGB(60, 25, 10), CFrame.new(0, 1.15, -1.18), { tag = "head", pivot = pv })
-				add("ball", V3(0.6, 0.6, 0.6), RGB(238, 125, 40), CFrame.new(1.45, 1.4, 0), { tag = "armR", pivot = V3(1.2, 1.4, 0) })
-				add("ball", V3(0.6, 0.6, 0.6), RGB(238, 125, 40), CFrame.new(-1.45, 1.4, 0), { tag = "armL", pivot = V3(-1.2, 1.4, 0) })
-				add("block", V3(0.75, 0.35, 1.0), RGB(255, 255, 255), CFrame.new(0.5, 0.18, -0.15))
-				add("block", V3(0.75, 0.35, 1.0), RGB(255, 255, 255), CFrame.new(-0.5, 0.18, -0.15))
-			end,
-		}
-
-		Defs.Pip = {
-			Name = "Pip", Accent = RGB(120, 160, 255), Top = 3.1, Float = 0,
-			Lines = {
-				"Waddle waddle! Hi %s!",
-				"It's cold out here but my dribble is hot.",
-				"I slid on my belly to get here. Worth it.",
-				"Penguins can't fly, but we can sure dunk. In theory.",
-				"Fish for a bucket, %s!",
-			},
-			Build = function(add)
-				add("ball", V3(1.9, 2.5, 1.7), RGB(40, 52, 90), CFrame.new(0, 1.6, 0), { tag = "head", pivot = V3(0, 0.5, 0) })
-				add("ball", V3(1.35, 1.9, 0.6), RGB(245, 245, 250), CFrame.new(0, 1.5, -0.6), { tag = "head", pivot = V3(0, 0.5, 0) })
-				eyes(add, 2.4, -0.78, 0.38, 0.46, 0.24, nil, V3(0, 0.5, 0))
-				add("block", V3(0.5, 0.22, 0.5), RGB(255, 170, 50), CFrame.new(0, 2.05, -0.95), { tag = "head", pivot = V3(0, 0.5, 0) })
-				add("block", V3(0.28, 1.2, 0.7), RGB(30, 40, 75), CFrame.new(1.05, 1.5, 0) * Ang(0, 0, -0.15), { tag = "armR", pivot = V3(0.95, 2.1, 0) })
-				add("block", V3(0.28, 1.2, 0.7), RGB(30, 40, 75), CFrame.new(-1.05, 1.5, 0) * Ang(0, 0, 0.15), { tag = "armL", pivot = V3(-0.95, 2.1, 0) })
-				add("block", V3(0.65, 0.16, 0.9), RGB(255, 170, 50), CFrame.new(0.45, 0.1, -0.2))
-				add("block", V3(0.65, 0.16, 0.9), RGB(255, 170, 50), CFrame.new(-0.45, 0.1, -0.2))
-			end,
-		}
-
-		Defs.Ghosty = {
-			Name = "Ghosty", Accent = RGB(200, 190, 255), Top = 3.4, Float = 1.1,
-			Lines = {
-				"Boo! Just kidding, I'm here to cheer, %s.",
-				"I can phase through defenders. Don't tell the refs.",
-				"Spooky good shot!",
-				"I haunt the rim. Nothing gets by me.",
-				"Whooo's got the best jumper? You do!",
-			},
-			Build = function(add)
-				add("ball", V3(2.1, 2.7, 2.0), RGB(240, 238, 255), CFrame.new(0, 1.9, 0), { tag = "head", pivot = V3(0, 0.4, 0), tr = 0.12 })
-				for i, sx in ipairs({ -0.7, 0, 0.7 }) do
-					add("ball", V3(0.85, 0.85, 0.85), RGB(240, 238, 255), CFrame.new(sx, 0.65 + (i == 2 and -0.1 or 0.05), 0), { tag = "tail", pivot = V3(0, 1.2, 0), tr = 0.12 })
-				end
-				for _, sx in ipairs({ -1, 1 }) do
-					add("ball", V3(0.4, 0.6, 0.2), RGB(25, 20, 40), CFrame.new(sx * 0.48, 2.15, -0.98), { tag = "head", pivot = V3(0, 0.4, 0) })
-				end
-				add("ball", V3(0.45, 0.55, 0.15), RGB(25, 20, 40), CFrame.new(0, 1.5, -1.0), { tag = "head", pivot = V3(0, 0.4, 0) })
-				add("ball", V3(0.6, 0.55, 0.55), RGB(240, 238, 255), CFrame.new(1.3, 1.6, 0), { tag = "armR", pivot = V3(1.0, 1.7, 0), tr = 0.12 })
-				add("ball", V3(0.6, 0.55, 0.55), RGB(240, 238, 255), CFrame.new(-1.3, 1.6, 0), { tag = "armL", pivot = V3(-1.0, 1.7, 0), tr = 0.12 })
-			end,
-		}
-
-		local PetNames = { "Blobby", "Whiskers", "Bolt", "Hoops", "Pip", "Ghosty" }
-		local SlotOptions = { "None", table.unpack(PetNames) }
-
-		local GenericLines = {
-			"Pass it here, %s, I'm wide open!",
-			"Buckets! Buckets! Buckets!",
-			"You've got the touch today, %s.",
-			"Defense! Defense! Clap clap clap-clap-clap.",
-			"Remember to hydrate, champ.",
-			"That's a green if I've ever seen one.",
-			"Run the fast break!",
-			"Whatever happens, I'm your biggest fan.",
-		}
-
-		-- ═════════════ EMOTES ═════════════
-		-- fn(t, a) -> body CFrame offset, { armL, armR, head, tail rotations }
-		local Emotes = {
-			Dance = { dur = 4, fn = function(t)
-				local b = t * 7
-				return CFrame.new(sin(b * 0.5) * 0.7, abs(sin(b)) * 0.9, 0) * Ang(0, sin(b * 0.5) * 0.7, sin(b * 0.5) * 0.22),
-					{ armR = Ang(0, 0, rad(130) + sin(b * 2) * 0.5), armL = Ang(0, 0, -rad(130) - sin(b * 2 + 1) * 0.5),
-					  head = Ang(0, 0, sin(b * 0.5) * 0.35), tail = Ang(0, sin(b * 2) * 0.8, 0) }
-			end },
-			Wave = { dur = 3, fn = function(t)
-				return CFrame.new(0, abs(sin(t * 3)) * 0.15, 0),
-					{ armR = Ang(0, 0, rad(150) + sin(t * 14) * 0.45), head = Ang(0, 0, sin(t * 3) * 0.12), tail = Ang(0, sin(t * 9) * 0.5, 0) }
-			end },
-			Spin = { dur = 1.6, fn = function(t, a)
-				return CFrame.new(0, sin(a * pi) * 1.8, 0) * Ang(0, a * pi * 4, 0),
-					{ armR = Ang(0, 0, rad(80)), armL = Ang(0, 0, -rad(80)) }
-			end },
-			Backflip = { dur = 1.4, fn = function(t, a)
-				return CFrame.new(0, sin(a * pi) * 3.2, 0) * Ang(-a * pi * 2, 0, 0),
-					{ armR = Ang(0, 0, rad(160)), armL = Ang(0, 0, -rad(160)) }
-			end },
-			Cheer = { dur = 3, fn = function(t)
-				local b = t * 8
-				return CFrame.new(0, abs(sin(b)) * 1.5, 0),
-					{ armR = Ang(0, 0, rad(165) + sin(b) * 0.2), armL = Ang(0, 0, -rad(165) - sin(b) * 0.2), head = Ang(-0.2, 0, 0) }
-			end },
-			Sway = { dur = 3.5, fn = function(t)
-				local b = t * 3
-				return CFrame.new(sin(b) * 0.8, 0, 0) * Ang(0, 0, sin(b) * 0.3),
-					{ armR = Ang(0, 0, rad(40) + sin(b) * 0.5), armL = Ang(0, 0, -rad(40) + sin(b) * 0.5),
-					  head = Ang(0, 0, -sin(b) * 0.3), tail = Ang(0, sin(b * 2) * 0.6, 0) }
-			end },
-			Floss = { dur = 4, fn = function(t)
-				local s = sin(t * 10)
-				return CFrame.new(-s * 0.5, abs(s) * 0.1, 0) * Ang(0, 0, -s * 0.05),
-					{ armR = Ang(0, rad(60) * s, rad(35)), armL = Ang(0, rad(60) * s, -rad(35)), head = Ang(0, 0, s * 0.1) }
-			end },
-		}
-		local EmoteNames = { "Dance", "Wave", "Spin", "Backflip", "Cheer", "Sway", "Floss" }
-
-		local function rnd(a, b) return a + math.random() * (b - a) end
-		local function pick(list) return list[math.random(1, #list)] end
-
-		-- ═════════════ BUILDING ═════════════
-		local function newPet(def)
-			local S = P.Scale
-			local model = Instance.new("Model")
-			model.Name = def.Name
-			local pet = {
-				def = def, model = model, parts = {}, pos = nil, yaw = 0, y = nil,
-				emote = nil, emoteT0 = 0, emoteName = nil,
-				nextEmote = os.clock() + rnd(4, 9), nextChat = os.clock() + rnd(3, 6),
-				seed = math.random() * 100, token = 0, dead = false, moving = 0,
-			}
-			local function add(shape, size, color, cf, o)
-				o = o or {}
-				local p = Instance.new("Part")
-				p.Size = size * S
-				p.Color = color
-				p.Material = o.mat or Enum.Material.SmoothPlastic
-				p.Transparency = o.tr or 0
-				p.Anchored = true
-				p.CanCollide = false
-				p.CanQuery = false
-				p.CanTouch = false
-				if shape == "ball" then
-					local m = Instance.new("SpecialMesh")
-					m.MeshType = Enum.MeshType.Sphere
-					m.Parent = p
-				elseif shape == "cyl" then
-					p.Shape = Enum.PartType.Cylinder
-				end
-				p.Parent = model
-				local rel = CFrame.new(cf.Position * S) * (cf - cf.Position)
-				table.insert(pet.parts, { part = p, cf = rel, tag = o.tag, pivot = (o.pivot or Vector3.zero) * S })
-				return p
 			end
-			def.Build(add)
-			local anchor = add("block", V3(0.2, 0.2, 0.2), RGB(255, 255, 255), CFrame.new(0, def.Top + 0.3, 0), { tr = 1 })
-			pet.anchor = anchor
-			return pet
+			return math.clamp(Highest, 0, 100)
 		end
 
-		local function clearPets()
-			for _, pet in ipairs(P.List) do pet.dead = true end
-			table.clear(P.List)
-			Folder:ClearAllChildren()
-		end
-
-		local function rebuild()
-			clearPets()
-			if not P.Enabled then return end
-			for _, name in ipairs(P.Slots) do
-				local def = Defs[name]
-				if def then
-					local pet = newPet(def)
-					pet.model.Parent = Folder
-					table.insert(P.List, pet)
-				end
+		Ext.Contested = function(Character, Root)
+			if not Aural.Plus.Shot.AntiContest then
+				return false
 			end
+			return ContestEstimate(Character, Root) > Aural.Plus.Shot.MaxContest
 		end
 
-		local rebuildToken = 0
-		local function queueRebuild()
-			rebuildToken += 1
-			local t = rebuildToken
-			task.delay(0.3, function()
-				if t == rebuildToken then pcall(rebuild) end
-			end)
+		-- // Dribble moves, macros
+		local ComboRunning = false
+
+		local function DoMove(Move, Direction)
+			local Character = GetCharacter()
+			local Combos = MoveCombos[Move]
+			if not Combos or not HasBall(Character) then
+				return false
+			end
+			local Combo = Combos[Character:GetAttribute("Hand") == "R" and 2 or 1]
+			Fire(Remotes.Dribble, Combo, Character:GetAttribute("Sprinting") == true, Direction or GetMoveDirection())
+			return true
 		end
 
-		-- ═════════════ CHAT BUBBLES ═════════════
-		local function say(pet, text)
-			if pet.dead or not pet.anchor then return end
-			pet.token += 1
-			local token = pet.token
-			local old = pet.anchor:FindFirstChild("PetBubble")
-			if old then old:Destroy() end
-
-			local acc = pet.def.Accent
-			local gui = Instance.new("BillboardGui")
-			gui.Name = "PetBubble"
-			gui.Adornee = pet.anchor
-			gui.Size = UDim2.fromOffset(240, 110)
-			gui.StudsOffset = Vector3.new(0, 1.4, 0)
-			gui.AlwaysOnTop = true
-			gui.MaxDistance = 90
-			gui.LightInfluence = 0
-			gui.Parent = pet.anchor
-
-			local frame = Instance.new("Frame")
-			frame.AnchorPoint = Vector2.new(0.5, 1)
-			frame.Position = UDim2.fromScale(0.5, 1)
-			frame.Size = UDim2.fromOffset(0, 0)
-			frame.AutomaticSize = Enum.AutomaticSize.XY
-			frame.BackgroundColor3 = RGB(20, 20, 26)
-			frame.BackgroundTransparency = 0.08
-			frame.BorderSizePixel = 0
-			frame.Parent = gui
-			local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 12); c.Parent = frame
-			local st = Instance.new("UIStroke"); st.Color = acc; st.Thickness = 1.5; st.Parent = frame
-			local pad = Instance.new("UIPadding")
-			pad.PaddingTop = UDim.new(0, 7); pad.PaddingBottom = UDim.new(0, 7)
-			pad.PaddingLeft = UDim.new(0, 10); pad.PaddingRight = UDim.new(0, 10)
-			pad.Parent = frame
-
-			local label = Instance.new("TextLabel")
-			label.BackgroundTransparency = 1
-			label.Size = UDim2.fromOffset(0, 0)
-			label.AutomaticSize = Enum.AutomaticSize.XY
-			label.TextWrapped = true
-			label.RichText = true
-			label.Font = Enum.Font.GothamMedium
-			label.TextSize = 15
-			label.TextColor3 = RGB(240, 240, 245)
-			label.TextXAlignment = Enum.TextXAlignment.Left
-			label.Parent = frame
-			local lim = Instance.new("UISizeConstraint"); lim.MaxSize = Vector2.new(210, math.huge); lim.Parent = label
-
-			local header = string.format('<font color="rgb(%d,%d,%d)"><b>%s</b></font>  ', math.floor(acc.R * 255 + 0.5), math.floor(acc.G * 255 + 0.5), math.floor(acc.B * 255 + 0.5), pet.def.Name)
-			local nameLen = utf8.len(pet.def.Name) + 2
-			local total = utf8.len(text) or #text
-
+		local function RunCombo(Moves, Delay)
+			if ComboRunning or #Moves == 0 then
+				return
+			end
+			ComboRunning = true
 			task.spawn(function()
-				-- "typing..." dots first, then the text types out
-				label.Text = header .. "..."
-				task.wait(rnd(0.45, 0.9))
-				if pet.dead or token ~= pet.token then return end
-				label.Text = header .. text
-				label.MaxVisibleGraphemes = nameLen
-				for i = 1, total do
-					if pet.dead or token ~= pet.token then return end
-					label.MaxVisibleGraphemes = nameLen + i
-					task.wait(0.035)
+				for Index, Move in table.clone(Moves) do
+					if not Running then
+						break
+					end
+					if Index > 1 then
+						local Character = GetCharacter()
+						local Started = os.clock()
+						task.wait(0.05)
+						while Character and Character:GetAttribute("Action") == "Dribbling" and os.clock() - Started < 1.5 do
+							task.wait()
+						end
+						task.wait(0.25 + (Delay or 0))
+					end
+					if not DoMove(Move) then
+						break
+					end
 				end
-				task.wait(2.2 + total * 0.05)
-				if pet.dead or token ~= pet.token then return end
-				gui:Destroy()
+				ComboRunning = false
 			end)
 		end
 
-		local function petSay(pet, text)
-			text = text or pick(math.random() < 0.65 and pet.def.Lines or GenericLines)
-			local name = LocalPlayer.DisplayName or LocalPlayer.Name
-			text = text:gsub("%%s", function() return name end):gsub("%%%%", "%%")
-			say(pet, text)
+		local function IsComboRunning()
+			return ComboRunning
 		end
 
-		local function playEmote(pet, name)
-			if name == nil or name == "Random" then name = pick(EmoteNames) end
-			local e = Emotes[name]
-			if not e then return end
-			pet.emote, pet.emoteName, pet.emoteT0 = e, name, os.clock()
+		local Macros = {
+			{ Name = "Cross Behind Back", Moves = { "Crossover", "Behind Back" } },
+			{ Name = "Hesi Cross", Moves = { "Hesitation", "Crossover" } },
+			{ Name = "Snatch Step Back", Moves = { "Snatch Back", "Step Back" } },
+			{ Name = "Double Cross Spin", Moves = { "Double Crossover", "Spin" } },
+			{ Name = "Breakdown Half Spin", Moves = { "Breakdown", "Half Spin" } },
+			{ Name = "Tween Behind Back", Moves = { "Tween", "Behind Back" } },
+		}
+
+		-- // Auto Calibrate  [Shooting tab]
+		do
+			local Calibrate = ShootingTab:CreateSection({ Title = "Auto Calibrate", Icon = Icons.Calibrate })
+			Calibrate:AddToggle({ Title = "Auto Calibrate", Description = "Learns your timing offset", Flag = "AutoCalibrate", Default = Aural.Shooting.AutoCalibrate, Callback = function(V) Aural.Shooting.AutoCalibrate = V end })
+			Ext.CalibrationLabel = Calibrate:AddLabel("calibration: +0ms")
+			Ext.LastShotLabel = Calibrate:AddLabel("last shot: none")
+			Calibrate:AddButton({ Title = "Reset calibration", Callback = function()
+				Ext.Calibration = 0
+				Ext.CalibrationLabel:Update("calibration: +0ms")
+			end })
 		end
 
-		-- ═════════════ FOLLOW + ANIMATION LOOP ═════════════
-		local function playerRoot()
-			local ch = GetCharacter()
-			local r = ch and GetRoot(ch)
-			if r then return r end
-			local proxy = workspace:FindFirstChild("ProxyCharacter")
-			if proxy and proxy:IsA("BasePart") then return proxy end
-			local lc = LocalPlayer.Character
-			return lc and lc:FindFirstChild("HumanoidRootPart")
+		-- // Dribble Macros  [Offense tab]
+		do
+			local Macro = OffenseTab:CreateSection({ Title = "Dribble Macros", Icon = Icons.Move })
+			Macro:AddToggle({ Title = "Dribble Macros", Description = "Lets the keybinds below play their macro", Flag = "DribbleMacros", Default = Aural.Dribbling.Macros, Callback = function(V) Aural.Dribbling.Macros = V end })
+			local Selected = Macros[1].Name
+			local Names = {}
+			for Index, Entry in Macros do
+				table.insert(Names, Entry.Name)
+			end
+			Macro:AddDropdown({ Title = "Macro", Options = Names, Default = Selected, Flag = "SelectedMacro", Callback = function(V) Selected = V or Selected end })
+			Macro:AddButton({ Title = "Play macro", Callback = function()
+				for Index, Entry in Macros do
+					if Entry.Name == Selected then
+						RunCombo(Entry.Moves, Aural.Dribbling.ComboDelay)
+					end
+				end
+			end })
+			local Binds = OffenseTab:CreateSection({ Title = "Macro Keybinds", Icon = Icons.List })
+			for Index, Entry in Macros do
+				Binds:AddKeybind({ Title = Entry.Name, Flag = "MacroKey" .. Index, Callback = function()
+					if Aural.Dribbling.Macros then
+						RunCombo(Entry.Moves, Aural.Dribbling.ComboDelay)
+					end
+				end })
+			end
 		end
 
-		local rayParams = RaycastParams.new()
-		rayParams.FilterType = Enum.RaycastFilterType.Exclude
-		local lastFilter, lastRoot, idleFor = 0, nil, 0
+		-- // Mobile Buttons  [Offense tab]: floating on-screen buttons for any dribble move or macro
+		do
+			local Dribbling = Aural.Dribbling
+			local SaveFile = "Aural/MacroButtons.json"
+			local Positions = {}
+			pcall(function()
+				if typeof(isfile) == "function" and typeof(readfile) == "function" and isfile(SaveFile) then
+					local Data = HttpService:JSONDecode(readfile(SaveFile))
+					if type(Data) == "table" then
+						Positions = Data
+					end
+				end
+			end)
 
-		Connect(RunSvc.RenderStepped, function(dt)
-			if not P.Enabled or #P.List == 0 then return end
-			local root = playerRoot()
-			if not root then return end
-			local now = os.clock()
-			local rp = root.Position
-
-			if now - lastFilter > 1 then
-				lastFilter = now
-				local filter = { Folder }
-				local c1, c2, c3 = LocalPlayer.Character, GetCharacter(), workspace:FindFirstChild("ProxyCharacter")
-				if c1 then table.insert(filter, c1) end
-				if c2 then table.insert(filter, c2) end
-				if c3 then table.insert(filter, c3) end
-				rayParams.FilterDescendantsInstances = filter
+			local function SavePositions()
+				pcall(function()
+					if typeof(writefile) ~= "function" then
+						return
+					end
+					if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("Aural") then
+						makefolder("Aural")
+					end
+					writefile(SaveFile, HttpService:JSONEncode(Positions))
+				end)
 			end
 
-			local speed = lastRoot and (Vector3.new(rp.X - lastRoot.X, 0, rp.Z - lastRoot.Z).Magnitude / math.max(dt, 1e-3)) or 0
-			lastRoot = rp
-			if speed > 1.5 then idleFor = 0 else idleFor += dt end
+			local Gui = Instance.new("ScreenGui")
+			Gui.Name = "AuralMacroButtons"
+			Gui.ResetOnSpawn = false
+			Gui.IgnoreGuiInset = true
+			Gui.DisplayOrder = 50
+			Gui.Enabled = false
+			Gui.Parent = GuiRoot
+			table.insert(Connections, { Disconnect = function()
+				Gui:Destroy()
+			end })
 
-			local D = P.Distance * math.max(P.Scale, 0.8)
-			for i, pet in ipairs(P.List) do
-				if not pet.pos then
-					local a = i * 2.2
-					pet.pos = rp + Vector3.new(sin(a), 0, cos(a)) * D
+			-- every move gets an entry, every macro gets one too ("Macro: name")
+			local Actions, Options = {}, {}
+			for Index, Name in MoveNames do
+				Actions[Name] = { Label = Name, Moves = { Name }, Macro = false }
+				table.insert(Options, Name)
+			end
+			for Index, Entry in Macros do
+				local Key = "Macro: " .. Entry.Name
+				Actions[Key] = { Label = Entry.Name, Moves = Entry.Moves, Macro = true }
+				table.insert(Options, Key)
+			end
+
+			local function Play(Key)
+				local Action = Actions[Key]
+				if Action then
+					RunCombo(Action.Moves, Action.Macro and Dribbling.ComboDelay or 0)
+				end
+			end
+
+			local Buttons = {}
+			local Active = nil
+
+			local function Place(Button, Key, Index)
+				local Saved = Positions[Key]
+				if type(Saved) == "table" and tonumber(Saved[1]) and tonumber(Saved[2]) then
+					Button.Position = UDim2.fromScale(math.clamp(Saved[1], 0, 0.95), math.clamp(Saved[2], 0, 0.95))
+				else
+					local Size = Dribbling.ButtonSize
+					Button.Position = UDim2.new(1, -(Size + 14), 0.2, (Index - 1) * (Size + 8))
+				end
+			end
+
+			local function SameInput(Drag, Input)
+				if Input == Drag.Input then
+					return true
+				end
+				return Drag.Input.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseButton1
+			end
+
+			local function Rebuild()
+				for Index, Button in Buttons do
+					Button:Destroy()
+				end
+				table.clear(Buttons)
+				Active = nil
+				local Picked = {}
+				for Index, Key in Dribbling.ButtonMoves do
+					Picked[Key] = true
+				end
+				local Count = 0
+				for Index, Key in Options do
+					if Picked[Key] then
+						Count += 1
+						local Action = Actions[Key]
+						local Size = Dribbling.ButtonSize
+						local Button = Instance.new("TextButton")
+						Button.Name = Key
+						Button.AutoButtonColor = false
+						Button.Size = UDim2.fromOffset(Size, Size)
+						Button.BackgroundColor3 = Color3.fromRGB(24, 25, 34)
+						Button.BackgroundTransparency = 0.15
+						Button.BorderSizePixel = 0
+						Button.Text = Action.Label
+						Button.TextColor3 = Color3.fromRGB(235, 236, 245)
+						Button.Font = Enum.Font.GothamMedium
+						Button.TextScaled = true
+						Button.TextWrapped = true
+						local Corner = Instance.new("UICorner")
+						Corner.CornerRadius = UDim.new(0, 14)
+						Corner.Parent = Button
+						local Stroke = Instance.new("UIStroke")
+						Stroke.Color = Action.Macro and Color3.fromRGB(255, 92, 146) or Color3.fromRGB(110, 120, 255)
+						Stroke.Thickness = 1.5
+						Stroke.Transparency = 0.2
+						Stroke.Parent = Button
+						local Padding = Instance.new("UIPadding")
+						Padding.PaddingLeft, Padding.PaddingRight = UDim.new(0, 6), UDim.new(0, 6)
+						Padding.PaddingTop, Padding.PaddingBottom = UDim.new(0, 6), UDim.new(0, 6)
+						Padding.Parent = Button
+						local Limit = Instance.new("UITextSizeConstraint")
+						Limit.MaxTextSize = 15
+						Limit.MinTextSize = 7
+						Limit.Parent = Button
+						Button.Parent = Gui
+						Place(Button, Key, Count)
+						Button.InputBegan:Connect(function(Input)
+							if Input.UserInputType ~= Enum.UserInputType.Touch and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+								return
+							end
+							if Active then
+								return
+							end
+							Active = { Button = Button, Key = Key, Input = Input, Start = Input.Position, Origin = Button.Position, Moved = false }
+							Button.BackgroundTransparency = 0.4
+						end)
+						table.insert(Buttons, Button)
+					end
+				end
+				Gui.Enabled = Dribbling.MobileButtons == true and Count > 0
+			end
+
+			-- one pair of global listeners handles every button (tap = play, drag = move)
+			Connect(UserInputService.InputChanged, function(Input)
+				local Drag = Active
+				if not Drag or Dribbling.ButtonLock then
+					return
+				end
+				local IsMove = Input == Drag.Input or (Drag.Input.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseMovement)
+				if not IsMove then
+					return
+				end
+				local Delta = Input.Position - Drag.Start
+				if Drag.Moved or Vector3.new(Delta.X, Delta.Y, 0).Magnitude > 10 then
+					Drag.Moved = true
+					Drag.Button.Position = UDim2.new(Drag.Origin.X.Scale, Drag.Origin.X.Offset + Delta.X, Drag.Origin.Y.Scale, Drag.Origin.Y.Offset + Delta.Y)
+				end
+			end)
+
+			Connect(UserInputService.InputEnded, function(Input)
+				local Drag = Active
+				if not Drag or not SameInput(Drag, Input) then
+					return
+				end
+				Active = nil
+				Drag.Button.BackgroundTransparency = 0.15
+				if Drag.Moved and not Dribbling.ButtonLock then
+					local View = workspace.CurrentCamera.ViewportSize
+					local X = math.clamp(Drag.Button.AbsolutePosition.X, 0, math.max(View.X - Drag.Button.AbsoluteSize.X, 0))
+					local Y = math.clamp(Drag.Button.AbsolutePosition.Y, 0, math.max(View.Y - Drag.Button.AbsoluteSize.Y, 0))
+					Positions[Drag.Key] = { X / View.X, Y / View.Y }
+					Drag.Button.Position = UDim2.fromScale(X / View.X, Y / View.Y)
+					SavePositions()
+				elseif not Drag.Moved then
+					Play(Drag.Key)
+				end
+			end)
+
+			local Mobile = OffenseTab:CreateSection({ Title = "Mobile Buttons", Icon = Icons.Move })
+			Mobile:AddToggle({ Title = "Mobile Buttons", Description = "On-screen move buttons", Flag = "MobileButtons", Default = Dribbling.MobileButtons, Callback = function(V)
+				Dribbling.MobileButtons = V
+				Rebuild()
+			end })
+			Mobile:AddDropdown({ Title = "Button Moves", Description = "Pick what gets a button", Multi = true, Options = Options, Default = Dribbling.ButtonMoves, Flag = "ButtonMoves", Callback = function(V)
+				Dribbling.ButtonMoves = type(V) == "table" and V or {}
+				Rebuild()
+			end })
+			Mobile:AddSlider({ Title = "Button Size", Description = "How big each button is", Min = 40, Max = 110, Default = Dribbling.ButtonSize, Step = 2, Suffix = " px", Flag = "ButtonSize", Callback = function(V)
+				Dribbling.ButtonSize = V
+				for Index, Button in Buttons do
+					Button.Size = UDim2.fromOffset(V, V)
+				end
+			end })
+			Mobile:AddToggle({ Title = "Lock Buttons", Description = "Stops the buttons from being dragged", Flag = "ButtonLock", Default = Dribbling.ButtonLock, Callback = function(V)
+				Dribbling.ButtonLock = V
+			end })
+			Mobile:AddButton({ Title = "Reset Button Positions", Callback = function()
+				table.clear(Positions)
+				SavePositions()
+				Rebuild()
+			end })
+			Rebuild()
+		end
+
+		-- // Pets  [Visuals tab]: cute client-side buddy that follows you and cheers you on
+		do
+			local TweenService = game:GetService("TweenService")
+			local Pet = { Enabled = false, Type = "Cat", Size = 100, Follow = 5, Name = "", Tint = false, Color = Color3.fromRGB(255, 190, 120), Cheers = true, React = true, Every = 30 }
+			local White = Color3.fromRGB(255, 255, 255)
+			local Dark = Color3.fromRGB(50, 40, 48)
+
+			local Species = {
+				Cat = { Fur = Color3.fromRGB(255, 176, 102), Belly = Color3.fromRGB(255, 240, 222), Inner = Color3.fromRGB(255, 160, 184), Paw = Color3.fromRGB(255, 176, 102), Sound = "Meow", Ears = "Point", Tail = "Long", Top = 3.75 },
+				Dog = { Fur = Color3.fromRGB(214, 160, 104), Belly = Color3.fromRGB(255, 238, 214), Inner = Color3.fromRGB(130, 84, 54), Paw = Color3.fromRGB(214, 160, 104), Nose = Dark, Sound = "Woof", Ears = "Floppy", Tail = "Short", Top = 3.4 },
+				Bunny = { Fur = Color3.fromRGB(246, 242, 250), Belly = White, Inner = Color3.fromRGB(255, 176, 198), Paw = Color3.fromRGB(246, 242, 250), Sound = "Boing", Ears = "Long", Tail = "Pom", Top = 4.9 },
+				Fox = { Fur = Color3.fromRGB(240, 128, 52), Belly = Color3.fromRGB(255, 244, 232), Inner = Color3.fromRGB(74, 52, 46), Paw = Color3.fromRGB(88, 60, 50), Nose = Dark, Sound = "Yip", Ears = "Tall", Tail = "Fluffy", Top = 4.1 },
+				Panda = { Fur = Color3.fromRGB(250, 250, 252), Belly = White, Inner = Color3.fromRGB(40, 40, 46), Paw = Color3.fromRGB(40, 40, 46), Nose = Dark, Sound = "Squee", Ears = "Round", Tail = "Pom", Patches = true, Top = 3.7 },
+				Frog = { Fur = Color3.fromRGB(122, 214, 110), Belly = Color3.fromRGB(226, 248, 190), Inner = Color3.fromRGB(86, 164, 84), Paw = Color3.fromRGB(122, 214, 110), Sound = "Ribbit", Ears = "None", Tail = "None", TopEyes = true, Top = 3.75 },
+				Duck = { Fur = Color3.fromRGB(255, 224, 82), Belly = Color3.fromRGB(255, 242, 156), Inner = Color3.fromRGB(255, 150, 50), Paw = Color3.fromRGB(255, 150, 50), Sound = "Quack", Ears = "None", Tail = "Short", Beak = true, Top = 3.75 },
+				Hamster = { Fur = Color3.fromRGB(232, 176, 112), Belly = Color3.fromRGB(255, 244, 228), Inner = Color3.fromRGB(255, 172, 172), Paw = Color3.fromRGB(232, 176, 112), Sound = "Squeak", Ears = "Round", Tail = "None", Cheeks = true, Top = 3.4 },
+			}
+			local SpeciesNames = { "Cat", "Dog", "Bunny", "Fox", "Panda", "Frog", "Duck", "Hamster" }
+
+			local Lines = {
+				Idle = { "You've got this!", "Stay locked in!", "I believe in you!", "Keep that form clean!", "Eyes on the rim!", "Breathe. Shoot. Repeat.", "Every shot gets you closer!", "Hustle on defense too!", "Let's get that W!", "Confidence is everything!", "You're doing great!", "Next bucket is yours!", "Trust your shot!", "Keep hooping, champ!" },
+				Perfect = { "GREEN! Beautiful!", "That's the one!", "Perfect release!", "Nothing but net!", "So smooth!", "Ice cold!", "Money!", "Textbook form!" },
+				Good = { "So close! Nice form!", "Almost green!", "Great timing, keep it up!" },
+				Miss = { "Shake it off!", "Next one's yours!", "Reset and go again!", "Timing's coming, keep at it!", "No worries, keep shooting!", "You got the next one!" },
+				Takeover = { "TAKEOVER! Let's gooo!" },
+				Greet = { "Hi! Let's hoop together!", "Ready to hoop!", "Let's get to work!" },
+			}
+			local LastPick = {}
+			local Rig = nil
+			local Pos, Yaw, GroundY = Vector3.zero, 0, 0
+			local LastRoot, PlayerSpeed, NextCheer = Vector3.zero, 0, 0
+			local ReactAt, Streak = 0, 0
+			local Sparks = { Color3.fromRGB(255, 170, 210), Color3.fromRGB(255, 232, 120), Color3.fromRGB(170, 220, 255) }
+			local Params = RaycastParams.new()
+			Params.FilterType = Enum.RaycastFilterType.Exclude
+			Params.RespectCanCollide = true
+
+			local function Holder()
+				return workspace.CurrentCamera or workspace
+			end
+
+			local function Pick(Key)
+				local List = Lines[Key]
+				local Index = math.random(#List)
+				if #List > 1 and Index == LastPick[Key] then
+					Index = Index % #List + 1
+				end
+				LastPick[Key] = Index
+				local Text = List[Index]
+				if Rig and math.random() < 0.3 then
+					Text = Rig.Info.Sound .. "! " .. Text
+				end
+				return Text
+			end
+
+			local function StreakText(Count)
+				if Count == 2 then
+					return "Back to back!"
+				elseif Count == 3 then
+					return "Three in a row!!"
+				elseif Count == 4 then
+					return "Four straight! Unreal!"
+				end
+				return "On fire! " .. Count .. " greens in a row!"
+			end
+
+			local function Say(Text, Seconds)
+				local R = Rig
+				if not R or R.Dead then
+					return
+				end
+				R.Talk += 1
+				local Id = R.Talk
+				R.Text.Text = Text
+				R.Card.Visible = true
+				R.CardScale.Scale = 0.6
+				TweenService:Create(R.CardScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+				TweenService:Create(R.Card, TweenInfo.new(0.2), { BackgroundTransparency = 0.05 }):Play()
+				TweenService:Create(R.Text, TweenInfo.new(0.2), { TextTransparency = 0 }):Play()
+				TweenService:Create(R.Stroke, TweenInfo.new(0.2), { Transparency = 0 }):Play()
+				R.Excite = os.clock() + 1.1
+				task.delay(Seconds or 3.2, function()
+					if R.Dead or R.Talk ~= Id then
+						return
+					end
+					TweenService:Create(R.Card, TweenInfo.new(0.25), { BackgroundTransparency = 1 }):Play()
+					TweenService:Create(R.Text, TweenInfo.new(0.25), { TextTransparency = 1 }):Play()
+					TweenService:Create(R.Stroke, TweenInfo.new(0.25), { Transparency = 1 }):Play()
+					task.delay(0.3, function()
+						if not R.Dead and R.Talk == Id then
+							R.Card.Visible = false
+						end
+					end)
+				end)
+			end
+
+			local function Sparkle(Count)
+				local R = Rig
+				if not R or R.Dead then
+					return
+				end
+				local Origin = R.Head.Position
+				for Index = 1, Count do
+					local Part = Instance.new("Part")
+					Part.Shape = Enum.PartType.Ball
+					Part.Size = Vector3.one * 0.28 * R.Scale
+					Part.Material = Enum.Material.Neon
+					Part.Color = Sparks[math.random(#Sparks)]
+					Part.Anchored = true
+					Part.CanCollide = false
+					Part.CanQuery = false
+					Part.CanTouch = false
+					Part.CastShadow = false
+					Part.Position = Origin + Vector3.new(math.random() - 0.5, math.random() * 0.6, math.random() - 0.5) * 2.4 * R.Scale
+					Part.Parent = Holder()
+					TweenService:Create(Part, TweenInfo.new(0.9 + math.random() * 0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = Part.Position + Vector3.new(0, 2.5 * R.Scale, 0), Transparency = 1 }):Play()
+					task.delay(1.5, function()
+						Part:Destroy()
+					end)
+				end
+			end
+
+			local function Build(Type, Scale)
+				local Info = Species[Type]
+				local New = { Type = Type, Info = Info, Scale = Scale, Fur = {}, Eyes = {}, Tails = {}, Talk = 0, Phase = 0, Lean = 0, Excite = 0, Moving = false, Dead = false, Takeover = false, NextBlink = os.clock() + 3 }
+				local Model = Instance.new("Model")
+				Model.Name = "AuralPet"
+				New.Model = Model
+
+				local function Piece(Name, Size, Position, Color, Rotation, Plain)
+					local Part = Instance.new("Part")
+					Part.Name = Name
+					Part.Size = Size * Scale
+					Part.Color = Color
+					Part.Material = Enum.Material.SmoothPlastic
+					Part.Anchored = true
+					Part.CanCollide = false
+					Part.CanQuery = false
+					Part.CanTouch = false
+					Part.CastShadow = false
+					Part.Massless = true
+					Part.TopSurface = Enum.SurfaceType.Smooth
+					Part.BottomSurface = Enum.SurfaceType.Smooth
+					Part.CFrame = CFrame.new(Position * Scale) * (Rotation or CFrame.new())
+					if not Plain then
+						local Mesh = Instance.new("SpecialMesh")
+						Mesh.MeshType = Enum.MeshType.Sphere
+						Mesh.Parent = Part
+					end
+					Part.Parent = Model
+					return Part
 				end
 
-				-- follow: trail you at a set distance, don't crowd the other pets
-				local flat = Vector3.new(pet.pos.X - rp.X, 0, pet.pos.Z - rp.Z)
-				local dist = flat.Magnitude
-				local target = pet.pos
-				if dist > D then
-					target = Vector3.new(rp.X, pet.pos.Y, rp.Z) + flat.Unit * D
+				-- mirrored pair: give the right side (x > 0) and the left is flipped
+				local function Pair(Name, Size, Position, Color, TiltY, TiltZ)
+					local Made = {}
+					for Index, Side in { 1, -1 } do
+						Made[Index] = Piece(Name .. (Side > 0 and " R" or " L"), Size, Vector3.new(Position.X * Side, Position.Y, Position.Z), Color, CFrame.Angles(0, (TiltY or 0) * Side, (TiltZ or 0) * Side))
+					end
+					return Made[1], Made[2]
 				end
-				for j, other in ipairs(P.List) do
-					if j ~= i and other.pos then
-						local sep = Vector3.new(pet.pos.X - other.pos.X, 0, pet.pos.Z - other.pos.Z)
-						local m = sep.Magnitude
-						if m < 3.2 * P.Scale then
-							target += (m > 0.01 and sep.Unit or Vector3.new(1, 0, 0)) * (3.2 * P.Scale - m) * 0.5
+
+				local function Fur(...)
+					for Index, Part in { ... } do
+						table.insert(New.Fur, Part)
+					end
+				end
+
+				local Root = Piece("Root", Vector3.new(0.2, 0.2, 0.2), Vector3.zero, Info.Fur, nil, true)
+				Root.Transparency = 1
+				Model.PrimaryPart = Root
+
+				-- body, belly, paws, head
+				Fur(Piece("Body", Vector3.new(1.9, 1.55, 1.9), Vector3.new(0, 0.95, 0.2), Info.Fur))
+				Piece("Belly", Vector3.new(1.25, 1.0, 0.5), Vector3.new(0, 0.9, -0.62), Info.Belly)
+				Pair("Front Paw", Vector3.new(0.72, 0.5, 0.9), Vector3.new(0.58, 0.25, -0.35), Info.Paw)
+				Pair("Back Paw", Vector3.new(0.72, 0.5, 0.9), Vector3.new(0.62, 0.25, 0.75), Info.Paw)
+				New.Head = Piece("Head", Vector3.new(2.5, 2.1, 2.2), Vector3.new(0, 2.25, -0.15), Info.Fur)
+				Fur(New.Head)
+
+				-- face
+				local EyeColor = Info.Patches and Color3.fromRGB(78, 78, 92) or Color3.fromRGB(34, 28, 44)
+				local function Eyes(Size, Position)
+					for Index, Eye in { Pair("Eye", Size, Position, EyeColor) } do
+						table.insert(New.Eyes, { Part = Eye, Size = Eye.Size })
+					end
+				end
+				if Info.TopEyes then
+					Fur(Pair("Bulge", Vector3.new(0.95, 0.95, 0.95), Vector3.new(0.7, 3.05, -0.45), Info.Fur))
+					Eyes(Vector3.new(0.5, 0.6, 0.3), Vector3.new(0.7, 3.1, -0.93))
+					Pair("Shine", Vector3.new(0.17, 0.2, 0.1), Vector3.new(0.78, 3.25, -1.05), White)
+					Piece("Smile", Vector3.new(1.1, 0.09, 0.12), Vector3.new(0, 1.78, -1.06), Info.Inner)
+				else
+					if Info.Patches then
+						Pair("Patch", Vector3.new(0.78, 0.95, 0.2), Vector3.new(0.64, 2.33, -0.95), Info.Inner, 0, 0.35)
+					end
+					Eyes(Vector3.new(0.36, 0.5, 0.24), Vector3.new(0.62, 2.35, -1.0))
+					Pair("Shine", Vector3.new(0.13, 0.16, 0.1), Vector3.new(0.68, 2.48, -1.12), White)
+				end
+				if Info.Cheeks then
+					Pair("Cheek Puff", Vector3.new(0.95, 0.8, 0.6), Vector3.new(0.95, 1.85, -0.7), Info.Belly, -0.5, 0)
+				end
+				for Index, Part in { Pair("Blush", Vector3.new(0.5, 0.3, 0.2), Vector3.new(0.9, 1.9, -0.78), Color3.fromRGB(255, 150, 172), -0.6, 0) } do
+					Part.Transparency = 0.3
+				end
+				if Info.Beak then
+					Piece("Beak", Vector3.new(1.0, 0.42, 0.8), Vector3.new(0, 1.9, -1.3), Info.Inner)
+					Fur(Piece("Tuft", Vector3.new(0.3, 0.5, 0.3), Vector3.new(0, 3.4, -0.1), Info.Fur))
+					Fur(Pair("Wing", Vector3.new(0.4, 0.9, 1.0), Vector3.new(1.0, 1.05, 0.25), Info.Fur, 0, 0.15))
+				elseif not Info.TopEyes then
+					Piece("Nose", Vector3.new(0.34, 0.24, 0.24), Vector3.new(0, 2.04, -1.12), Info.Nose or Color3.fromRGB(255, 130, 150))
+				end
+
+				-- ears
+				local Ears = Info.Ears
+				if Ears == "Point" then
+					Fur(Pair("Ear", Vector3.new(0.8, 1.0, 0.4), Vector3.new(0.8, 3.2, -0.1), Info.Fur, 0, -0.35))
+					Pair("Inner Ear", Vector3.new(0.45, 0.6, 0.2), Vector3.new(0.8, 3.13, -0.27), Info.Inner, 0, -0.35)
+				elseif Ears == "Tall" then
+					Fur(Pair("Ear", Vector3.new(0.8, 1.3, 0.4), Vector3.new(0.85, 3.4, -0.1), Info.Fur, 0, -0.3))
+					Pair("Inner Ear", Vector3.new(0.42, 0.75, 0.2), Vector3.new(0.85, 3.33, -0.27), Info.Inner, 0, -0.3)
+				elseif Ears == "Floppy" then
+					Pair("Ear", Vector3.new(0.7, 1.25, 0.5), Vector3.new(1.3, 2.45, -0.05), Info.Inner, 0, 0.25)
+				elseif Ears == "Long" then
+					Fur(Pair("Ear", Vector3.new(0.65, 2.0, 0.4), Vector3.new(0.6, 3.85, 0), Info.Fur, 0, -0.1))
+					Pair("Inner Ear", Vector3.new(0.34, 1.55, 0.2), Vector3.new(0.6, 3.8, -0.15), Info.Inner, 0, -0.1)
+				elseif Ears == "Round" then
+					if Info.Patches then
+						Pair("Ear", Vector3.new(0.85, 0.85, 0.5), Vector3.new(1.0, 3.1, -0.05), Info.Inner)
+					else
+						Fur(Pair("Ear", Vector3.new(0.85, 0.85, 0.5), Vector3.new(1.0, 3.1, -0.05), Info.Fur))
+						Pair("Inner Ear", Vector3.new(0.5, 0.5, 0.25), Vector3.new(1.0, 3.08, -0.2), Info.Inner)
+					end
+				end
+
+				-- tail (wags)
+				local function Tail(Part)
+					table.insert(New.Tails, { Part = Part, Local = Part.CFrame })
+					return Part
+				end
+				local Kind = Info.Tail
+				if Kind == "Long" then
+					Fur(Tail(Piece("Tail", Vector3.new(0.42, 1.5, 0.42), Vector3.new(0, 1.75, 1.6), Info.Fur, CFrame.Angles(0.6, 0, 0))))
+				elseif Kind == "Short" then
+					Fur(Tail(Piece("Tail", Vector3.new(0.45, 0.85, 0.45), Vector3.new(0, 1.5, 1.3), Info.Fur, CFrame.Angles(0.5, 0, 0))))
+				elseif Kind == "Pom" then
+					Tail(Piece("Tail", Vector3.new(0.7, 0.7, 0.7), Vector3.new(0, 1.0, 1.3), White))
+				elseif Kind == "Fluffy" then
+					Fur(Tail(Piece("Tail", Vector3.new(0.95, 0.95, 1.9), Vector3.new(0, 1.0, 1.95), Info.Fur)))
+					Tail(Piece("Tail Tip", Vector3.new(0.8, 0.8, 0.7), Vector3.new(0, 1.0, 2.6), Info.Belly))
+				end
+				New.TailPivot = CFrame.new(0, 1.0 * Scale, 1.15 * Scale)
+				New.TailInverse = New.TailPivot:Inverse()
+
+				-- name tag + speech bubble
+				local Gui = Instance.new("BillboardGui")
+				Gui.Name = "Chat"
+				Gui.Adornee = New.Head
+				Gui.AlwaysOnTop = true
+				Gui.LightInfluence = 0
+				Gui.MaxDistance = 150
+				Gui.Size = UDim2.fromOffset(260, 110)
+				Gui.StudsOffset = Vector3.new(0, (Info.Top - 2.25 + 0.7) * Scale, 0)
+				Gui.Parent = New.Head
+
+				local Tag = Instance.new("TextLabel")
+				Tag.Name = "Tag"
+				Tag.AnchorPoint = Vector2.new(0.5, 1)
+				Tag.Position = UDim2.new(0.5, 0, 1, 0)
+				Tag.Size = UDim2.fromOffset(0, 22)
+				Tag.AutomaticSize = Enum.AutomaticSize.X
+				Tag.BackgroundColor3 = Color3.fromRGB(30, 24, 44)
+				Tag.BackgroundTransparency = 0.25
+				Tag.BorderSizePixel = 0
+				Tag.Font = Enum.Font.GothamBold
+				Tag.TextSize = 13
+				Tag.TextColor3 = Color3.fromRGB(255, 232, 246)
+				Tag.Text = Pet.Name
+				Tag.Visible = Pet.Name ~= ""
+				Tag.Parent = Gui
+				local TagCorner = Instance.new("UICorner")
+				TagCorner.CornerRadius = UDim.new(1, 0)
+				TagCorner.Parent = Tag
+				local TagPad = Instance.new("UIPadding")
+				TagPad.PaddingLeft = UDim.new(0, 10)
+				TagPad.PaddingRight = UDim.new(0, 10)
+				TagPad.Parent = Tag
+				New.Tag = Tag
+
+				local Card = Instance.new("Frame")
+				Card.Name = "Bubble"
+				Card.AnchorPoint = Vector2.new(0.5, 1)
+				Card.Position = UDim2.new(0.5, 0, 1, -28)
+				Card.Size = UDim2.fromOffset(240, 56)
+				Card.BackgroundColor3 = White
+				Card.BackgroundTransparency = 1
+				Card.BorderSizePixel = 0
+				Card.Visible = false
+				Card.Parent = Gui
+				local CardCorner = Instance.new("UICorner")
+				CardCorner.CornerRadius = UDim.new(0, 16)
+				CardCorner.Parent = Card
+				local Stroke = Instance.new("UIStroke")
+				Stroke.Color = Color3.fromRGB(255, 150, 200)
+				Stroke.Thickness = 2
+				Stroke.Transparency = 1
+				Stroke.Parent = Card
+				local CardScale = Instance.new("UIScale")
+				CardScale.Scale = 0.6
+				CardScale.Parent = Card
+				local Text = Instance.new("TextLabel")
+				Text.BackgroundTransparency = 1
+				Text.Position = UDim2.fromOffset(10, 6)
+				Text.Size = UDim2.new(1, -20, 1, -12)
+				Text.Font = Enum.Font.GothamBold
+				Text.TextSize = 18
+				Text.TextScaled = true
+				Text.TextWrapped = true
+				Text.TextColor3 = Color3.fromRGB(82, 50, 104)
+				Text.TextTransparency = 1
+				Text.Text = ""
+				Text.Parent = Card
+				local Limit = Instance.new("UITextSizeConstraint")
+				Limit.MaxTextSize = 18
+				Limit.MinTextSize = 8
+				Limit.Parent = Text
+				New.Card, New.Stroke, New.CardScale, New.Text = Card, Stroke, CardScale, Text
+
+				if Pet.Tint then
+					for Index, Part in New.Fur do
+						Part.Color = Pet.Color
+					end
+				end
+				return New
+			end
+
+			local function Despawn()
+				local R = Rig
+				Rig = nil
+				if R then
+					R.Dead = true
+					pcall(function()
+						R.Model:Destroy()
+					end)
+				end
+			end
+
+			local function Spawn(Root)
+				Despawn()
+				local R = Build(Pet.Type, Pet.Size / 100)
+				Rig = R
+				local Ignore = {}
+				for Index, Item in { Characters, R.Model, workspace:FindFirstChild("ProxyCharacter") } do
+					table.insert(Ignore, Item)
+				end
+				Params.FilterDescendantsInstances = Ignore
+				local Look = Flat(Root.CFrame.LookVector)
+				Look = Look.Magnitude > 0.05 and Look.Unit or Vector3.new(0, 0, -1)
+				Pos = Root.Position - Look * Pet.Follow
+				GroundY = Root.Position.Y - 3
+				LastRoot = Root.Position
+				PlayerSpeed = 0
+				Yaw = math.atan2(-Look.X, -Look.Z)
+				NextCheer = os.clock() + 6
+				R.Model:PivotTo(CFrame.new(Pos.X, GroundY, Pos.Z) * CFrame.Angles(0, Yaw, 0))
+				R.Model.Parent = Holder()
+				task.delay(0.4, function()
+					if Rig == R then
+						Say(Pet.Name ~= "" and ("Hi! I'm " .. Pet.Name .. "!") or Pick("Greet"), 3.5)
+						Sparkle(6)
+					end
+				end)
+			end
+
+			Connect(RunService.Heartbeat, function(Delta)
+				if not Running then
+					return
+				end
+				if not Pet.Enabled then
+					if Rig then
+						Despawn()
+					end
+					return
+				end
+				local Character = GetCharacter()
+				local Root = GetRoot(Character)
+				if not Root then
+					if Rig and Rig.Model.Parent then
+						Rig.Model.Parent = nil
+					end
+					return
+				end
+				if not Rig or Rig.Type ~= Pet.Type or math.abs(Rig.Scale - Pet.Size / 100) > 0.001 then
+					Spawn(Root)
+				end
+				local R = Rig
+				if R.Model.Parent ~= Holder() then
+					R.Model.Parent = Holder()
+				end
+				local Now = os.clock()
+
+				-- follow: stay behind-right of you, scoot over when you move away
+				local RootPos = Root.Position
+				local Instant = Delta > 0 and math.min((RootPos - LastRoot).Magnitude / Delta, 40) or 0
+				LastRoot = RootPos
+				PlayerSpeed += (Instant - PlayerSpeed) * math.min(1, Delta * 6)
+				local Look = Flat(Root.CFrame.LookVector)
+				Look = Look.Magnitude > 0.05 and Look.Unit or Vector3.new(0, 0, -1)
+				local Right = Vector3.new(-Look.Z, 0, Look.X)
+				local Home = RootPos - Look * Pet.Follow + Right * (Pet.Follow * 0.6)
+				local ToHome = Flat(Home - Pos)
+				local Distance = ToHome.Magnitude
+				if Distance > 80 then
+					Pos = Vector3.new(Home.X, Pos.Y, Home.Z)
+					Distance = 0
+				end
+				if R.Moving then
+					R.Moving = Distance > 0.6
+				else
+					R.Moving = Distance > 2.2
+				end
+				local Heading = nil
+				if R.Moving then
+					Heading = ToHome / Distance
+					local Speed = math.max(10, PlayerSpeed * 1.25 + Distance * 2.5)
+					Pos += Heading * math.min(Distance, Speed * Delta)
+				end
+				local Hit = workspace:Raycast(Vector3.new(Pos.X, RootPos.Y + 2, Pos.Z), Vector3.new(0, -30, 0), Params)
+				GroundY += ((Hit and Hit.Position.Y or (RootPos.Y - 3)) - GroundY) * math.min(1, Delta * 14)
+
+				-- hop while running, gentle breathing when idle, extra bounce when it just cheered
+				R.Phase += Delta * (R.Moving and 13 or 2.4)
+				R.Lean += ((R.Moving and 1 or 0) - R.Lean) * math.min(1, Delta * 8)
+				local Bob = R.Moving and math.abs(math.sin(R.Phase)) * 0.75 or (math.sin(R.Phase) * 0.5 + 0.5) * 0.1
+				local Excited = R.Excite - Now
+				if Excited > 0 then
+					Bob += math.abs(math.sin(Excited * 12)) * 0.9 * math.min(1, Excited)
+				end
+				local Face = Heading
+				if not Face then
+					local ToPlayer = Flat(RootPos - Pos)
+					Face = ToPlayer.Magnitude > 0.1 and ToPlayer.Unit or nil
+				end
+				if Face then
+					local Diff = (math.atan2(-Face.X, -Face.Z) - Yaw + math.pi) % (2 * math.pi) - math.pi
+					Yaw += Diff * math.min(1, Delta * (R.Moving and 12 or 6))
+				end
+				local CF = CFrame.new(Pos.X, GroundY + Bob * R.Scale, Pos.Z) * CFrame.Angles(0, Yaw, 0) * CFrame.Angles(-0.14 * R.Lean, 0, math.sin(R.Phase) * 0.07 * R.Lean)
+				R.Model:PivotTo(CF)
+				if #R.Tails > 0 then
+					local Wag = math.sin(Now * (Excited > 0 and 16 or 7)) * (Excited > 0 and 0.7 or 0.35)
+					local Swing = CF * R.TailPivot * CFrame.Angles(0, Wag, 0) * R.TailInverse
+					for Index, Entry in R.Tails do
+						Entry.Part.CFrame = Swing * Entry.Local
+					end
+				end
+
+				-- blink
+				if Now >= R.NextBlink then
+					R.NextBlink = Now + 2.5 + math.random() * 3
+					R.BlinkEnd = Now + 0.12
+					for Index, Eye in R.Eyes do
+						Eye.Part.Size = Vector3.new(Eye.Size.X, math.max(0.06, Eye.Size.Y * 0.12), Eye.Size.Z)
+					end
+				elseif R.BlinkEnd and Now >= R.BlinkEnd then
+					R.BlinkEnd = nil
+					for Index, Eye in R.Eyes do
+						Eye.Part.Size = Eye.Size
+					end
+				end
+
+				-- takeover + idle cheers
+				local Takeover = Character:GetAttribute("Takeover") == true
+				if Takeover and not R.Takeover and Pet.React then
+					Say(Pick("Takeover"), 3.5)
+					Sparkle(10)
+				end
+				R.Takeover = Takeover
+				if Pet.Cheers and Now >= NextCheer then
+					NextCheer = Now + Pet.Every * (0.75 + math.random() * 0.5)
+					Say(Pick("Idle"), 3.2)
+				end
+			end)
+
+			-- reacts to the grade of every shot you take
+			if Remotes.ShowFeedback then
+				Connect(Remotes.ShowFeedback.OnClientEvent, function(Model, Value, GradeIndex)
+					local Character = GetCharacter()
+					if not Character or Model ~= Character then
+						return
+					end
+					local Index = tonumber(GradeIndex)
+					if Index == 5 then
+						Streak += 1
+					elseif Index ~= 4 then
+						Streak = 0
+					end
+					if not (Pet.Enabled and Pet.React and Rig) or os.clock() - ReactAt < 1.2 then
+						return
+					end
+					if Index ~= 5 and math.random() < 0.4 then
+						return
+					end
+					ReactAt = os.clock()
+					task.delay(0.15, function()
+						if not Rig then
+							return
+						end
+						if Index == 5 then
+							Say(Streak >= 2 and StreakText(Streak) or Pick("Perfect"), 3)
+							Sparkle(6 + math.min(Streak, 4) * 2)
+						elseif Index == 4 then
+							Say(Pick("Good"), 2.8)
+						else
+							Say(Pick("Miss"), 2.8)
+						end
+					end)
+				end)
+			end
+
+			table.insert(Connections, { Disconnect = function()
+				Despawn()
+			end })
+
+			local PetSection = VisualsTab:CreateSection({ Title = "Pet", Icon = Icons.Person })
+			PetSection:AddToggle({ Title = "Pet", Description = "A cute buddy that follows you", Flag = "PetEnabled", Default = Pet.Enabled, Callback = function(V)
+				Pet.Enabled = V
+			end })
+			PetSection:AddDropdown({ Title = "Pet Type", Description = "Pick your buddy", Options = SpeciesNames, Default = Pet.Type, Flag = "PetType", Callback = function(V)
+				if Species[V] then
+					Pet.Type = V
+				end
+			end })
+			PetSection:AddTextbox({ Title = "Pet Name", Placeholder = "Name your pet", Flag = "PetName", Callback = function(V)
+				Pet.Name = string.sub(tostring(V or ""), 1, 16)
+				if Rig then
+					Rig.Tag.Text = Pet.Name
+					Rig.Tag.Visible = Pet.Name ~= ""
+				end
+			end })
+			PetSection:AddSlider({ Title = "Pet Size", Description = "How big it is", Min = 50, Max = 200, Default = Pet.Size, Step = 5, Suffix = "%", Flag = "PetSize", Callback = function(V)
+				Pet.Size = V
+			end })
+			PetSection:AddSlider({ Title = "Follow Distance", Description = "How far behind you", Min = 3, Max = 12, Default = Pet.Follow, Step = 1, Suffix = " studs", Flag = "PetFollow", Callback = function(V)
+				Pet.Follow = V
+			end })
+			PetSection:AddToggle({ Title = "Custom Color", Description = "Tint the pet's fur", Flag = "PetTint", Default = Pet.Tint, Callback = function(V)
+				Pet.Tint = V
+				if Rig then
+					for Index, Part in Rig.Fur do
+						Part.Color = V and Pet.Color or Rig.Info.Fur
+					end
+				end
+			end })
+			PetSection:AddColorPicker({ Title = "Pet Color", Default = Pet.Color, Flag = "PetColor", Callback = function(V)
+				Pet.Color = V
+				if Rig and Pet.Tint then
+					for Index, Part in Rig.Fur do
+						Part.Color = V
+					end
+				end
+			end })
+
+			local CheerSection = VisualsTab:CreateSection({ Title = "Pet Cheers", Icon = Icons.Person })
+			CheerSection:AddToggle({ Title = "Cheer Bubbles", Description = "Pet says kind words", Flag = "PetCheers", Default = Pet.Cheers, Callback = function(V)
+				Pet.Cheers = V
+			end })
+			CheerSection:AddToggle({ Title = "React To Shots", Description = "Reacts to your greens", Flag = "PetReact", Default = Pet.React, Callback = function(V)
+				Pet.React = V
+			end })
+			CheerSection:AddSlider({ Title = "Cheer Every", Description = "Seconds between cheers", Min = 10, Max = 120, Default = Pet.Every, Step = 5, Suffix = " s", Flag = "PetEvery", Callback = function(V)
+				Pet.Every = V
+			end })
+			CheerSection:AddButton({ Title = "Cheer Now", Callback = function()
+				if Rig then
+					Say(Pick("Idle"), 3.2)
+					Sparkle(8)
+				else
+					Notify("Pet", "Turn your pet on first")
+				end
+			end })
+		end
+
+	-- // Aural+ : Shot extras, Pass Link, Defense, Heights, Auto Play & Rec
+	do
+		local Plus = Aural.Plus
+		local TeleportService = game:GetService("TeleportService")
+		local Requester = (typeof(request) == "function" and request) or (typeof(http_request) == "function" and http_request) or (typeof(syn) == "table" and syn.request) or nil
+
+		local Extra = {
+			Pass = GetRemote("InputService", "Pass"),
+			Steal = GetRemote("InputService", "Steal"),
+			Clutch = GetRemote("InputService", "Clutch"),
+			LeaveRec = GetRemote("InterfaceService", "LeaveRec"),
+			Summary = GetRemote("InterfaceService", "Summary"),
+		}
+
+		-- // Helpers
+		local function Opponents(Character)
+			local List = {}
+			for Index, Other in GetOthers(Character) do
+				if IsOpponent(Other.Model, Character, true) then
+					table.insert(List, Other)
+				end
+			end
+			return List
+		end
+
+		local function Teammates(Character)
+			local List = {}
+			local Mine = Character:GetAttribute("Team")
+			for Index, Other in GetOthers(Character) do
+				if Mine ~= nil and Mine ~= 0 and Other.Model:GetAttribute("Team") == Mine then
+					table.insert(List, Other)
+				end
+			end
+			return List
+		end
+
+		local function Nearest(List, Position)
+			local Best, BestDistance = nil, math.huge
+			for Index, Entry in List do
+				local Distance = Flat(Entry.Root.Position - Position).Magnitude
+				if Distance < BestDistance then
+					Best, BestDistance = Entry, Distance
+				end
+			end
+			return Best, BestDistance
+		end
+
+		local function FindHandler()
+			if not Characters then
+				return nil
+			end
+			for Index, Model in Characters:GetChildren() do
+				if Model.Name ~= "InvisCharacter" and GetRoot(Model) and HasBall(Model) then
+					return Model
+				end
+			end
+			return nil
+		end
+
+		local function FreeBalls()
+			local List = {}
+			local Folder = workspace:FindFirstChild("Basketballs")
+			if not Folder then
+				return List
+			end
+			local Held = {}
+			for Index, Model in (Characters and Characters:GetChildren() or {}) do
+				local ModelRoot = Model:FindFirstChild("HumanoidRootPart")
+				local Weld = ModelRoot and ModelRoot:FindFirstChild("Basketball")
+				if Weld and Weld:IsA("Motor6D") and Weld.Part1 then
+					Held[Weld.Part1] = true
+				end
+			end
+			for Index, Ball in Folder:GetChildren() do
+				if Ball:IsA("BasePart") and not Held[Ball] and Ball:GetAttribute("Active") ~= false then
+					table.insert(List, Ball)
+				end
+			end
+			return List
+		end
+
+		local function TopSpeed(Sprinting)
+			local Speed = Sprinting and 17.35 or 14
+			if Aural.Player.SpeedBoost then
+				Speed = math.max(Speed, Aural.Player.Speed)
+			end
+			return Speed
+		end
+
+		local SprintOn = false
+		local function SetSprint(State)
+			if State ~= SprintOn then
+				SprintOn = State
+				Fire(Remotes.Sprint, State)
+			end
+		end
+
+		local HoldOn = false
+		local function SetHold(State)
+			if State ~= HoldOn then
+				HoldOn = State
+				Fire(Remotes.HoldG, { HoldingG = State })
+			end
+		end
+
+		local ClampCourt = function(Target)
+			return Target
+		end
+
+		local function LeaveCourt()
+			task.spawn(function()
+				pcall(function()
+					if Extra.LeaveRec:IsA("RemoteFunction") then
+						Extra.LeaveRec:InvokeServer()
+					else
+						Fire(Extra.LeaveRec)
+					end
+				end)
+			end)
+		end
+
+		local function Drive(Proxy, Velocity, Gyro, Target, Speed, Face)
+			Target = ClampCourt(Target)
+			local Offset = Flat(Target - Proxy.Position)
+			local Distance = Offset.Magnitude
+			Velocity.Velocity = (Distance > 0.5 and Offset.Unit * math.min(Speed, Distance * 6 + 2) or Vector3.zero) + Vector3.new(0, Velocity.Velocity.Y, 0)
+			local Look = Face and Flat(Face - Proxy.Position) or Offset
+			if Gyro and Look.Magnitude > 0.1 then
+				Gyro.CFrame = CFrame.lookAt(Proxy.Position, Proxy.Position + Look)
+			end
+			return Distance
+		end
+
+		local function Hover(Proxy, Velocity)
+			Velocity.Velocity = Vector3.new(0, Velocity.Velocity.Y, 0)
+		end
+
+		local function JumpAt(Toward)
+			local Proxy, Velocity, Gyro = GetProxy()
+			if Gyro and Proxy and Toward then
+				local Look = Flat(Toward - Proxy.Position)
+				if Look.Magnitude > 0.1 then
+					Gyro.CFrame = CFrame.lookAt(Proxy.Position, Proxy.Position + Look)
+				end
+			end
+			Fire(Remotes.Shoot, { Shoot = true, Input = "E", UseSpace = true })
+			Fire(Remotes.Jump)
+			task.delay(0.3, function()
+				Fire(Remotes.Shoot, { Shoot = false })
+			end)
+		end
+
+		local function Dunk()
+			Fire(Remotes.Shoot, { Shoot = true, Input = "E", UseSpace = true })
+			Fire(Remotes.Jump)
+			task.delay(0.9, function()
+				Fire(Remotes.Shoot, { Shoot = false })
+			end)
+		end
+
+		local DoGather = function()
+			return false
+		end
+		local Finish = function()
+			Dunk()
+		end
+
+		local function TakeShot(Sprint)
+			MarkAutoShot()
+			if Sprint ~= nil then
+				SetSprint(Sprint)
+			end
+			Fire(Remotes.Shoot, { Shoot = true, Input = "E" })
+			task.delay(1.1, function()
+				Fire(Remotes.Shoot, { Shoot = false })
+			end)
+		end
+
+		local function Glide(Proxy, Speed, DeltaTime)
+			local Moving = Flat(Proxy.AssemblyLinearVelocity)
+			local Direction = Moving.Magnitude > 1 and Moving.Unit or GetMoveDirection()
+			if Direction.Magnitude > 0 then
+				Proxy.CFrame += Direction * (Speed / 100 * 16) * DeltaTime
+			end
+		end
+
+		-- // Guard Humanization
+		local History = {}
+		local HistoryTarget = nil
+		local Anchor = nil
+		local MistakeOffset, MistakeUntil, MistakeRoll = Vector3.zero, 0, 0
+		local BiteUntil, BiteCool = 0, 0
+		local LastVelocity = Vector3.zero
+
+		GuardPosition = function(Target)
+			local Defense = Plus.Defense
+			local Now = os.clock()
+			local Position = Target.Root.Position
+			if HistoryTarget ~= Target.Model then
+				HistoryTarget = Target.Model
+				History = {}
+				Anchor = nil
+			end
+			table.insert(History, { Now, Position })
+			while #History > 1 and Now - History[1][1] > 1.5 do
+				table.remove(History, 1)
+			end
+			if Defense.ReactionTime > 0 then
+				local Wanted = Now - Defense.ReactionTime / 1000
+				for Index = #History, 1, -1 do
+					if History[Index][1] <= Wanted then
+						Position = History[Index][2]
+						break
+					end
+					Position = History[Index][2]
+				end
+			end
+			if Defense.IgnoreSlow then
+				local First = History[math.max(#History - 8, 1)]
+				local Elapsed = Now - First[1]
+				local Speed = Elapsed > 0.05 and Flat(Target.Root.Position - First[2]).Magnitude / Elapsed or 0
+				if Speed < Defense.SlowSpeed then
+					Anchor = Anchor or Position
+					if Flat(Position - Anchor).Magnitude > Defense.CreepDistance / 10 then
+						Anchor = Position
+					end
+					Position = Anchor
+				else
+					Anchor = nil
+				end
+			end
+			if Defense.Mistakes > 0 then
+				if Now - MistakeRoll > 1.2 then
+					MistakeRoll = Now
+					if math.random() * 100 < Defense.Mistakes then
+						local Angle = math.random() * math.pi * 2
+						MistakeOffset = Vector3.new(math.cos(Angle), 0, math.sin(Angle)) * (2 + math.random() * 2)
+						MistakeUntil = Now + 0.8
+					end
+				end
+				if Now < MistakeUntil then
+					Position += MistakeOffset
+				end
+			end
+			return Position
+		end
+
+		GuardAdjust = function(Velocity, Target, Offset)
+			local Defense = Plus.Defense
+			local Now = os.clock()
+			local Moved = Velocity.Velocity
+			if Defense.GetCrossed > 0 and #History > 3 then
+				local Old = History[math.max(#History - 12, 1)]
+				local Elapsed = Now - Old[1]
+				if Elapsed > 0.08 then
+					local Their = Flat(Target.Root.Position - Old[2]) / Elapsed
+					if Their.Magnitude > 8 and LastVelocity.Magnitude > 4 and Their.Unit:Dot(Flat(LastVelocity).Unit) < -0.2 and Now > BiteCool and math.random() * 100 < Defense.GetCrossed then
+						BiteUntil = Now + 0.4
+						BiteCool = Now + 2
+					end
+				end
+			end
+			if Now < BiteUntil or (Defense.HoldGround and Offset.Magnitude < 1.2) then
+				Moved = Vector3.new(0, Moved.Y, 0)
+			elseif Defense.Smoothness > 0 then
+				local Factor = 1 - math.clamp(Defense.Smoothness / 100, 0, 0.95)
+				local Flat2 = Flat(LastVelocity):Lerp(Flat(Moved), Factor)
+				Moved = Vector3.new(Flat2.X, Moved.Y, Flat2.Z)
+			end
+			LastVelocity = Moved
+			Velocity.Velocity = Moved
+		end
+
+		Ext.GuardPosition, Ext.GuardAdjust = GuardPosition, GuardAdjust
+
+		-- // Rebound
+		local LastRebound = 0
+		local function ReboundStep(Character, Root, Proxy, Velocity, Gyro, Range)
+			local Gravity = workspace.Gravity
+			local Best, BestLand, BestDistance = nil, nil, nil
+			for Index, Ball in FreeBalls() do
+				local Velocity3 = Ball.AssemblyLinearVelocity
+				local Position = Ball.Position
+				if Flat(Position - Root.Position).Magnitude <= Range and not (Ball:GetAttribute("MidShot") and Velocity3.Y > 2) then
+					local Land = Position
+					local Discriminant = Velocity3.Y * Velocity3.Y + 2 * Gravity * (Position.Y - (Root.Position.Y + 1))
+					if Discriminant > 0 then
+						local Time = (Velocity3.Y + math.sqrt(Discriminant)) / Gravity
+						Land = Position + Flat(Velocity3) * math.clamp(Time, 0, 3)
+					end
+					local Distance = Flat(Land - Root.Position).Magnitude
+					if not BestDistance or Distance < BestDistance then
+						Best, BestLand, BestDistance = Ball, Land, Distance
+					end
+				end
+			end
+			if not Best then
+				return false
+			end
+			Drive(Proxy, Velocity, Gyro, BestLand, TopSpeed(true), BestLand)
+			SetSprint(BestDistance > 6)
+			local Height = Best.Position.Y - Root.Position.Y
+			if Flat(Best.Position - Root.Position).Magnitude < 7 and Height > 1.5 and Height < 11 and os.clock() - LastRebound > 0.8 then
+				LastRebound = os.clock()
+				JumpAt(Best.Position)
+			end
+			return true
+		end
+
+		-- // Auto Play
+		local SpotOffsets = {
+			["Top 3"] = { 0, "Three" },
+			["Left Wing 3"] = { -45, "Three" },
+			["Right Wing 3"] = { 45, "Three" },
+			["Left Corner 3"] = { -82, "Three" },
+			["Right Corner 3"] = { 82, "Three" },
+			["Top Mid"] = { 0, 15 },
+			["Left Elbow"] = { -40, 14 },
+			["Right Elbow"] = { 40, 14 },
+		}
+		local SpotNames = { "Top 3", "Left Wing 3", "Right Wing 3", "Left Corner 3", "Right Corner 3", "Top Mid", "Left Elbow", "Right Elbow", "Anywhere 3" }
+
+		local function CourtFrame(Attack, Fallback)
+			local Own, OwnDistance = nil, -1
+			for Hoop in Hoops do
+				if Hoop.Parent then
+					local Distance = (Hoop.Position - Attack).Magnitude
+					if Distance > OwnDistance then
+						Own, OwnDistance = Hoop.Position, Distance
+					end
+				end
+			end
+			local Forward = Own and OwnDistance > 20 and Flat(Attack - Own) or Fallback
+			if not Forward or Forward.Magnitude < 0.1 then
+				Forward = Vector3.new(0, 0, -1)
+			end
+			Forward = Forward.Unit
+			return Forward, Forward:Cross(Vector3.yAxis)
+		end
+
+		local function SpotPosition(Name, Attack, Forward, Right)
+			local Info = SpotOffsets[Name]
+			if not Info then
+				return nil
+			end
+			local Radius = Info[2] == "Three" and Plus.Play.ThreeDistance or Info[2]
+			local Angle = math.rad(Info[1])
+			return Vector3.new(Attack.X, 0, Attack.Z) + (-Forward * math.cos(Angle) + Right * math.sin(Angle)) * Radius
+		end
+
+		local function LaneOpen(Root, Goal, Opps)
+			local To = Flat(Goal - Root.Position)
+			local Length = To.Magnitude
+			if Length < 1 then
+				return true
+			end
+			local Direction = To.Unit
+			for Index, Other in Opps do
+				local Relative = Flat(Other.Root.Position - Root.Position)
+				local Along = Relative:Dot(Direction)
+				if Along > 0 and Along < Length + 3 and (Relative - Direction * Along).Magnitude < 5 then
+					return false
+				end
+			end
+			return true
+		end
+
+		local Play = {
+			Active = false,
+			Plan = nil,
+			PlanAt = 0,
+			Man = nil,
+			ManAt = 0,
+			OffSpot = nil,
+			OffSpotAt = 0,
+			LastShot = 0,
+			LastPass = 0,
+			LastSteal = 0,
+			LastAnkle = 0,
+			LastAnti = 0,
+			LastBlock = 0,
+			PostSince = nil,
+		}
+
+		local function PlayStop()
+			Play.Plan = nil
+			Play.PostSince = nil
+			SetHold(false)
+			SetSprint(false)
+		end
+
+		local function ChoosePlan(Root, Goal, Opps, Forward, Right)
+			local Settings = Plus.Play
+			local Chosen = {}
+			for Index, Name in Settings.Spots do
+				if SpotOffsets[Name] then
+					table.insert(Chosen, Name)
+				end
+			end
+			local Anywhere = table.find(Settings.Spots, "Anywhere 3") ~= nil
+			local GoalDistance = Flat(Goal - Root.Position).Magnitude
+			if Settings.Dunks and Settings.RimRun and LaneOpen(Root, Goal, Opps) and GoalDistance < 45 then
+				return { Kind = "Rim" }
+			end
+			if Settings.PostUp and GoalDistance < 40 and math.random() * 100 < Settings.PostChance then
+				return { Kind = "Post" }
+			end
+			if (#Chosen > 0 or Anywhere) and math.random() * 100 < Settings.ThreeChance then
+				local Best, BestDistance = nil, math.huge
+				for Index, Name in Chosen do
+					local Position = SpotPosition(Name, Goal, Forward, Right)
+					local Distance = Flat(Position - Root.Position).Magnitude
+					if Distance < BestDistance then
+						Best, BestDistance = Name, Distance
+					end
+				end
+				if Best then
+					return { Kind = "Spot", Spot = Best }
+				end
+				return { Kind = "Anywhere" }
+			end
+			if Settings.Midranges then
+				return { Kind = "Mid" }
+			end
+			return { Kind = "Rim" }
+		end
+
+		local function PlayWithBall(Character, Root, Proxy, Velocity, Gyro, Action)
+			local Settings = Plus.Play
+			local Now = os.clock()
+			local Goal = GetGoal(Character)
+			if not Goal then
+				return
+			end
+			if Action == "Shooting" or Action == "Dunking" or Action == "Passing" or Action == "Gathering" then
+				return
+			end
+			local Opps = Opponents(Character)
+			local Closest, ClosestDistance = Nearest(Opps, Root.Position)
+			ClosestDistance = Closest and ClosestDistance or math.huge
+			local GoalDistance = Flat(Goal - Root.Position).Magnitude
+			local Forward, Right = CourtFrame(Goal, Flat(Goal - Root.Position))
+
+			if Settings.AntiSteal and Now - Play.LastAnti > 0.8 then
+				for Index, Other in Opps do
+					if Other.Model:GetAttribute("Action") == "Stealing" and (Other.Root.Position - Root.Position).Magnitude < 7 then
+						Play.LastAnti = Now
+						Fire(Remotes.Dribble, "H")
+						break
+					end
+				end
+			end
+
+			if Settings.PassTeammates and ClosestDistance < 4.5 and Now - Play.LastPass > 1.2 and not Play.PostSince then
+				local Best, BestScore = nil, -math.huge
+				for Index, Mate in Teammates(Character) do
+					local Cover = select(2, Nearest(Opponents(Character), Mate.Root.Position))
+					local Reach = (Mate.Root.Position - Root.Position).Magnitude
+					if Cover and Cover > 8 and Reach > 6 and Reach < 45 then
+						local Score = Cover - Flat(Goal - Mate.Root.Position).Magnitude * 0.2
+						if Score > BestScore then
+							Best, BestScore = Mate, Score
 						end
 					end
 				end
-				if dist > 70 then pet.pos = target end
-				local rate = 1 - math.exp(-dt * (dist > D * 2 and 9 or 4))
-				local newPos = pet.pos:Lerp(target, rate)
-				local vel = Vector3.new(newPos.X - pet.pos.X, 0, newPos.Z - pet.pos.Z)
-				local mv = vel.Magnitude / math.max(dt, 1e-3)
-				pet.moving += ((mv > 1.2 and 1 or 0) - pet.moving) * math.min(1, dt * 8)
-				pet.pos = newPos
+				if Best then
+					Play.LastPass = Now
+					Fire(Extra.Pass, { Player = Best.Model.Name, PassType = 1 })
+					return
+				end
+			end
 
-				-- face where it's going, or look at you when it stops
-				local want
-				if mv > 1.2 then
-					want = vel.Unit
+			if Settings.BreakAnkles and ClosestDistance <= 7 and Now - Play.LastAnkle > 1.6 and (Action == "" or Action == "TripleThreat") and not Play.PostSince then
+				local Moves
+				if Settings.UseMyCombo and #Aural.Dribbling.ComboMoves > 0 then
+					Moves = Aural.Dribbling.ComboMoves
+				elseif #Settings.AnkleMoves > 0 then
+					Moves = { Settings.AnkleMoves[math.random(#Settings.AnkleMoves)] }
+				end
+				if Moves then
+					Play.LastAnkle = Now
+					RunCombo(Moves, Aural.Dribbling.ComboDelay)
+				end
+			end
+
+			if Settings.ShootOpen and Now - Play.LastShot > 1.5 and (Action == "" or Action == "Dribbling") and ClosestDistance >= Settings.OpenSpace then
+				for Index, Name in Settings.Spots do
+					local Position = SpotPosition(Name, Goal, Forward, Right)
+					if Position and Flat(Position - Root.Position).Magnitude <= Settings.ShotRange then
+						Play.LastShot = Now
+						TakeShot()
+						return
+					end
+				end
+			end
+
+			if not Play.Plan or Now - Play.PlanAt > 2.5 then
+				Play.Plan = ChoosePlan(Root, Goal, Opps, Forward, Right)
+				Play.PlanAt = Now
+				Play.PostSince = nil
+				SetHold(false)
+			end
+			local Plan = Play.Plan
+
+			if Plan.Kind == "Rim" then
+				local Distance = Drive(Proxy, Velocity, Gyro, Goal, TopSpeed(true), Goal)
+				SetSprint(true)
+				if Flat(Goal - Root.Position).Magnitude <= 11 and Now - Play.LastShot > 1.5 then
+					Play.LastShot = Now
+					MarkAutoShot()
+					Finish()
+				end
+			elseif Plan.Kind == "Mid" then
+				local Away = Flat(Root.Position - Goal)
+				Away = Away.Magnitude > 0.1 and Away.Unit or -Forward
+				local Spot = Goal + Away * 15
+				local Distance = Drive(Proxy, Velocity, Gyro, Spot, TopSpeed(false), Goal)
+				SetSprint(Distance > 8)
+				if (Distance < 2.5 or GoalDistance <= 16) and ClosestDistance >= Settings.OpenSpace * 0.5 and Now - Play.LastShot > 1.5 then
+					Play.LastShot = Now
+					Hover(Proxy, Velocity)
+					TakeShot(false)
+				end
+			elseif Plan.Kind == "Spot" then
+				local Spot = SpotPosition(Plan.Spot, Goal, Forward, Right)
+				local Distance = Drive(Proxy, Velocity, Gyro, Spot, TopSpeed(false), Goal)
+				SetSprint(Distance > 8)
+				if Distance <= 3 then
+					Hover(Proxy, Velocity)
+					if (not Settings.ShootOpen or ClosestDistance >= Settings.OpenSpace) and Now - Play.LastShot > 1.5 then
+						Play.LastShot = Now
+						TakeShot(false)
+					end
+				end
+			elseif Plan.Kind == "Anywhere" then
+				if GoalDistance <= Aural.Shooting.ShootRange then
+					Hover(Proxy, Velocity)
+					if ClosestDistance >= Settings.OpenSpace and Now - Play.LastShot > 1.5 then
+						Play.LastShot = Now
+						TakeShot(false)
+					end
 				else
-					local toP = Vector3.new(rp.X - pet.pos.X, 0, rp.Z - pet.pos.Z)
-					want = toP.Magnitude > 0.1 and toP.Unit or nil
+					Drive(Proxy, Velocity, Gyro, Goal, TopSpeed(false), Goal)
+					SetSprint(GoalDistance > Aural.Shooting.ShootRange + 8)
 				end
-				if want then
-					local ty = math.atan2(-want.X, -want.Z)
-					local diff = ((ty - pet.yaw + pi) % (2 * pi)) - pi
-					pet.yaw += diff * (1 - math.exp(-dt * 8))
-				end
-
-				-- ground height
-				local hit = workspace:Raycast(Vector3.new(pet.pos.X, rp.Y + 2, pet.pos.Z), Vector3.new(0, -40, 0), rayParams)
-				local gy = hit and hit.Position.Y or (rp.Y - 3)
-				pet.y = pet.y and (pet.y + (gy - pet.y) * (1 - math.exp(-dt * 12))) or gy
-
-				-- emote scheduling
-				if pet.emote and now - pet.emoteT0 > pet.emote.dur then pet.emote = nil end
-				if P.AutoEmote and not pet.emote and now > pet.nextEmote and idleFor > 1.2 then
-					playEmote(pet, nil)
-					pet.nextEmote = now + rnd(7, 15)
-				end
-				if P.Chat and not pet.bubbleBusy and now > pet.nextChat then
-					petSay(pet)
-					if not pet.emote and math.random() < 0.4 then playEmote(pet, "Wave") end
-					pet.nextChat = now + P.ChatEvery * rnd(0.7, 1.3)
-				end
-
-				-- pose
-				local t = now + pet.seed
-				local body, rots
-				if pet.emote then
-					local et = now - pet.emoteT0
-					body, rots = pet.emote.fn(et, math.clamp(et / pet.emote.dur, 0, 1))
+			elseif Plan.Kind == "Post" then
+				if GoalDistance > 15 then
+					local Away = Flat(Root.Position - Goal)
+					Away = Away.Magnitude > 0.1 and Away.Unit or -Forward
+					Drive(Proxy, Velocity, Gyro, Goal + Away * 13, TopSpeed(true), Goal)
+					SetSprint(true)
 				else
-					local m = pet.moving
-					body = CFrame.new(0, abs(sin(t * 9)) * 0.3 * m + sin(t * 2.2) * 0.08 * (1 - m), 0) * Ang(0, 0, sin(t * 9) * 0.1 * m)
-					rots = {
-						armR = Ang(0, 0, rad(10) + sin(t * 9) * 0.5 * m + sin(t * 2) * 0.06),
-						armL = Ang(0, 0, -rad(10) - sin(t * 9 + pi) * 0.5 * m - sin(t * 2 + 1) * 0.06),
-						head = Ang(sin(t * 1.3) * 0.04, 0, 0),
-						tail = Ang(0, sin(t * 4) * 0.4, 0),
-					}
+					SetSprint(false)
+					SetHold(true)
+					Play.PostSince = Play.PostSince or Now
+					Drive(Proxy, Velocity, Gyro, Goal, 5, Goal)
+					if Now - Play.PostSince > 1.4 and Now - Play.LastShot > 1.5 then
+						Play.LastShot = Now
+						local Fade = Settings.PostFade and math.random() * 100 < Settings.PostFadeChance
+						SetHold(false)
+						Play.PostSince = nil
+						Play.Plan = nil
+						if Settings.PostHopStep and DoGather("Back") then
+							task.delay(0.5, function()
+								if Running and Settings.Enabled then
+									TakeShot(Fade)
+								end
+							end)
+						else
+							TakeShot(Fade)
+						end
+					end
 				end
-				local cy = pet.def.Top * 0.5 * P.Scale
-				local hover = pet.def.Float * P.Scale + (pet.def.Float > 0 and sin(t * 2) * 0.25 or 0)
-				local base = CFrame.new(pet.pos.X, pet.y + hover, pet.pos.Z) * Ang(0, pet.yaw, 0)
-					* CFrame.new(0, cy, 0) * body * CFrame.new(0, -cy, 0)
+			end
+		end
 
-				for _, e in ipairs(pet.parts) do
-					local cf = e.cf
-					local r = e.tag and rots[e.tag]
-					if r then cf = CFrame.new(e.pivot) * r * CFrame.new(-e.pivot) * cf end
-					e.part.CFrame = base * cf
+		local function PlayWithoutBall(Character, Root, Proxy, Velocity, Gyro, Action, Handler)
+			local Settings = Plus.Play
+			local Now = os.clock()
+			Play.Plan = nil
+			Play.PostSince = nil
+			if Action ~= "" and Action ~= "Dribbling" then
+				return
+			end
+			local HandlerRoot = Handler and GetRoot(Handler)
+
+			if Handler and HandlerRoot and IsOpponent(Handler, Character, true) then
+				if not (Settings.AutoDefense or Settings.ManDefense) then
+					SetHold(false)
+					return
+				end
+				local Target = { Model = Handler, Root = HandlerRoot }
+				if Settings.ManDefense then
+					if not Play.Man or not Play.Man.Model.Parent or Now - Play.ManAt > 6 then
+						Play.Man = Nearest(Opponents(Character), Root.Position)
+						Play.ManAt = Now
+					end
+					local Mine = Flat(HandlerRoot.Position - Root.Position).Magnitude
+					local Closer = false
+					for Index, Mate in Teammates(Character) do
+						if Flat(HandlerRoot.Position - Mate.Root.Position).Magnitude < Mine then
+							Closer = true
+						end
+					end
+					if Play.Man and Closer then
+						Target = Play.Man
+					end
+				end
+				local Hoop = GetGoal(Handler) or Root.Position
+				local ToHoop = Flat(Hoop - Target.Root.Position)
+				ToHoop = ToHoop.Magnitude > 0.1 and ToHoop.Unit or Vector3.zero
+				local Spot = Target.Root.Position + ToHoop * Aural.Defense.GuardDistance
+				local Distance = Drive(Proxy, Velocity, Gyro, Spot, TopSpeed(true), Target.Root.Position)
+				SetSprint(Distance > 10)
+				SetHold(Distance < 14)
+				local HandlerDistance = Flat(HandlerRoot.Position - Root.Position).Magnitude
+				if BlockActions[Handler:GetAttribute("Action")] and HandlerDistance <= Aural.Defense.BlockRange and Now - Play.LastBlock > 1 then
+					Play.LastBlock = Now
+					task.delay(Aural.Defense.BlockDelay / 1000, function()
+						if Running and BlockActions[Handler:GetAttribute("Action")] then
+							JumpAt(HandlerRoot.Position)
+						end
+					end)
+				end
+				if Settings.AutoSteal and HandlerDistance <= 5 and Now - Play.LastSteal > 1 then
+					Play.LastSteal = Now
+					Fire(Extra.Steal)
+				end
+				return
+			end
+
+			SetHold(false)
+			if Handler and HandlerRoot then
+				local Goal = GetGoal(Character)
+				if not Goal then
+					return
+				end
+				local Forward, Right = CourtFrame(Goal, Flat(Goal - Root.Position))
+				if Settings.RimRun then
+					local Side = Right * ((Root.Position - HandlerRoot.Position):Dot(Right) >= 0 and 1 or -1) * 4
+					local Spot = Goal - Forward * 5 + Side
+					local Distance = Drive(Proxy, Velocity, Gyro, Spot, TopSpeed(true), HandlerRoot.Position)
+					SetSprint(Distance > 8)
+				else
+					if not Play.OffSpot or Now - Play.OffSpotAt > 2.5 then
+						Play.OffSpotAt = Now
+						Play.OffSpot = nil
+						local Mates = Teammates(Character)
+						local BestDistance = math.huge
+						for Index, Name in Settings.Spots do
+							local Position = SpotPosition(Name, Goal, Forward, Right)
+							if Position then
+								local Taken = false
+								for Index2, Mate in Mates do
+									if Flat(Mate.Root.Position - Position).Magnitude < 8 then
+										Taken = true
+									end
+								end
+								local Distance = Flat(Position - Root.Position).Magnitude
+								if not Taken and Distance < BestDistance then
+									Play.OffSpot, BestDistance = Position, Distance
+								end
+							end
+						end
+					end
+					if Play.OffSpot then
+						local Distance = Drive(Proxy, Velocity, Gyro, Play.OffSpot, TopSpeed(false), HandlerRoot.Position)
+						SetSprint(Distance > 10)
+					else
+						Hover(Proxy, Velocity)
+						SetSprint(false)
+					end
+				end
+				return
+			end
+
+			if ReboundStep(Character, Root, Proxy, Velocity, Gyro, 30) then
+				return
+			end
+			SetSprint(false)
+		end
+
+		-- // Main Stepped
+		local LiftAction, LiftBase = nil, 0
+		local PreviousAction = nil
+		local HoldOwn, StanceSince = false, nil
+
+		Connect(RunService.Stepped, function(Time, DeltaTime)
+			local Character = GetCharacter()
+			local Root = GetRoot(Character)
+			local Proxy, Velocity, Gyro = GetProxy()
+			if not Root or not Proxy then
+				if Play.Active then
+					Play.Active = false
+					PlayStop()
+				end
+				return
+			end
+			local Action = Character:GetAttribute("Action")
+			local Now = os.clock()
+			local CanMove = Character:GetAttribute("CanMove")
+
+			-- // Defense Magnet
+			if Action ~= PreviousAction then
+				PreviousAction = Action
+				local Defense = Plus.Defense
+				if Defense.Magnet then
+					local Reach = Defense.MagnetReach
+					if Action == "Stealing" and Defense.MagnetSteal then
+						local Best, BestDistance = nil, Reach
+						for Index, Other in GetOthers(Character) do
+							local Distance = (Other.Root.Position - Root.Position).Magnitude
+							if HasBall(Other.Model) and IsOpponent(Other.Model, Character, true) and Distance < BestDistance then
+								Best, BestDistance = Other, Distance
+							end
+						end
+						if Best and BestDistance > 2.5 then
+							local Toward = Flat(Best.Root.Position - Proxy.Position).Unit
+							Proxy.CFrame = CFrame.new(Best.Root.Position.X - Toward.X * 2, Proxy.Position.Y, Best.Root.Position.Z - Toward.Z * 2) * Proxy.CFrame.Rotation
+						end
+					elseif Action == "Blocking" and Defense.MagnetBlock then
+						local Best, BestDistance = nil, Reach
+						for Index, Other in GetOthers(Character) do
+							local Distance = (Other.Root.Position - Root.Position).Magnitude
+							if BlockActions[Other.Model:GetAttribute("Action")] and IsOpponent(Other.Model, Character, true) and Distance < BestDistance then
+								Best, BestDistance = Other, Distance
+							end
+						end
+						if Best and BestDistance > 3 then
+							local Toward = Flat(Best.Root.Position - Proxy.Position).Unit
+							Proxy.CFrame = CFrame.new(Best.Root.Position.X - Toward.X * 2.5, Proxy.Position.Y, Best.Root.Position.Z - Toward.Z * 2.5) * Proxy.CFrame.Rotation
+						end
+					elseif Action == "Rebounding" and Defense.MagnetRebound then
+						local Best, BestDistance = nil, Reach
+						for Index, Ball in FreeBalls() do
+							local Distance = Flat(Ball.Position - Root.Position).Magnitude
+							if Distance < BestDistance then
+								Best, BestDistance = Ball, Distance
+							end
+						end
+						if Best then
+							Proxy.CFrame = CFrame.new(Best.Position.X, Proxy.Position.Y, Best.Position.Z) * Proxy.CFrame.Rotation
+						end
+					end
+				end
+			end
+
+			-- // Heights
+			local Lifting = (Plus.Player.DunkHeight and Action == "Dunking") or (Plus.Player.ShotHeight and Action == "Shooting")
+			if Lifting then
+				if LiftAction ~= Action then
+					LiftAction = Action
+					LiftBase = Proxy.Position.Y
+				end
+				local Maximum = Action == "Dunking" and Plus.Player.DunkHeightValue or Plus.Player.ShotHeightValue
+				local Rise = Proxy.Position.Y - LiftBase
+				if Rise < Maximum then
+					Proxy.CFrame += Vector3.new(0, math.min(Maximum - Rise, 70 * DeltaTime), 0)
+				end
+			else
+				LiftAction = nil
+			end
+
+			-- // Auto Hold G
+			if Plus.Defense.AutoHoldG and not Plus.Play.Enabled then
+				local Handler = FindHandler()
+				local HandlerRoot = Handler and GetRoot(Handler)
+				local Want = Handler and Handler ~= Character and HandlerRoot and IsOpponent(Handler, Character, true) and not HasBall(Character) and Action == "" and Flat(HandlerRoot.Position - Root.Position).Magnitude <= 14
+				if Want then
+					StanceSince = StanceSince or Now
+					if Now - StanceSince >= Plus.Defense.StanceDelay / 1000 and not HoldOwn then
+						HoldOwn = true
+						Fire(Remotes.HoldG, { HoldingG = true })
+					end
+				else
+					StanceSince = nil
+					if HoldOwn then
+						HoldOwn = false
+						Fire(Remotes.HoldG, { HoldingG = false })
+					end
+				end
+			elseif HoldOwn then
+				HoldOwn = false
+				Fire(Remotes.HoldG, { HoldingG = false })
+			end
+
+			-- // Auto Rebound
+			if Plus.Defense.AutoRebound and not Plus.Play.Enabled and CanMove and Action == "" and not HasBall(Character) then
+				ReboundStep(Character, Root, Proxy, Velocity, Gyro, Plus.Defense.ReboundRange)
+			end
+
+			-- // Auto Play
+			local Settings = Plus.Play
+			if not Settings.Enabled then
+				if Play.Active then
+					Play.Active = false
+					PlayStop()
+				end
+				return
+			end
+			if not Settings.AnyTime and not (Character:GetAttribute("InGame") or Character:GetAttribute("OnCourt")) then
+				if Play.Active then
+					Play.Active = false
+					PlayStop()
+				end
+				return
+			end
+			Play.Active = true
+			if CanMove == false then
+				return
+			end
+			if HasBall(Character) then
+				PlayWithBall(Character, Root, Proxy, Velocity, Gyro, Action)
+			else
+				PlayWithoutBall(Character, Root, Proxy, Velocity, Gyro, Action, FindHandler())
+			end
+		end)
+
+		-- // Heartbeat Extras: Jelly, Self Lob, Pass Link, Rec
+		local LastJelly, LastLob, LastLink = 0, 0, 0
+		local LastReady, LastHopCheck = 0, 0
+		local WasInGame, GameEnded, EmptySince = false, nil, nil
+		local TipHandled = false
+
+		local function SendWebhook(Title, Description, CustomUrl)
+			local Url = CustomUrl or Plus.Rec.WebhookUrl
+			if type(Url) ~= "string" or not (Url:match("^https://discord%.com/api/webhooks/") or Url:match("^https://discordapp%.com/api/webhooks/") or Url:match("^https://[%w]+%.discord%.com/api/webhooks/")) then
+				Notify("Webhook", "Enter a valid Discord webhook URL first.")
+				return false
+			end
+			if not Requester then
+				Notify("Webhook", "Your executor has no request function.")
+				return false
+			end
+			local Body = HttpService:JSONEncode({
+				username = "Aural",
+				embeds = { {
+					title = Title,
+					description = Description,
+					color = 16734866,
+					footer = { text = LocalPlayer.Name },
+				} },
+			})
+			local Ok = pcall(Requester, { Url = Url, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = Body })
+			return Ok
+		end
+
+		local function Describe(Value, Depth)
+			if type(Value) == "table" then
+				if Depth > 2 then
+					return "{...}"
+				end
+				local Parts = {}
+				for Key, Item in Value do
+					if #Parts >= 14 then
+						table.insert(Parts, "...")
+						break
+					end
+					table.insert(Parts, tostring(Key) .. "=" .. Describe(Item, Depth + 1))
+				end
+				return "{" .. table.concat(Parts, ", ") .. "}"
+			end
+			return tostring(Value)
+		end
+
+		pcall(function()
+			Connect(Extra.Summary.OnClientEvent, function(...)
+				if not Plus.Rec.SendResults then
+					return
+				end
+				local Parts = {}
+				for Index, Value in { ... } do
+					table.insert(Parts, Describe(Value, 0))
+				end
+				task.spawn(SendWebhook, "Game finished", string.sub(table.concat(Parts, "\n"), 1, 1800))
+			end)
+		end)
+
+		local function Hop()
+			local Ok, Servers = pcall(function()
+				return HttpService:JSONDecode(game:HttpGet(("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100"):format(game.PlaceId)))
+			end)
+			if not Ok or not Servers or not Servers.data then
+				return
+			end
+			local Choices = {}
+			for Index, Server in Servers.data do
+				if Server.id ~= game.JobId and Server.playing and Server.maxPlayers and Server.playing >= 1 and Server.playing < Server.maxPlayers - 1 then
+					table.insert(Choices, Server.id)
+				end
+			end
+			if #Choices > 0 then
+				pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, Choices[math.random(#Choices)], LocalPlayer)
+				end)
+			end
+		end
+
+		local function PressButton(Pattern)
+			if typeof(getconnections) ~= "function" then
+				return false
+			end
+			local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+			if not PlayerGui then
+				return false
+			end
+			for Index, Object in PlayerGui:GetDescendants() do
+				if Object:IsA("TextButton") and Object.Visible and Object.AbsoluteSize.X > 0 and string.match(string.lower(Object.Text), Pattern) then
+					local Shown = true
+					local Parent = Object.Parent
+					while Parent and Parent ~= PlayerGui do
+						if (Parent:IsA("GuiObject") and not Parent.Visible) or (Parent:IsA("ScreenGui") and not Parent.Enabled) then
+							Shown = false
+							break
+						end
+						Parent = Parent.Parent
+					end
+					if Shown then
+						for Index2, Signal in { Object.Activated, Object.MouseButton1Click } do
+							for Index3, Connection in getconnections(Signal) do
+								pcall(function() Connection:Fire() end)
+							end
+						end
+						return true
+					end
+				end
+			end
+			return false
+		end
+
+		Connect(RunService.Heartbeat, function()
+			local Character = GetCharacter()
+			local Root = GetRoot(Character)
+			if not Root then
+				return
+			end
+			local Now = os.clock()
+			local Action = Character:GetAttribute("Action")
+			local Goal = GetGoal(Character)
+			local Ball = HasBall(Character)
+
+			-- // Smart Jelly
+			if Plus.Shot.SmartJelly and Ball and Goal and (Action == "" or Action == "Dribbling") and Now - LastJelly > 1.5 and Flat(Goal - Root.Position).Magnitude <= Plus.Shot.JellyRange then
+				LastJelly = Now
+				MarkAutoShot()
+				Fire(Remotes.Shoot, { Shoot = true, Input = "E", UseSpace = true })
+				Fire(Remotes.Jump)
+				task.delay(0.06, function()
+					Fire(Remotes.Shoot, { Shoot = true, Input = "E", UseSpace = true })
+					Fire(Remotes.Jump)
+				end)
+				task.delay(1.1, function()
+					Fire(Remotes.Shoot, { Shoot = false })
+				end)
+			end
+
+			-- // Auto Self Lob
+			if Plus.Shot.SelfLob and Ball and Goal and Action == "" and Now - LastLob > 2 and Flat(Goal - Root.Position).Magnitude <= Plus.Shot.LobRange then
+				LastLob = Now
+				Fire(Extra.Clutch, true)
+				Fire(Extra.Pass, { PassType = 4, Player = LocalPlayer.Name })
+			end
+			if Plus.Shot.SelfLob and (Action == "CatchingLob" or Character:GetAttribute("CatchingLob") == true) and Now - LastJelly > 0.8 then
+				LastJelly = Now
+				MarkAutoShot()
+				Dunk()
+			end
+
+			-- // Pass Link
+			if Plus.Pass.Link and Plus.Pass.Target and Ball and Action ~= "Passing" and Now - LastLink > 0.6 then
+				local Other = Players:FindFirstChild(Plus.Pass.Target)
+				local OtherCharacter = Other and Characters and Characters:FindFirstChild(Other.Name)
+				if OtherCharacter and OtherCharacter:GetAttribute("CallingForBall") == true then
+					LastLink = Now
+					Fire(Extra.Pass, { Player = Other.Name, PassType = Plus.Pass.PassType == "Lob" and 4 or 1 })
+				end
+			end
+
+			-- // Auto Jump Ball
+			if Plus.Rec.AutoJumpBall then
+				if Action == "TipOff" and not TipHandled then
+					TipHandled = true
+					for Index = 0, 3 do
+						task.delay(0.25 * Index, function()
+							if Running then
+								JumpAt(nil)
+							end
+						end)
+					end
+				elseif Action ~= "TipOff" then
+					TipHandled = false
+				end
+			end
+
+			-- // Auto Ready
+			if Plus.Rec.AutoReady and not Character:GetAttribute("InGame") and Now - LastReady > 3 then
+				LastReady = Now
+				PressButton("^%s*ready%s*u?p?%s*$")
+			end
+
+			-- // Auto Leave Rec
+			local InGame = Character:GetAttribute("InGame") == true
+			if WasInGame and not InGame then
+				GameEnded = Now
+			end
+			if InGame then
+				GameEnded = nil
+			end
+			WasInGame = InGame
+			if Plus.Rec.AutoLeave and GameEnded and Now - GameEnded >= Plus.Rec.LeaveAfter then
+				GameEnded = nil
+				LeaveCourt()
+			end
+
+			-- // Server Hop
+			if Plus.Rec.ServerHop and Now - LastHopCheck > 3 then
+				LastHopCheck = Now
+				local Others = 0
+				for Index, Other in GetOthers(Character) do
+					if Other.Model:GetAttribute("InGame") or Other.Model:GetAttribute("OnCourt") then
+						Others += 1
+					end
+				end
+				if Others == 0 then
+					EmptySince = EmptySince or Now
+					if Now - EmptySince >= Plus.Rec.HopAfter then
+						EmptySince = nil
+						task.spawn(Hop)
+					end
+				else
+					EmptySince = nil
 				end
 			end
 		end)
 
-		-- Pets cheer when a green goes off (any player's green effect)
-		task.spawn(function()
-			local t0 = os.clock()
-			while Running and not Remotes.RunGreenEffect and os.clock() - t0 < 90 do task.wait(1) end
-			local r = Remotes.RunGreenEffect
-			if r and Running then
-				Connect(r.OnClientEvent, function()
-					if not P.Enabled then return end
-					for _, pet in ipairs(P.List) do
-						playEmote(pet, "Cheer")
-						if P.Chat and math.random() < 0.5 then petSay(pet, "GREEN! Let's go, %s!") end
-					end
-				end)
+		-- // Contest Zone
+		local ContestCircle = Instance.new("CylinderHandleAdornment")
+		ContestCircle.Name = HttpService:GenerateGUID(false)
+		ContestCircle.Adornee = workspace.Terrain
+		ContestCircle.Height = 0.12
+		ContestCircle.Transparency = 0.35
+		ContestCircle.Color3 = Color3.fromRGB(255, 70, 70)
+		ContestCircle.Visible = false
+		ContestCircle.Parent = GuiRoot
+
+		Connect(RunService.RenderStepped, function()
+			local Root = GetRoot(GetCharacter())
+			ContestCircle.Visible = Plus.Shot.AntiContest and Plus.Shot.ShowContest and Root ~= nil
+			if ContestCircle.Visible then
+				ContestCircle.Radius = Plus.Shot.ContestRange
+				ContestCircle.InnerRadius = math.max(Plus.Shot.ContestRange - 0.25, 0)
+				ContestCircle.CFrame = CFrame.new(Root.Position.X, Root.Position.Y - 2.9, Root.Position.Z) * CFrame.Angles(math.rad(90), 0, 0)
 			end
 		end)
 
 		table.insert(Connections, { Disconnect = function()
-			pcall(clearPets)
-			pcall(function() Folder:Destroy() end)
+			ContestCircle:Destroy()
+			Plus.Play.Enabled = false
+			if HoldOn or HoldOwn then
+				Fire(Remotes.HoldG, { HoldingG = false })
+			end
+			if SprintOn then
+				Fire(Remotes.Sprint, false)
+			end
 		end })
 
-		-- ═════════════ MENU ═════════════
-		PetsTab:CreateSection("Companions")
-		PetsTab:CreateToggle({
-			Name = "Enable pets", Desc = "Pets follow you, dance and chat. Only you can see them.",
-			Flag = "pb_pets", CurrentValue = P.Enabled,
-			Callback = function(v) P.Enabled = v == true; queueRebuild() end,
-		})
-		for i = 1, 3 do
-			PetsTab:CreateDropdown({
-				Name = "Pet " .. i, Options = SlotOptions, CurrentValue = P.Slots[i], Flag = "pb_pet_slot" .. i,
-				Callback = function(v)
-					if type(v) == "table" then v = v[1] end
-					if v == nil then return end
-					P.Slots[i] = v
-					queueRebuild()
-				end,
-			})
+		-- // Unlock All & Custom Mascots
+		do
+			local Added = {}
+			local UnlockOn = false
+			local Config = ReplicatedStorage:WaitForChild("Aero"):WaitForChild("Shared"):WaitForChild("Config")
+
+			local function Read(Name)
+				local Module = Config:FindFirstChild(Name)
+				local Ok, Value = pcall(require, Module)
+				return Ok and type(Value) == "table" and Value or nil
+			end
+
+			local function GetInventory()
+				local Ok, Controller = pcall(function()
+					return require(LocalPlayer.PlayerScripts.Aero.Controllers.Player)
+				end)
+				local Data = Ok and type(Controller) == "table" and Controller.ProfileData
+				return Data and Data.Inventory or nil
+			end
+
+			local function GiveEntry(List, Key, Value)
+				if List[Key] == nil then
+					List[Key] = Value
+					table.insert(Added, { List, Key })
+				end
+			end
+
+			local function GiveName(List, Name)
+				if not table.find(List, Name) then
+					table.insert(List, Name)
+					table.insert(Added, { List, Name, true })
+				end
+			end
+
+			local function Merge()
+				local Inventory = GetInventory()
+				if not Inventory then
+					return
+				end
+				local Accessories = Read("Accessories")
+				if Accessories then
+					for Type, Items in Accessories do
+						if type(Items) == "table" then
+							for Name, Item in Items do
+								if type(Item) == "table" and Item.Price ~= nil then
+									if type(Inventory[Type]) ~= "table" then
+										Inventory[Type] = {}
+									end
+									GiveEntry(Inventory[Type], Name, { 255, 255, 255 })
+								end
+							end
+						end
+					end
+				end
+				local Titles = Read("Titles")
+				if Titles and type(Inventory.Titles) == "table" then
+					for Name in Titles do
+						GiveName(Inventory.Titles, Name)
+					end
+				end
+				local Banners = Read("Banners")
+				if Banners and type(Inventory.Banners) == "table" then
+					for Name in Banners do
+						GiveName(Inventory.Banners, Name)
+					end
+				end
+				local Effects = Read("GreenEffects")
+				if Effects and type(Effects.Effects) == "table" and type(Inventory.GreenEffects) == "table" then
+					for Name in Effects.Effects do
+						GiveName(Inventory.GreenEffects, Name)
+					end
+				end
+				if ReplicatedStorage:FindFirstChild("Accessories") and ReplicatedStorage.Accessories:FindFirstChild("Mascots") then
+					if type(Inventory.Mascots) ~= "table" then
+						Inventory.Mascots = {}
+					end
+					for Index, Mascot in ReplicatedStorage.Accessories.Mascots:GetChildren() do
+						GiveEntry(Inventory.Mascots, Mascot.Name, {})
+					end
+				end
+			end
+
+			local function Revoke()
+				for Index = #Added, 1, -1 do
+					local Entry = Added[Index]
+					if Entry[3] then
+						local Position = table.find(Entry[1], Entry[2])
+						if Position then
+							table.remove(Entry[1], Position)
+						end
+					else
+						Entry[1][Entry[2]] = nil
+					end
+				end
+				table.clear(Added)
+			end
+
+			task.spawn(function()
+				while Running do
+					if UnlockOn then
+						pcall(Merge)
+					end
+					task.wait(2)
+				end
+			end)
+			table.insert(Connections, { Disconnect = Revoke })
+
+			local Chosen = "Tung Tung Sahur"
+			local Link = ""
+			local Wearing = false
+			local Names = {}
+			for Index, Name in MascotOptions do
+				if Name ~= "None" then
+					table.insert(Names, Name)
+				end
+			end
+			table.insert(Names, "Custom")
+
+			local function Wear(State)
+				Wearing = State
+				if not State then
+					Aural.Cosmetics.Mascot = "None"
+					RefreshCosmetics()
+					return
+				end
+				local Name = Chosen
+				if Chosen == "Custom" then
+					local Id = tonumber(string.match(Link, "bundles/(%d+)") or string.match(Link, "^%s*(%d+)%s*$"))
+					if not Id then
+						Notify("Mascot", "Paste a Roblox bundle link first.")
+						return
+					end
+					Name = "Custom " .. Id
+					CustomMascotIds[Name] = Id
+				end
+				Aural.Cosmetics.Mascot = Name
+				RefreshCosmetics()
+			end
+
+			local Page = VisualsCategory:CreateTab({ Title = "Mascots", Icon = Icons.Person })
+			local Cosmetics = Page:CreateSection({ Title = "Cosmetics", Icon = Icons.Person })
+			Cosmetics:AddToggle({ Title = "Unlock All", Description = "Shows every cosmetic as yours", Flag = "UnlockAll", Default = false, Callback = function(V)
+				UnlockOn = V
+				if V then
+					pcall(Merge)
+				else
+					Revoke()
+				end
+			end })
+
+			local Mascots = Page:CreateSection({ Title = "Custom Mascots", Icon = Icons.Person })
+			Mascots:AddDropdown({ Title = "Mascot", Description = "Who you turn into", Options = Names, Default = Chosen, Flag = "MascotPick", MaxRows = 8, Callback = function(V)
+				Chosen = V or Chosen
+				if Wearing then
+					Wear(true)
+				end
+			end })
+			Mascots:AddTextbox({ Title = "Custom Mascot", Placeholder = "A bundle link, for Custom", Flag = "MascotLink", Save = false, Callback = function(V)
+				Link = V or ""
+				if Wearing and Chosen == "Custom" then
+					Wear(true)
+				end
+			end })
+			Mascots:AddToggle({ Title = "Wear Mascot", Description = "Turns you into your mascot", Flag = "WearMascot", Save = false, Default = false, Callback = function(V) Wear(V) end })
 		end
 
-		PetsTab:CreateSection("Behavior")
-		PetsTab:CreateSlider({
-			Name = "Pet size", Range = { 0.5, 2.5 }, Increment = 0.1, Suffix = "x",
-			CurrentValue = P.Scale, Flag = "pb_pet_size",
-			Callback = function(v) P.Scale = tonumber(v) or 1; queueRebuild() end,
-		})
-		PetsTab:CreateSlider({
-			Name = "Follow distance", Range = { 3, 15 }, Increment = 1, Suffix = " studs",
-			CurrentValue = P.Distance, Flag = "pb_pet_dist",
-			Callback = function(v) P.Distance = tonumber(v) or 6 end,
-		})
-		PetsTab:CreateToggle({
-			Name = "Auto emotes", Desc = "Pets dance and do emotes on their own while you stand still.",
-			Flag = "pb_pet_autoemote", CurrentValue = P.AutoEmote,
-			Callback = function(v) P.AutoEmote = v == true end,
-		})
-		PetsTab:CreateToggle({
-			Name = "Pet chat", Desc = "Pets type little messages to you above their heads.",
-			Flag = "pb_pet_chat", CurrentValue = P.Chat,
-			Callback = function(v) P.Chat = v == true end,
-		})
-		PetsTab:CreateSlider({
-			Name = "Chat every", Range = { 5, 40 }, Increment = 1, Suffix = "s",
-			CurrentValue = P.ChatEvery, Flag = "pb_pet_chatevery",
-			Callback = function(v) P.ChatEvery = tonumber(v) or 14 end,
-		})
+		-- // Menu: Meter Timing
+		do
+			local Page = OffenseCategory:CreateTab({ Title = "Meter Timing", Icon = Icons.Meter })
+			local Section = Page:CreateSection({ Title = "Per Meter Timing", Icon = Icons.Timer })
+			Section:AddLabel("Slightly late on a meter? Lower its slider. Slightly early? Raise it. 0 is the tested timing.")
+			for Index, Name in MeterTypes do
+				Section:AddSlider({ Title = Name .. " Timing", Description = "Late: lower. Early: up", Min = -100, Max = 100, Default = 0, Step = 1, Decimals = 1, Suffix = "ms", Flag = "MeterTiming_" .. Name, Callback = function(V) Plus.Shot.MeterTiming[Name] = V end })
+			end
+		end
 
-		PetsTab:CreateSection("Emotes")
-		local EmoteOptions = { "Random", table.unpack(EmoteNames) }
-		PetsTab:CreateDropdown({
-			Name = "Emote", Options = EmoteOptions, CurrentValue = "Dance", Flag = "pb_pet_emote",
-			Callback = function(v)
-				if type(v) == "table" then v = v[1] end
-				if v then P.EmoteName = v end
-			end,
-		})
-		PetsTab:CreateButton({
-			Name = "Play emote", Desc = "Every pet does the selected emote",
-			Callback = function() for _, pet in ipairs(P.List) do playEmote(pet, P.EmoteName) end end,
-		})
-		PetsTab:CreateButton({
-			Name = "Dance party", Desc = "Everyone dances at once",
-			Callback = function() for _, pet in ipairs(P.List) do playEmote(pet, "Dance") end end,
-		})
-		PetsTab:CreateButton({
-			Name = "Say something", Desc = "Makes your pets type a message right now",
-			Callback = function() for _, pet in ipairs(P.List) do petSay(pet) end end,
-		})
-	end)
-	if not ok then
-		Notify("Pets", "Pets failed: " .. tostring(err):sub(1, 110))
+		-- // Menu: Shot Extras
+		do
+			local Page = OffenseCategory:CreateTab({ Title = "Shot Extras", Icon = Icons.Contest })
+
+			local Lob = Page:CreateSection({ Title = "Auto Self Lob", Icon = Icons.Lob })
+			Lob:AddToggle({ Title = "Auto Self Lob", Description = "Self alley-oop near hoop", Keybind = true, Flag = "SelfLob", Default = Plus.Shot.SelfLob, Callback = function(V) Plus.Shot.SelfLob = V end })
+			Lob:AddSlider({ Title = "Lob Range", Description = "Distance to the hoop", Min = 5, Max = 40, Default = Plus.Shot.LobRange, Suffix = " studs", Flag = "LobRange", Callback = function(V) Plus.Shot.LobRange = V end })
+
+			local Contest = Page:CreateSection({ Title = "Anti Contest", Icon = Icons.Contest })
+			Contest:AddToggle({ Title = "Anti Contest", Description = "No shot if guarded close", Keybind = true, Flag = "AntiContest", Default = Plus.Shot.AntiContest, Callback = function(V) Plus.Shot.AntiContest = V end })
+			Contest:AddSlider({ Title = "Contest Range", Description = "Counts as a contest", Min = 3, Max = 30, Default = Plus.Shot.ContestRange, Suffix = " studs", Flag = "ContestRange", Callback = function(V) Plus.Shot.ContestRange = V end })
+			Contest:AddSlider({ Title = "Max Contest", Description = "Skip shots above this", Min = 0, Max = 100, Default = Plus.Shot.MaxContest, Suffix = "%", Flag = "MaxContest", Callback = function(V) Plus.Shot.MaxContest = V end })
+			Contest:AddToggle({ Title = "Show Contest %", Description = "Shows the estimated contest above you", Flag = "ShowContestPercent", Default = Plus.Shot.ShowContestPercent, Callback = function(V) Plus.Shot.ShowContestPercent = V end })
+			Contest:AddToggle({ Title = "Show Contest Zone", Description = "Shows the contest zone around you", Flag = "ShowContest", Default = Plus.Shot.ShowContest, Callback = function(V) Plus.Shot.ShowContest = V end })
+
+			local Jelly = Page:CreateSection({ Title = "Smart Jelly", Icon = Icons.Jelly })
+			Jelly:AddToggle({ Title = "Smart Jelly", Description = "Double jump jelly finish", Keybind = true, Flag = "SmartJelly", Default = Plus.Shot.SmartJelly, Callback = function(V) Plus.Shot.SmartJelly = V end })
+			Jelly:AddSlider({ Title = "Jelly Range", Description = "Distance to the hoop", Min = 3, Max = 25, Default = Plus.Shot.JellyRange, Suffix = " studs", Flag = "JellyRange", Callback = function(V) Plus.Shot.JellyRange = V end })
+		end
+
+		-- // Menu: Moves & Gather
+		do
+			local Page = OffenseCategory:CreateTab({ Title = "Moves", Icon = Icons.Move })
+
+			local Gathers = Page:CreateSection({ Title = "Gather Keybinds", Icon = Icons.Move })
+			Gathers:AddLabel("Double tap shoot gather, aimed relative to the hoop you attack. The server picks the gather from the direction.")
+			for Index, Name in next, { "Forward", "Left", "Right", "Back" } do
+				Gathers:AddKeybind({ Title = "Gather " .. Name, Flag = "GatherKey_" .. Name, Callback = function()
+					DoGather(Name)
+				end })
+			end
+
+			local Loop = Page:CreateSection({ Title = "Loop Combo", Icon = Icons.Combos })
+			Loop:AddToggle({ Title = "Loop Play Combo", Description = "Loops combo while dribbling", Keybind = true, Flag = "LoopCombo", Save = false, Default = false, Callback = function(V) Plus.Dribble.LoopCombo = V end })
+
+			local Binds = Page:CreateSection({ Title = "Move Keybinds", Icon = Icons.Ankle })
+			Binds:AddLabel("Bind any dribble move to a key. It plays on your current hand.")
+			for Index, Name in MoveNames do
+				Binds:AddKeybind({ Title = Name, Flag = "MoveKey_" .. Name, Callback = function()
+					RunCombo({ Name }, 0)
+				end })
+			end
+		end
+
+		-- // Menu: Pass Link
+		do
+			local Page = OffenseCategory:CreateTab({ Title = "Pass Link", Icon = Icons.Person })
+			local Link = Page:CreateSection({ Title = "Pass Link", Icon = Icons.Person })
+			Link:AddToggle({ Title = "Pass Link", Description = "Passes to your linked player", Keybind = true, Flag = "PassLink", Default = Plus.Pass.Link, Callback = function(V) Plus.Pass.Link = V end })
+			local Linked = Link:AddDropdown({ Title = "Linked Player", Description = "Your teammate", Options = {}, Flag = "PassTarget", Save = false, MaxRows = 8, Callback = function(V) Plus.Pass.Target = V end })
+			Link:AddDropdown({ Title = "Pass Type", Description = "How you pass", Options = { "Chest", "Lob" }, Default = Plus.Pass.PassType, Flag = "PassType", Callback = function(V) Plus.Pass.PassType = V or "Chest" end })
+			Link:AddButton({ Title = "Call For Pass", Callback = function()
+				Fire(Remotes.HoldG, { HoldingG = true })
+				task.delay(0.8, function()
+					Fire(Remotes.HoldG, { HoldingG = false })
+				end)
+			end })
+
+			local function RefreshPlayers()
+				local Names = {}
+				for Index, Player in Players:GetPlayers() do
+					if Player ~= LocalPlayer then
+						table.insert(Names, Player.Name)
+					end
+				end
+				table.sort(Names)
+				Linked:Refresh(Names)
+			end
+			RefreshPlayers()
+			Connect(Players.PlayerAdded, RefreshPlayers)
+			Connect(Players.PlayerRemoving, function()
+				task.defer(RefreshPlayers)
+			end)
+		end
+
+		-- // Menu: Defense+
+		do
+			local Page = DefenseCategory:CreateTab({ Title = "Defense+", Icon = Icons.Shield })
+			local Swat = Page:CreateSection({ Title = "Block Style", Icon = Icons.Shield })
+			Swat:AddToggle({ Title = "Swat Away", Description = "Swats it out away from their hoop", Flag = "SwatAway", Default = Plus.Defense.SwatAway, Callback = function(V) Plus.Defense.SwatAway = V end })
+			Swat:AddDropdown({ Title = "Shots To Block", Description = "Rim & Post skips jumpers", Options = { "All Shots", "Rim & Post" }, Default = Plus.Defense.BlockShots, Flag = "BlockShots", Callback = function(V) Plus.Defense.BlockShots = V or "All Shots" end })
+			Swat:AddSlider({ Title = "Rim Block Delay", Description = "Delay for dunks/layups", Min = 0, Max = 500, Default = Plus.Defense.RimBlockDelay, Step = 10, Suffix = "ms", Flag = "RimBlockDelay", Callback = function(V) Plus.Defense.RimBlockDelay = V end })
+			Swat:AddToggle({ Title = "Lunge At Shooter", Description = "Moves into the shooter as you jump", Flag = "BlockLunge", Default = Plus.Defense.BlockLunge, Callback = function(V) Plus.Defense.BlockLunge = V end })
+			Swat:AddToggle({ Title = "Chase Down", Description = "Chases drives past range", Flag = "BlockChase", Default = Plus.Defense.BlockChase, Callback = function(V) Plus.Defense.BlockChase = V end })
+
+			local Rebound = Page:CreateSection({ Title = "Auto Rebound", Icon = Icons.Target })
+			Rebound:AddToggle({ Title = "Auto Rebound", Description = "Jumps for missed shots", Keybind = true, Flag = "AutoRebound", Default = Plus.Defense.AutoRebound, Callback = function(V) Plus.Defense.AutoRebound = V end })
+			Rebound:AddSlider({ Title = "Rebound Range", Description = "Distance to rebound", Min = 8, Max = 60, Default = Plus.Defense.ReboundRange, Suffix = " studs", Flag = "ReboundRange", Callback = function(V) Plus.Defense.ReboundRange = V end })
+
+			local Magnet = Page:CreateSection({ Title = "Defense Magnet", Icon = Icons.Target })
+			Magnet:AddToggle({ Title = "Defense Magnet", Description = "Longer steal/block reach", Keybind = true, Flag = "DefenseMagnet", Default = Plus.Defense.Magnet, Callback = function(V) Plus.Defense.Magnet = V end })
+			Magnet:AddSlider({ Title = "Reach", Description = "How far it reaches", Min = 3, Max = 30, Default = Plus.Defense.MagnetReach, Suffix = " studs", Flag = "MagnetReach", Callback = function(V) Plus.Defense.MagnetReach = V end })
+			Magnet:AddToggle({ Title = "Steal", Description = "Your steal reaches the handler", Flag = "MagnetSteal", Default = Plus.Defense.MagnetSteal, Callback = function(V) Plus.Defense.MagnetSteal = V end })
+			Magnet:AddToggle({ Title = "Block", Description = "Your jump reaches shots in the air", Flag = "MagnetBlock", Default = Plus.Defense.MagnetBlock, Callback = function(V) Plus.Defense.MagnetBlock = V end })
+			Magnet:AddToggle({ Title = "Rebound", Description = "Your jump reaches loose balls", Flag = "MagnetRebound", Default = Plus.Defense.MagnetRebound, Callback = function(V) Plus.Defense.MagnetRebound = V end })
+		end
+
+		-- // Menu: Guard Tuning
+		do
+			local Page = DefenseCategory:CreateTab({ Title = "Guard Tuning", Icon = Icons.Guard })
+			local Mode = Page:CreateSection({ Title = "Guard Mode", Icon = Icons.Guard })
+			Mode:AddDropdown({ Title = "Mode", Description = "Legit = capped speed", Options = { "Blatant", "Legit" }, Default = Plus.Defense.GuardMode, Flag = "GuardMode", Callback = function(V) Plus.Defense.GuardMode = V or "Blatant" end })
+			Mode:AddToggle({ Title = "Show Guard Coverage", Description = "Marks the spot Auto Guard is holding", Flag = "ShowCoverage", Default = Plus.Defense.ShowCoverage, Callback = function(V) Plus.Defense.ShowCoverage = V end })
+
+			local Stance = Page:CreateSection({ Title = "Guard Stance", Icon = Icons.Guard })
+			Stance:AddToggle({ Title = "Auto Hold G", Description = "Guards without you holding G", Keybind = true, Flag = "AutoHoldG", Default = Plus.Defense.AutoHoldG, Callback = function(V) Plus.Defense.AutoHoldG = V end })
+			Stance:AddSlider({ Title = "Stance Delay", Description = "Wait before stance", Min = 0, Max = 1000, Default = Plus.Defense.StanceDelay, Step = 10, Suffix = "ms", Flag = "StanceDelay", Callback = function(V) Plus.Defense.StanceDelay = V end })
+			Stance:AddToggle({ Title = "Hold Ground", Description = "Stands still in front of them", Flag = "HoldGround", Default = Plus.Defense.HoldGround, Callback = function(V) Plus.Defense.HoldGround = V end })
+
+			local Follow = Page:CreateSection({ Title = "Guard Following", Icon = Icons.Move })
+			Follow:AddToggle({ Title = "Ignore Slow Moves", Description = "Ignores slow creeping", Flag = "IgnoreSlow", Default = Plus.Defense.IgnoreSlow, Callback = function(V) Plus.Defense.IgnoreSlow = V end })
+			Follow:AddSlider({ Title = "Slow Move Speed", Description = "Slower = ignored", Min = 1, Max = 14, Default = Plus.Defense.SlowSpeed, Step = 0.5, Decimals = 1, Suffix = " studs/s", Flag = "SlowSpeed", Callback = function(V) Plus.Defense.SlowSpeed = V end })
+			Follow:AddSlider({ Title = "Creep Distance", Description = "Creep before you shift", Min = 5, Max = 80, Default = Plus.Defense.CreepDistance, Flag = "CreepDistance", Callback = function(V) Plus.Defense.CreepDistance = V end })
+
+			local Human = Page:CreateSection({ Title = "Guard Humanization", Icon = Icons.Person })
+			Human:AddSlider({ Title = "Reaction Time", Description = "Delay before reacting", Min = 0, Max = 500, Default = Plus.Defense.ReactionTime, Step = 10, Suffix = "ms", Flag = "ReactionTime", Callback = function(V) Plus.Defense.ReactionTime = V end })
+			Human:AddSlider({ Title = "Smoothness", Description = "Smooth, not snappy", Min = 0, Max = 100, Default = Plus.Defense.Smoothness, Flag = "Smoothness", Callback = function(V) Plus.Defense.Smoothness = V end })
+			Human:AddSlider({ Title = "Mistakes", Description = "Guards a bit off", Min = 0, Max = 100, Default = Plus.Defense.Mistakes, Suffix = "%", Flag = "Mistakes", Callback = function(V) Plus.Defense.Mistakes = V end })
+			Human:AddSlider({ Title = "Get Crossed", Description = "Chance to bite", Min = 0, Max = 100, Default = Plus.Defense.GetCrossed, Suffix = "%", Flag = "GetCrossed", Callback = function(V) Plus.Defense.GetCrossed = V end })
+		end
+
+		-- // Menu: Heights
+		do
+			local Page = PlayerCategory:CreateTab({ Title = "Heights", Icon = Icons.Move })
+			local Dunk = Page:CreateSection({ Title = "Dunk Height", Icon = Icons.Move })
+			Dunk:AddToggle({ Title = "Dunk Height", Description = "Your dunks go way up", Keybind = true, Flag = "DunkHeight", Default = Plus.Player.DunkHeight, Callback = function(V) Plus.Player.DunkHeight = V end })
+			Dunk:AddSlider({ Title = "Height", Description = "How high your dunks go", Min = 5, Max = 120, Default = Plus.Player.DunkHeightValue, Step = 1, Decimals = 1, Flag = "DunkHeightValue", Callback = function(V) Plus.Player.DunkHeightValue = V end })
+			local Shot = Page:CreateSection({ Title = "Jump Shot Height", Icon = Icons.Move })
+			Shot:AddToggle({ Title = "Jump Shot Height", Description = "Your jumpers go way up", Keybind = true, Flag = "ShotHeight", Default = Plus.Player.ShotHeight, Callback = function(V) Plus.Player.ShotHeight = V end })
+			Shot:AddSlider({ Title = "Shot Height", Description = "How high your jumpers go", Min = 2, Max = 80, Default = Plus.Player.ShotHeightValue, Step = 1, Decimals = 1, Flag = "ShotHeightValue", Callback = function(V) Plus.Player.ShotHeightValue = V end })
+		end
+
+		-- // Menu: Auto Play
+		local PlayCategory = MergedCategory("Auto Play")
+		do
+			local Page = PlayCategory:CreateTab({ Title = "Auto Play", Icon = Icons.Combos })
+			local Main = Page:CreateSection({ Title = "Auto Play", Icon = Icons.Combos })
+			Main:AddToggle({ Title = "Auto Play", Description = "Plays for you", Keybind = true, Flag = "AutoPlay", Save = false, Default = false, Callback = function(V)
+				Plus.Play.Enabled = V
+				if not V then
+					PlayStop()
+				end
+			end })
+			Main:AddToggle({ Title = "Run Outside Games", Description = "Also plays when you are not in a game", Flag = "PlayAnyTime", Default = Plus.Play.AnyTime, Callback = function(V) Plus.Play.AnyTime = V end })
+			Main:AddToggle({ Title = "Anti AFK", Description = "Stops the idle kick", Flag = "PlayAntiAfk", Default = Plus.Play.AntiAfk, Callback = function(V) Plus.Play.AntiAfk = V end })
+			Main:AddSlider({ Title = "Sideline Margin", Description = "Stays this far inside", Min = 0, Max = 12, Default = Plus.Play.SidelineMargin, Suffix = " studs", Flag = "PlaySidelineMargin", Callback = function(V) Plus.Play.SidelineMargin = V end })
+
+			local Rim = Page:CreateSection({ Title = "Rim Running", Icon = Icons.Move })
+			Rim:AddDropdown({ Title = "Finish With", Description = "How rim runs end", Options = { "Mix", "Dunk", "Layup" }, Default = Plus.Play.FinishWith, Flag = "PlayFinishWith", Callback = function(V) Plus.Play.FinishWith = V or "Mix" end })
+			Rim:AddDropdown({ Title = "Rim Gathers", Description = "Gathers before finish", Multi = true, Options = { "Forward", "Left", "Right", "Back" }, Flag = "PlayRimGathers", Callback = function(V) Plus.Play.RimGathers = V or {} end })
+
+			local Offense = Page:CreateSection({ Title = "Offense", Icon = Icons.Target })
+			Offense:AddToggle({ Title = "Rim Run", Description = "Attacks or cuts to the rim", Flag = "PlayRimRun", Default = Plus.Play.RimRun, Callback = function(V) Plus.Play.RimRun = V end })
+			Offense:AddToggle({ Title = "Go For Dunks", Description = "Dunks when the lane is open", Flag = "PlayDunks", Default = Plus.Play.Dunks, Callback = function(V) Plus.Play.Dunks = V end })
+			Offense:AddToggle({ Title = "Midranges", Description = "Pulls up from midrange", Flag = "PlayMidranges", Default = Plus.Play.Midranges, Callback = function(V) Plus.Play.Midranges = V end })
+			Offense:AddToggle({ Title = "Pass To Teammates", Description = "Finds open teammates when you're covered", Flag = "PlayPass", Default = Plus.Play.PassTeammates, Callback = function(V) Plus.Play.PassTeammates = V end })
+			Offense:AddSlider({ Title = "3PT Chance", Description = "How often to shoot 3s", Min = 0, Max = 100, Default = Plus.Play.ThreeChance, Suffix = "%", Flag = "PlayThreeChance", Callback = function(V) Plus.Play.ThreeChance = V end })
+
+			local Open = Page:CreateSection({ Title = "Shoot When Open", Icon = Icons.Timer })
+			Open:AddToggle({ Title = "Shoot When Open", Description = "Shoots when nobody's close", Flag = "PlayShootOpen", Default = Plus.Play.ShootOpen, Callback = function(V) Plus.Play.ShootOpen = V end })
+			Open:AddSlider({ Title = "Shot Range", Description = "Max shot distance", Min = 1, Max = 20, Default = Plus.Play.ShotRange, Suffix = " studs", Flag = "PlayShotRange", Callback = function(V) Plus.Play.ShotRange = V end })
+			Open:AddSlider({ Title = "Open Space", Description = "Space needed to shoot", Min = 2, Max = 25, Default = Plus.Play.OpenSpace, Suffix = " studs", Flag = "PlayOpenSpace", Callback = function(V) Plus.Play.OpenSpace = V end })
+
+			local Defense = Page:CreateSection({ Title = "Defense", Icon = Icons.Shield })
+			Defense:AddToggle({ Title = "Auto Defense", Description = "Guards the ball handler", Flag = "PlayAutoDefense", Default = Plus.Play.AutoDefense, Callback = function(V) Plus.Play.AutoDefense = V end })
+			Defense:AddToggle({ Title = "Man Defense", Description = "Sticks with your man", Flag = "PlayManDefense", Default = Plus.Play.ManDefense, Callback = function(V) Plus.Play.ManDefense = V end })
+			Defense:AddToggle({ Title = "Auto Steal", Description = "Goes for the steal when you're close", Flag = "PlayAutoSteal", Default = Plus.Play.AutoSteal, Callback = function(V) Plus.Play.AutoSteal = V end })
+			Defense:AddToggle({ Title = "Anti Steal", Description = "Pulls ball from reachers", Flag = "PlayAntiSteal", Default = Plus.Play.AntiSteal, Callback = function(V) Plus.Play.AntiSteal = V end })
+
+			local Spots = PlayCategory:CreateTab({ Title = "Spots & Moves", Icon = Icons.Target })
+			local Shooting = Spots:CreateSection({ Title = "Shooting Spots", Icon = Icons.Target })
+			local SpotDropdown = Shooting:AddDropdown({ Title = "Shoot From", Description = "Where it goes to shoot", Multi = true, Options = SpotNames, Flag = "PlaySpots", MaxRows = 9, Callback = function(V) Plus.Play.Spots = V or {} end })
+			Shooting:AddSlider({ Title = "Three Distance", Description = "3-point spot distance", Min = 15, Max = 40, Default = Plus.Play.ThreeDistance, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "PlayThreeDistance", Callback = function(V) Plus.Play.ThreeDistance = V end })
+
+			local Ankles = Spots:CreateSection({ Title = "Break Ankles", Icon = Icons.Ankle })
+			Ankles:AddToggle({ Title = "Break Ankles", Description = "Shakes close defenders", Flag = "PlayBreakAnkles", Default = Plus.Play.BreakAnkles, Callback = function(V) Plus.Play.BreakAnkles = V end })
+			local MoveDropdown = Ankles:AddDropdown({ Title = "Moves To Use", Description = "Moves to shake with", Multi = true, Options = MoveNames, Flag = "PlayAnkleMoves", MaxRows = 8, Callback = function(V) Plus.Play.AnkleMoves = V or {} end })
+			Ankles:AddToggle({ Title = "Use My Combo", Description = "Uses your Combo Creator", Flag = "PlayUseCombo", Default = Plus.Play.UseMyCombo, Callback = function(V) Plus.Play.UseMyCombo = V end })
+
+			local Post = Spots:CreateSection({ Title = "Post Up", Icon = Icons.Guard })
+			Post:AddToggle({ Title = "Post Up", Description = "Backs down, then posts", Flag = "PlayPostUp", Default = Plus.Play.PostUp, Callback = function(V) Plus.Play.PostUp = V end })
+			Post:AddToggle({ Title = "Post Fadeaways", Description = "Fades away out of the post", Flag = "PlayPostFade", Default = Plus.Play.PostFade, Callback = function(V) Plus.Play.PostFade = V end })
+			Post:AddToggle({ Title = "Post Hop Step", Description = "Hop step out of the post", Flag = "PlayPostHopStep", Default = Plus.Play.PostHopStep, Callback = function(V) Plus.Play.PostHopStep = V end })
+			Post:AddSlider({ Title = "Post Fade Chance", Description = "% ending in fadeaway", Min = 0, Max = 100, Default = Plus.Play.PostFadeChance, Suffix = "%", Flag = "PlayPostFadeChance", Callback = function(V) Plus.Play.PostFadeChance = V end })
+			Post:AddSlider({ Title = "Post Up Chance", Description = "% going to the post", Min = 0, Max = 100, Default = Plus.Play.PostChance, Suffix = "%", Flag = "PlayPostChance", Callback = function(V) Plus.Play.PostChance = V end })
+
+			SpotDropdown:Update(Plus.Play.Spots, true)
+			MoveDropdown:Update(Plus.Play.AnkleMoves, true)
+		end
+
+		-- // Menu: Rec
+		local RecCategory = MergedCategory("Rec")
+		do
+			local Page = RecCategory:CreateTab({ Title = "Rec", Icon = Icons.Person })
+			local Queue = Page:CreateSection({ Title = "Rec Automation", Icon = Icons.Person })
+			Queue:AddToggle({ Title = "Auto Ready", Description = "Presses the Ready button for you", Flag = "RecAutoReady", Default = Plus.Rec.AutoReady, Callback = function(V) Plus.Rec.AutoReady = V end })
+			Queue:AddToggle({ Title = "Auto Leave Rec", Description = "Leaves the court when the game ends", Flag = "RecAutoLeave", Default = Plus.Rec.AutoLeave, Callback = function(V) Plus.Rec.AutoLeave = V end })
+			Queue:AddSlider({ Title = "Leave After", Description = "Seconds after game", Min = 0, Max = 30, Default = Plus.Rec.LeaveAfter, Suffix = "s", Flag = "RecLeaveAfter", Callback = function(V) Plus.Rec.LeaveAfter = V end })
+			Queue:AddToggle({ Title = "Auto Jump Ball", Description = "Jumps the tip-off for you", Flag = "RecAutoJumpBall", Default = Plus.Rec.AutoJumpBall, Callback = function(V) Plus.Rec.AutoJumpBall = V end })
+
+			local Hopping = Page:CreateSection({ Title = "Server Hop", Icon = Icons.Target })
+			Hopping:AddToggle({ Title = "Hop When No Opponents", Description = "Hops servers when nobody plays you", Flag = "RecServerHop", Default = Plus.Rec.ServerHop, Callback = function(V) Plus.Rec.ServerHop = V end })
+			Hopping:AddSlider({ Title = "Hop After", Description = "Seconds with no opponent", Min = 30, Max = 600, Default = Plus.Rec.HopAfter, Step = 10, Suffix = "s", Flag = "RecHopAfter", Callback = function(V) Plus.Rec.HopAfter = V end })
+
+			local Hook = Page:CreateSection({ Title = "Webhook", Icon = Icons.List })
+			Hook:AddTextbox({ Title = "Webhook URL", Placeholder = "Your Discord webhook", Default = Plus.Rec.WebhookUrl, Flag = "RecWebhookUrl", Callback = function(V) Plus.Rec.WebhookUrl = V or "" end })
+			Hook:AddToggle({ Title = "Send Game Results", Description = "Posts each game's result", Flag = "RecSendResults", Default = Plus.Rec.SendResults, Callback = function(V) Plus.Rec.SendResults = V end })
+			Hook:AddButton({ Title = "Test Webhook", Callback = function()
+				if SendWebhook("Aural", "Test message from " .. LocalPlayer.Name) then
+					Notify("Webhook", "Test message sent.")
+				end
+			end })
+		end
+
+		-- // Parity: Gathers, Finishes, Sideline Margin, Loop Combo, Spots, Badge Farm, Logos & Share Build
+		do
+			local MoveDirection = GetRemote("InputService", "MoveDirection")
+			local JoinPlace = GetRemote("InterfaceService", "JoinPlace")
+			local VirtualUser = game:GetService("VirtualUser")
+			local QueueTeleport = (typeof(queue_on_teleport) == "function" and queue_on_teleport) or (typeof(queueonteleport) == "function" and queueonteleport) or (typeof(syn) == "table" and syn.queue_on_teleport) or nil
+			local Clipboard = (typeof(setclipboard) == "function" and setclipboard) or (typeof(toclipboard) == "function" and toclipboard) or nil
+			local FarmStatus
+
+			-- // Gathers: the client sends a double tap shoot ("EE"); the server reads the last move direction
+			DoGather = function(Name)
+				local Character = GetCharacter()
+				local Root = GetRoot(Character)
+				if not Root or not HasBall(Character) then
+					return false
+				end
+				local Action = Character:GetAttribute("Action")
+				if Action ~= "" and Action ~= "Dribbling" and Action ~= "TripleThreat" then
+					return false
+				end
+				local Goal = GetGoal(Character)
+				local Forward = Goal and Flat(Goal - Root.Position) or Vector3.zero
+				if Forward.Magnitude < 0.01 then
+					Forward = Flat(Root.CFrame.LookVector)
+				end
+				Forward = Forward.Unit
+				local Right = Forward:Cross(Vector3.yAxis)
+				local Direction = (Name == "Back" and -Forward) or (Name == "Left" and -Right) or (Name == "Right" and Right) or Forward
+				local Sprint = Character:GetAttribute("Sprinting") == true
+				Fire(MoveDirection, Direction)
+				task.delay(0.05, function()
+					Fire(Remotes.Shoot, { Shoot = false, Sprint = Sprint, Input = "EE" })
+				end)
+				return true
+			end
+
+			-- // Finishes
+			Finish = function()
+				local Settings = Plus.Play
+				local Kind = Settings.FinishWith
+				if Kind == "Mix" then
+					Kind = math.random() < 0.5 and "Dunk" or "Layup"
+				end
+				local function Go()
+					if Kind == "Layup" then
+						Fire(Remotes.Shoot, { Shoot = true, Input = "E" })
+						task.delay(0.25, function()
+							Fire(Remotes.Shoot, { Shoot = false })
+						end)
+					else
+						Dunk()
+					end
+				end
+				local Gathers = Settings.RimGathers
+				if #Gathers > 0 and DoGather(Gathers[math.random(#Gathers)]) then
+					task.delay(0.45, function()
+						if Running and Settings.Enabled then
+							Go()
+						end
+					end)
+				else
+					Go()
+				end
+			end
+
+			-- // Sideline Margin
+			local Floors = {}
+			local function TrackFloor(Object)
+				if Object.Name == "CourtFloor" and Object:IsA("BasePart") then
+					Floors[Object] = true
+				end
+			end
+			for Index, Object in next, workspace:GetDescendants() do
+				TrackFloor(Object)
+			end
+			Connect(workspace.DescendantAdded, TrackFloor)
+
+			ClampCourt = function(Target)
+				local Settings = Plus.Play
+				if not Settings.Enabled or Settings.SidelineMargin <= 0 then
+					return Target
+				end
+				local Closest, ClosestDistance = nil, math.huge
+				for Floor in next, Floors do
+					if Floor.Parent then
+						local Distance = (Floor.Position - Target).Magnitude
+						if Distance < ClosestDistance then
+							Closest, ClosestDistance = Floor, Distance
+						end
+					else
+						Floors[Floor] = nil
+					end
+				end
+				if not Closest then
+					return Target
+				end
+				local Point = Closest.CFrame:PointToObjectSpace(Target)
+				local HalfX = math.max(Closest.Size.X / 2 - Settings.SidelineMargin, 0)
+				local HalfZ = math.max(Closest.Size.Z / 2 - Settings.SidelineMargin, 0)
+				if math.abs(Point.X) <= HalfX and math.abs(Point.Z) <= HalfZ then
+					return Target
+				end
+				return Closest.CFrame:PointToWorldSpace(Vector3.new(math.clamp(Point.X, -HalfX, HalfX), Point.Y, math.clamp(Point.Z, -HalfZ, HalfZ)))
+			end
+
+			-- // Anti AFK
+			Connect(LocalPlayer.Idled, function()
+				if Plus.Play.AntiAfk then
+					pcall(function()
+						VirtualUser:CaptureController()
+						VirtualUser:ClickButton2(Vector2.zero)
+					end)
+				end
+			end)
+
+			-- // Contest % & Guard Coverage
+			local ContestGui = Instance.new("BillboardGui")
+			ContestGui.Name = HttpService:GenerateGUID(false)
+			ContestGui.Size = UDim2.fromOffset(90, 24)
+			ContestGui.StudsOffset = Vector3.new(0, 4.5, 0)
+			ContestGui.AlwaysOnTop = true
+			ContestGui.Enabled = false
+			ContestGui.Parent = GuiRoot
+			local ContestText = Instance.new("TextLabel")
+			ContestText.BackgroundTransparency = 1
+			ContestText.Size = UDim2.fromScale(1, 1)
+			ContestText.Font = Enum.Font.GothamBold
+			ContestText.TextSize = 16
+			ContestText.TextStrokeTransparency = 0.4
+			ContestText.Text = ""
+			ContestText.Parent = ContestGui
+
+			local CoverageRing = Instance.new("CylinderHandleAdornment")
+			CoverageRing.Name = HttpService:GenerateGUID(false)
+			CoverageRing.Adornee = workspace.Terrain
+			CoverageRing.Height = 0.12
+			CoverageRing.Radius = 2
+			CoverageRing.InnerRadius = 1.75
+			CoverageRing.Transparency = 0.3
+			CoverageRing.Color3 = Color3.fromRGB(84, 255, 126)
+			CoverageRing.Visible = false
+			CoverageRing.Parent = GuiRoot
+
+			local Open, Covered = Color3.fromRGB(84, 255, 126), Color3.fromRGB(255, 70, 70)
+			Connect(RunService.RenderStepped, function()
+				local Character = GetCharacter()
+				local Root = GetRoot(Character)
+				local ShowPercent = Plus.Shot.ShowContestPercent and Root ~= nil
+				ContestGui.Enabled = ShowPercent
+				if ShowPercent then
+					local Amount = ContestEstimate(Character, Root)
+					ContestGui.Adornee = Root
+					ContestText.Text = string.format("%d%% contest", Amount)
+					ContestText.TextColor3 = Open:Lerp(Covered, Amount / 100)
+				end
+				local Spot = GuardState.Spot
+				local ShowRing = Plus.Defense.ShowCoverage and Spot ~= nil and Root ~= nil and os.clock() - GuardState.At < 0.3
+				CoverageRing.Visible = ShowRing
+				if ShowRing then
+					CoverageRing.CFrame = CFrame.new(Spot.X, Root.Position.Y - 2.9, Spot.Z) * CFrame.Angles(math.rad(90), 0, 0)
+				end
+			end)
+
+			-- // Logos
+			local LogoAsset = ReplicatedStorage.Assets.Models:FindFirstChild("HeadLogo")
+			local LogoNames = { "None" }
+			if LogoAsset then
+				for Index, Child in next, LogoAsset:GetChildren() do
+					if Child:IsA("ImageLabel") then
+						table.insert(LogoNames, Child.Name)
+					end
+				end
+			end
+			table.insert(LogoNames, "Custom")
+			local LogoGui = nil
+
+			local ImageCache = {}
+
+			local function ResolveImage(Value)
+				Value = string.gsub(tostring(Value or ""), "^%s+", "")
+				Value = string.gsub(Value, "%s+$", "")
+				if Value == "" then
+					return nil
+				end
+				if ImageCache[Value] ~= nil then
+					return ImageCache[Value] or nil
+				end
+				ImageCache[Value] = false
+				if string.match(Value, "^%d+$") then
+					ImageCache[Value] = "rbxassetid://" .. Value
+					return ImageCache[Value]
+				end
+				if string.match(Value, "^rbxassetid://%d+$") then
+					ImageCache[Value] = Value
+					return Value
+				end
+				if string.match(Value, "^https://") and typeof(writefile) == "function" and typeof(getcustomasset) == "function" then
+					local Ok, Asset = pcall(function()
+						local Path = "Aural/logo_" .. tostring(#Value) .. "_" .. string.gsub(string.sub(Value, -24), "[^%w]", "") .. ".png"
+						writefile(Path, game:HttpGet(Value))
+						return getcustomasset(Path)
+					end)
+					ImageCache[Value] = Ok and Asset or false
+					return ImageCache[Value] or nil
+				end
+				return nil
+			end
+
+			local function RefreshLogo()
+				if LogoGui then
+					LogoGui:Destroy()
+					LogoGui = nil
+				end
+				local Choice = Plus.World.Logo
+				local Character = GetCharacter()
+				local Head = Character and Character:FindFirstChild("Head")
+				if Choice == "None" or not LogoAsset or not Head then
+					return
+				end
+				local Image = Choice == "Custom" and ResolveImage(Plus.World.CustomLogo) or nil
+				if Choice == "Custom" and not Image then
+					return
+				end
+				local Clone = LogoAsset:Clone()
+				local Used = false
+				for Index, Child in next, Clone:GetChildren() do
+					if Child:IsA("ImageLabel") then
+						if Choice == "Custom" and not Used then
+							Used = true
+							Child.Image = Image
+							Child.Visible = true
+						else
+							Child.Visible = Child.Name == Choice
+						end
+					end
+				end
+				Clone.Name = HttpService:GenerateGUID(false)
+				Clone.Adornee = Head
+				Clone.Enabled = true
+				Clone.Parent = GuiRoot
+				LogoGui = Clone
+			end
+
+			-- // Share Build
+			local function ShareBuild()
+				local Character = GetCharacter()
+				if not Character then
+					Notify("Share Build", "No character yet.")
+					return
+				end
+				local Lines = {}
+				for Index, Name in next, { "BuildName", "Position", "Overall", "Height", "Weight", "TakeoverType" } do
+					local Value = Character:GetAttribute(Name)
+					if Value ~= nil then
+						table.insert(Lines, Name .. ": " .. tostring(Value))
+					end
+				end
+				local Text = table.concat(Lines, "\n")
+				if Clipboard then
+					Clipboard(Text)
+					Notify("Share Build", "Build copied to your clipboard.")
+				else
+					Notify("Share Build", string.gsub(Text, "\n", ", "))
+				end
+			end
+
+			-- // Auto Steal Spot & Badge Farm
+			local Places = nil
+			pcall(function()
+				Places = require(ReplicatedStorage.Aero.Shared.Config.Enum).Places
+			end)
+			local Farm = { LastJoin = 0, LastPress = 0, Ended = nil, WasInGame = false, Forced = false, Shown = nil, Queued = false }
+			local SpotIndex = 0
+
+			local function StealSpot(Character)
+				local Service = RemoteServices:FindFirstChild("SpotService")
+				local Join = Service and Service:FindFirstChild("JoinSpot")
+				local Map = workspace:FindFirstChild("Map")
+				local Courts = Map and Map:FindFirstChild("Courts")
+				if not Join or not Courts then
+					return
+				end
+				local Pads = {}
+				for Index, Court in next, Courts:GetChildren() do
+					local Spots = Court:FindFirstChild("Spots")
+					for Index2, Kind in next, (Spots and Spots:GetChildren() or {}) do
+						for Index3, Pad in next, Kind:GetChildren() do
+							table.insert(Pads, { Court = Court.Name, SpotType = Kind.Name, SpotIndex = Pad.Name })
+						end
+					end
+				end
+				if #Pads == 0 then
+					return
+				end
+				SpotIndex = SpotIndex % #Pads + 1
+				Fire(Join, Pads[SpotIndex])
+			end
+
+			local function StopFarmPlay()
+				if Farm.Forced then
+					Farm.Forced = false
+					Plus.Play.Enabled = false
+					PlayStop()
+				end
+			end
+
+			local function FarmStep(Character, Now)
+				local Settings = Plus.Farm
+				if not Settings.Enabled then
+					StopFarmPlay()
+					return "off"
+				end
+				if not Places then
+					return "place list unavailable"
+				end
+				if game.PlaceId == Places.Blacktop then
+					local InGame = Character ~= nil and Character:GetAttribute("InGame") == true
+					if Settings.PlayGames and not Plus.Play.Enabled then
+						Plus.Play.Enabled = true
+						Farm.Forced = true
+					end
+					if Farm.WasInGame and not InGame then
+						Farm.Ended = Now
+					end
+					if InGame then
+						Farm.Ended = nil
+					end
+					Farm.WasInGame = InGame
+					if Farm.Ended and Now - Farm.Ended >= Settings.LeaveAfter then
+						Farm.Ended = nil
+						LeaveCourt()
+						return "leaving the court"
+					end
+					return InGame and "in game" or "waiting for the game"
+				end
+				StopFarmPlay()
+				if game.PlaceId == Places.BlacktopMatchmaking then
+					if Now - Farm.LastPress > 2 then
+						Farm.LastPress = Now
+						PressButton("^%s*" .. string.lower(Settings.Mode) .. "%s*$")
+						if Settings.AnyRegion then
+							PressButton("any region")
+						end
+						if not PressButton("^%s*ready%s*u?p?%s*$") and not PressButton("^%s*queue%s*$") then
+							PressButton("^%s*find match%s*$")
+						end
+					end
+					return "queueing " .. Settings.Mode
+				end
+				if Now - Farm.LastJoin > 15 then
+					Farm.LastJoin = Now
+					task.spawn(function()
+						pcall(function()
+							JoinPlace:InvokeServer("BlacktopMatchmaking")
+						end)
+					end)
+				end
+				return "travelling to blacktop matchmaking"
+			end
+
+			task.spawn(function()
+				while Running do
+					task.wait(0.5)
+					local Character = GetCharacter()
+					local Now = os.clock()
+
+					if Plus.Dribble.LoopCombo and #Aural.Dribbling.ComboMoves > 0 and not IsComboRunning() and HasBall(Character) then
+						RunCombo(Aural.Dribbling.ComboMoves, Aural.Dribbling.ComboDelay)
+					end
+
+					if Plus.Spots.AutoSteal and Character and not (Character:GetAttribute("OnCourt") or Character:GetAttribute("OnSpot") or Character:GetAttribute("InGame")) then
+						StealSpot(Character)
+					end
+
+					if Plus.World.Logo ~= "None" and not (LogoGui and LogoGui.Adornee and LogoGui.Adornee.Parent) then
+						RefreshLogo()
+					end
+
+					local Status = FarmStep(Character, Now)
+					if Status ~= Farm.Shown and FarmStatus then
+						Farm.Shown = Status
+						FarmStatus:Update("status: " .. Status)
+					end
+				end
+			end)
+
+			pcall(function()
+				Connect(Extra.Summary.OnClientEvent, function(...)
+					if not (Plus.Farm.Enabled and Plus.Farm.SendResults) then
+						return
+					end
+					local Parts = {}
+					for Index, Value in next, { ... } do
+						table.insert(Parts, Describe(Value, 0))
+					end
+					task.spawn(SendWebhook, "Blacktop match finished", string.sub(table.concat(Parts, "\n"), 1, 1800), Plus.Farm.WebhookUrl)
+				end)
+			end)
+
+			Connect(LocalPlayer.OnTeleport, function(State)
+				local Settings = Plus.Farm
+				if State == Enum.TeleportState.Started and Settings.QueueOnTeleport and Settings.LoaderScript ~= "" and QueueTeleport and not Farm.Queued then
+					Farm.Queued = true
+					pcall(QueueTeleport, Settings.LoaderScript)
+				end
+			end)
+
+			table.insert(Connections, { Disconnect = function()
+				ContestGui:Destroy()
+				CoverageRing:Destroy()
+				if LogoGui then
+					LogoGui:Destroy()
+				end
+			end })
+
+			-- // Menu: Spots
+			do
+				local Page = RecCategory:CreateTab({ Title = "Spots", Icon = Icons.Target })
+				local Spots = Page:CreateSection({ Title = "Auto Steal Spot", Icon = Icons.Target })
+				Spots:AddLabel("Park only. Asks for every spot pad in turn until you are on one.")
+				Spots:AddToggle({ Title = "Auto Steal Spot", Description = "Takes the first spot", Keybind = true, Flag = "AutoStealSpot", Save = false, Default = false, Callback = function(V) Plus.Spots.AutoSteal = V end })
+			end
+
+			-- // Menu: Badge Farm
+			do
+				local Page = RecCategory:CreateTab({ Title = "Badge Farm", Icon = Icons.Combos })
+				local Blacktop = Page:CreateSection({ Title = "Blacktop", Icon = Icons.Combos })
+				Blacktop:AddToggle({ Title = "Badge Farm", Description = "Loops blacktop games", Flag = "BadgeFarm", Default = Plus.Farm.Enabled, Callback = function(V) Plus.Farm.Enabled = V end })
+				Blacktop:AddDropdown({ Title = "Mode", Options = { "1v1", "2v2", "3v3", "4v4", "5v5" }, Default = Plus.Farm.Mode, Flag = "BadgeFarmMode", Callback = function(V) Plus.Farm.Mode = V or "1v1" end })
+				Blacktop:AddToggle({ Title = "Any Region", Description = "Picks any region in the queue", Flag = "BadgeFarmAnyRegion", Default = Plus.Farm.AnyRegion, Callback = function(V) Plus.Farm.AnyRegion = V end })
+				Blacktop:AddToggle({ Title = "Auto Play Games", Description = "Auto Play in blacktop", Flag = "BadgeFarmPlay", Default = Plus.Farm.PlayGames, Callback = function(V) Plus.Farm.PlayGames = V end })
+				Blacktop:AddSlider({ Title = "Leave After", Description = "Seconds after game", Min = 0, Max = 30, Default = Plus.Farm.LeaveAfter, Suffix = "s", Flag = "BadgeFarmLeaveAfter", Callback = function(V) Plus.Farm.LeaveAfter = V end })
+				FarmStatus = Blacktop:AddLabel("status: off")
+				Blacktop:AddLabel("Save a config with this on and set it to autoload so it keeps going after every teleport.")
+
+				local Teleport = Page:CreateSection({ Title = "Teleports", Icon = Icons.Gear })
+				Teleport:AddToggle({ Title = "Queue On Teleport", Description = "Runs your loader again in the next place", Flag = "BadgeFarmQueueTeleport", Default = Plus.Farm.QueueOnTeleport, Callback = function(V) Plus.Farm.QueueOnTeleport = V end })
+				Teleport:AddTextbox({ Title = "Loader Script", Placeholder = "The line you use to load this script", Default = Plus.Farm.LoaderScript, Flag = "BadgeFarmLoader", Callback = function(V) Plus.Farm.LoaderScript = V or "" end })
+
+				local Hook = Page:CreateSection({ Title = "Badge Farm Webhook", Icon = Icons.List })
+				Hook:AddTextbox({ Title = "Webhook URL", Placeholder = "Your Discord webhook", Default = Plus.Farm.WebhookUrl, Flag = "BadgeFarmWebhookUrl", Callback = function(V) Plus.Farm.WebhookUrl = V or "" end })
+				Hook:AddToggle({ Title = "Send Match Results", Description = "Posts each match result", Flag = "BadgeFarmSendResults", Default = Plus.Farm.SendResults, Callback = function(V) Plus.Farm.SendResults = V end })
+				Hook:AddButton({ Title = "Test Webhook", Callback = function()
+					if SendWebhook("Aural", "Badge farm test from " .. LocalPlayer.Name, Plus.Farm.WebhookUrl) then
+						Notify("Webhook", "Test message sent.")
+					end
+				end })
+			end
+
+			-- // Menu: Logos & Build
+			do
+				local Page = VisualsCategory:CreateTab({ Title = "Logos", Icon = Icons.Person })
+				local Logos = Page:CreateSection({ Title = "Logos", Icon = Icons.Person })
+				Logos:AddLabel("Only you see these.")
+				Logos:AddDropdown({ Title = "Logo", Description = "Badge above your head", Options = LogoNames, Default = Plus.World.Logo, Flag = "HeadLogo", Callback = function(V)
+					Plus.World.Logo = V or "None"
+					RefreshLogo()
+				end })
+				Logos:AddTextbox({ Title = "Custom Logo", Placeholder = "Image id or https link", Default = Plus.World.CustomLogo, Flag = "CustomLogo", Callback = function(V)
+					Plus.World.CustomLogo = V or ""
+					if Plus.World.Logo == "Custom" then
+						RefreshLogo()
+					end
+				end })
+
+				local Build = Page:CreateSection({ Title = "Share Build", Icon = Icons.List })
+				Build:AddButton({ Title = "Share Build", Callback = ShareBuild })
+			end
+		end
 	end
+	end)
+	if not PlusOk then
+		warn("[Aural+] " .. tostring(PlusErr))
+		Notify("Aural+", "Part of Aural+ failed to load: " .. tostring(PlusErr):sub(1, 110))
+	end
+end)
 end
+
+local SettingsTab = Window:CreateCategory(""):CreateTab({ Title = "Settings",  Icon = Icons.Settings })
 
 -- ╔══════════════════════════════╗
 -- ║  SETTINGS TAB                ║
@@ -12915,7 +15345,7 @@ end
 do
 	-- Master enable toggle — shows/hides the window
 	local EnableSec = SettingsTab:CreateSection({ Title = "Script", Icon = Icons.Gear })
-	EnableSec:AddToggle({ Title = "Enable Script", Description = "Pauses all features — turn off to lay low mid-game", Flag = "ScriptEnabled", Default = true, Callback = function(V)
+	EnableSec:AddToggle({ Title = "Enable Script", Description = "Off pauses everything", Flag = "ScriptEnabled", Default = true, Callback = function(V)
 		Running = V
 		-- show/hide window by toggling visibility
 		pcall(function()
@@ -12968,6 +15398,9 @@ do
 		Distance = 22,
 	}
 	local AutoPending = 0
+	Ext.MarkAutoShot = function()
+		AutoPending = os.clock()
+	end
 	local LastAutoShot = 0
 	local DunkHold, DunkSeen, LastDunk = nil, false, 0
 	local DunkLastPos, DunkLastTime = nil, 0
@@ -13033,6 +15466,8 @@ do
 		if Aural.Shooting.PingCompensation then
 			c += GetSmoothedPing() * (Aural.Shooting.PingMultiplier / 100)
 		end
+		-- per-meter timing and Auto Calibrate both push the release later when positive
+		c -= (Aural.Plus.Shot.MeterTiming[Shot.Meter] or 0) / 1000 + Ext.Calibration
 		return math.clamp(c, -0.1, 0.35)
 	end
 
@@ -13041,6 +15476,7 @@ do
 			return
 		end
 		Shot.Released = true
+		Shot.Ours = true
 		Fire(Remotes.Shoot, { Shoot = false })
 	end
 
@@ -13109,6 +15545,41 @@ do
 		return BestRT or Default
 	end
 
+	local function Learn(Grade)
+		if not Aural.Shooting.AutoCalibrate or not Shot.Ours or not Grade then
+			return
+		end
+		local Index = table.find(Grades, Grade) or 5
+		local Change
+		if Index < 4 then
+			Change = 0.008 * (4 - Index)
+		elseif Index > 5 then
+			Change = -0.008 * (Index - 5)
+		elseif Index == 4 then
+			Change = 0.006
+		else
+			Change = 0
+		end
+		Change = math.clamp(Change * 0.7, -0.02, 0.02)
+		Ext.Calibration = math.clamp(Ext.Calibration + Change, -0.15, 0.15)
+		if Ext.CalibrationLabel then
+			Ext.CalibrationLabel:Update(string.format("calibration: %+dms", math.round(Ext.Calibration * 1000)))
+		end
+	end
+
+	Connect(Remotes.ShowFeedback.OnClientEvent, function(Model, Value, GradeIndex)
+		if Model ~= Bound then
+			return
+		end
+		local Grade = Grades[tonumber(GradeIndex)]
+		task.delay(0.1, function()
+			Learn(Grade)
+			if Ext.LastShotLabel then
+				Ext.LastShotLabel:Update("last shot: " .. tostring(Grade or "?"))
+			end
+		end)
+	end)
+
 	local function BeginShot(MeterType)
 		Shot.Id += 1
 		Shot.Active = true
@@ -13119,6 +15590,7 @@ do
 		Shot.Scheduled = false
 		Shot.Released = false
 		Shot.Final = nil
+		Shot.Ours = false
 		Shot.Auto = (os.clock() - AutoPending < 0.6) or (DunkHold ~= nil and os.clock() - DunkHold < 2.5)
 		AutoPending = 0
 
@@ -13344,7 +15816,7 @@ do
 		end
 		if Aural.Shooting.AutoShoot and not DunkHold and not DunkNear and not Shot.Active and Character and HasBall(Character) and Character:GetAttribute("Action") == "" and os.clock() - LastAutoShot > 1.5 then
 			local Root, Goal = GetRoot(Character), GetGoal(Character)
-			if Root and Goal then
+			if Root and Goal and not Ext.Contested(Character, Root) then
 				local Distance = Flat(Goal - Root.Position).Magnitude
 				local InRange = Distance <= Aural.Shooting.ShootRange
 				local ThreeValid = (not Aural.Shooting.ThreePointOnly) or (Distance >= 21.5)
@@ -13567,43 +16039,112 @@ do
 	local Blocked = setmetatable({}, { __mode = "k" })
 	local LastBlock = 0
 
-	local function Jump(Toward)
+	local function Jump(Toward, Shooter)
 		local Proxy, Velocity, Gyro = GetProxy()
+		if Aural.Plus.Defense.SwatAway and Proxy and Shooter then
+			local Goal = GetGoal(Shooter)
+			local Away = Goal and Flat(Proxy.Position - Goal)
+			if Away and Away.Magnitude > 0.1 then
+				Toward = Proxy.Position + Away.Unit * 10
+			end
+		end
 		if Gyro and Toward then
 			Gyro.CFrame = CFrame.lookAt(Proxy.Position, Vector3.new(Toward.X, Proxy.Position.Y, Toward.Z))
 		end
-		-- Same pair of calls the game sends for the jump key.
 		Fire(Remotes.Shoot, { Shoot = true, Input = "E", UseSpace = true })
 		Fire(Remotes.Jump)
 		task.delay(0.3, function()
 			Fire(Remotes.Shoot, { Shoot = false })
 		end)
+		if Aural.Plus.Defense.BlockLunge and Shooter then
+			task.spawn(function()
+				local Started = os.clock()
+				while Running and os.clock() - Started < 0.3 do
+					local ShooterRoot = GetRoot(Shooter)
+					local LungeProxy, LungeVelocity = GetProxy()
+					if not ShooterRoot or not LungeProxy then
+						break
+					end
+					local Offset = Flat(ShooterRoot.Position - LungeProxy.Position)
+					if Offset.Magnitude < 2 then
+						break
+					end
+					LungeVelocity.Velocity = Offset.Unit * 17.35 + Vector3.new(0, LungeVelocity.Velocity.Y, 0)
+					RunService.Heartbeat:Wait()
+				end
+			end)
+		end
+	end
+
+	local RimActions = { Dunking = true, ContactLayup = true }
+	local ChaseActions = { Dunking = true, ContactLayup = true, Gathering = true }
+	local Chasing = false
+
+	local function ShouldBlock(Model, Action)
+		if not BlockActions[Action] then
+			return false
+		end
+		if Aural.Plus.Defense.BlockShots == "Rim & Post" then
+			return RimActions[Action] == true or Model:GetAttribute("InPost") == true
+		end
+		return true
+	end
+
+	local function StopChase()
+		if Chasing then
+			Chasing = false
+			Fire(Remotes.Sprint, false)
+		end
 	end
 
 	Connect(RunService.Heartbeat, function()
-		if not Aural.Defense.AutoBlock or os.clock() - LastBlock < 0.8 then
+		if not Aural.Defense.AutoBlock then
+			StopChase()
 			return
 		end
 		local Character = GetCharacter()
 		local Root = GetRoot(Character)
 		if not Root or HasBall(Character) or Character:GetAttribute("Action") ~= "" then
+			StopChase()
 			return
 		end
-		for Index, Other in GetOthers(Character) do
+		local Range = Aural.Defense.BlockRange
+		local ChaseTarget, ChaseDistance = nil, Range + 25
+		for Index, Other in next, GetOthers(Character) do
 			local Action = Other.Model:GetAttribute("Action")
-			if BlockActions[Action] and IsOpponent(Other.Model, Character, Aural.Defense.BlockTeamCheck) and not (Blocked[Other.Model] and os.clock() - Blocked[Other.Model] < 1.5) then
-				if (Other.Root.Position - Root.Position).Magnitude <= Aural.Defense.BlockRange then
+			if IsOpponent(Other.Model, Character, Aural.Defense.BlockTeamCheck) then
+				local Distance = (Other.Root.Position - Root.Position).Magnitude
+				if os.clock() - LastBlock >= 0.8 and ShouldBlock(Other.Model, Action) and Distance <= Range and not (Blocked[Other.Model] and os.clock() - Blocked[Other.Model] < 1.5) then
 					Blocked[Other.Model] = os.clock()
 					LastBlock = os.clock()
-					task.delay(Aural.Defense.BlockDelay / 1000, function()
-						-- A pump fake ends the shooting action before the delay is up.
-						if Running and BlockActions[Other.Model:GetAttribute("Action")] and (Other.Root.Position - Root.Position).Magnitude <= Aural.Defense.BlockRange + 4 then
-							Jump(Other.Root.Position)
+					local Delay = RimActions[Action] and Aural.Plus.Defense.RimBlockDelay or Aural.Defense.BlockDelay
+					task.delay(Delay / 1000, function()
+						if Running and BlockActions[Other.Model:GetAttribute("Action")] and (Other.Root.Position - Root.Position).Magnitude <= Range + 4 then
+							Jump(Other.Root.Position, Other.Model)
 						end
 					end)
 					return
 				end
+				if Aural.Plus.Defense.BlockChase and ChaseActions[Action] and Distance > Range and Distance < ChaseDistance then
+					ChaseTarget, ChaseDistance = Other, Distance
+				end
 			end
+		end
+		local Proxy, Velocity, Gyro = GetProxy()
+		if ChaseTarget and Proxy and Character:GetAttribute("CanMove") ~= false then
+			local Offset = Flat(ChaseTarget.Root.Position - Proxy.Position)
+			if Offset.Magnitude > 0.5 then
+				Velocity.Velocity = Offset.Unit * 17.35 + Vector3.new(0, Velocity.Velocity.Y, 0)
+				if Gyro then
+					Gyro.CFrame = CFrame.lookAt(Proxy.Position, Proxy.Position + Offset)
+				end
+			end
+			if not Chasing then
+				Chasing = true
+				Fire(Remotes.Sprint, true)
+			end
+		else
+			StopChase()
 		end
 	end)
 end
@@ -13778,13 +16319,26 @@ do
 			local Goal = GetGoal(Target.Model) or Root.Position
 			local ToGoal = Flat(Goal - Target.Root.Position)
 			ToGoal = ToGoal.Magnitude > 0.01 and ToGoal.Unit or Vector3.zero
-			local Offset = Flat(Target.Root.Position + ToGoal * Aural.Defense.GuardDistance - Proxy.Position)
+			local Offset = Flat(Ext.GuardPosition(Target) + ToGoal * Aural.Defense.GuardDistance - Proxy.Position)
+			local Legit = Aural.Plus.Defense.GuardMode == "Legit"
 			local Limit = Aural.Defense.GuardSprint and 17.35 or 14
-			if Player.SpeedBoost then
+			if Player.SpeedBoost and not Legit then
 				Limit = math.max(Limit, Player.Speed)
 			end
 			local Speed = math.min(Offset.Magnitude * Aural.Defense.GuardStrength / 10, Limit)
-			Velocity.Velocity = (Offset.Magnitude > 0.25 and Offset.Unit * Speed or Vector3.zero) + Vector3.new(0, Current.Y, 0)
+			local Wanted = Offset.Magnitude > 0.25 and Offset.Unit * Speed or Vector3.zero
+			if Legit then
+				-- Legit: game speeds only, and the change in velocity is capped at 60 studs/s^2
+				local Change = Wanted - Flat(Current)
+				local Step = 60 * DeltaTime
+				if Change.Magnitude > Step then
+					Wanted = Flat(Current) + Change.Unit * Step
+				end
+			end
+			Velocity.Velocity = Wanted + Vector3.new(0, Current.Y, 0)
+			Ext.GuardState.Spot = Proxy.Position + Offset
+			Ext.GuardState.At = os.clock()
+			Ext.GuardAdjust(Velocity, Target, Offset)
 			if Gyro then
 				Gyro.CFrame = CFrame.lookAt(Proxy.Position, Vector3.new(Target.Root.Position.X, Proxy.Position.Y, Target.Root.Position.Z))
 			end
@@ -14278,299 +16832,442 @@ do
 end
 
 -- // Cosmetics
--- Built the same way the game's own Appearance code builds a character, but only on this client. The game's own
--- pieces of a replaced type are hidden rather than removed, so turning a slot back to None shows them again.
 do
-	local AttachParts = { Hats = "Head", Hair = "Head", FacialHair = "Head", Glasses = "Head", Chain = "UpperTorso", Backpack = "UpperTorso" }
-	local Unscaled = { Hats = true, Hair = true, FacialHair = true, Glasses = true }
-	local Applied = {}
+	local CustomMascotIds = Ext.CustomMascotIds
+	local CustomMascotSources = Ext.CustomMascotSources
+	-- // Custom Mascot Loader
+	local LoadingMascots, FailedMascots = {}, {}
 
-	local function GetScales(Character)
-		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-		local function Value(Name)
-			local Object = Humanoid and Humanoid:FindFirstChild(Name)
-			return Object and Object.Value or 1
+	local function LoadCustomMascot(Name)
+		local Id = CustomMascotIds[Name]
+		if not Id or CustomMascotSources[Name] or LoadingMascots[Name] or (FailedMascots[Name] and os.clock() - FailedMascots[Name] < 20) then
+			return
 		end
-		return Value("BodyWidthScale"), Value("BodyHeightScale"), Value("BodyDepthScale"), Value("HeadScale")
-	end
-
-	local function Prepare(Object)
-		for Index, Part in { Object, table.unpack(Object:GetDescendants()) } do
-			if Part:IsA("BasePart") then
-				Part.Anchored = false
-				Part.CanCollide = false
-				Part.CanQuery = false
-				Part.CanTouch = false
-				Part.Massless = true
+		LoadingMascots[Name] = true
+		task.spawn(function()
+			local Ok, Result = pcall(function()
+				local Body
+				for Attempt = 1, 4 do
+					local Success, Response = pcall(game.HttpGet, game, "https://catalog.roblox.com/v1/bundles/details?bundleIds=" .. Id)
+					if Success and #Response > 5 then
+						Body = Response
+						break
+					end
+					task.wait(2)
+				end
+				assert(Body, "the catalog did not answer")
+				local Bundle = HttpService:JSONDecode(Body)[1]
+				local Description, Score = nil, -1
+				for Index, Item in (Bundle and Bundle.items or {}) do
+					if Item.type == "UserOutfit" then
+						local Success, Candidate = pcall(Players.GetHumanoidDescriptionFromOutfitId, Players, Item.id)
+						if Success and Candidate then
+							local Points = 0
+							for Index2, Part in { "Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg" } do
+								if Candidate[Part] ~= 0 then
+									Points += 1
+								end
+							end
+							if Points > Score then
+								Description, Score = Candidate, Points
+							end
+						end
+					end
+				end
+				assert(Description, "that bundle has no body")
+				return Players:CreateHumanoidModelFromDescription(Description, Enum.HumanoidRigType.R15)
+			end)
+			LoadingMascots[Name] = nil
+			if Ok and Result then
+				CustomMascotSources[Name] = Result
+			else
+				FailedMascots[Name] = os.clock()
+				Notify("Mascot", "Couldn't load " .. Name .. ": " .. tostring(Result))
 			end
-		end
+		end)
 	end
 
-	-- The game's ScaleAccessory: size by the body scales, and the weld offset by the same scales.
-	local function Scale(Character, Object, Weld, Original)
-		local Width, Height, Depth = GetScales(Character)
-		Object.Size = Object.Size * Vector3.new(Width, Height, Depth)
-		local _, _, _, R00, R01, R02, R10, R11, R12, R20, R21, R22 = Original:GetComponents()
-		Weld.C1 = CFrame.new(Original.X * Width, Original.Y / 1.135 * Height, Original.Z * Depth, R00, R01, R02, R10, R11, R12, R20, R21, R22)
-	end
+	-- // Cosmetics
+	do
+		local AttachParts = { Hats = "Head", Hair = "Head", FacialHair = "Head", Glasses = "Head", Chain = "UpperTorso", Backpack = "UpperTorso" }
+		local Unscaled = { Hats = true, Hair = true, FacialHair = true, Glasses = true }
+		local Applied = {}
 
-	-- Several slots can hide the same piece (a mascot hides hair a hair swap already hid), so every hidden piece
-	-- keeps its real transparency once and only comes back when the last slot hiding it lets go.
-	local HiddenBy = {}
+		local function GetScales(Character)
+			local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+			local function Value(Name)
+				local Object = Humanoid and Humanoid:FindFirstChild(Name)
+				return Object and Object.Value or 1
+			end
+			return Value("BodyWidthScale"), Value("BodyHeightScale"), Value("BodyDepthScale"), Value("HeadScale")
+		end
 
-	local function Hide(State, Object)
-		if not Object:IsA("BasePart") or State.Hidden[Object] then
-			return
-		end
-		local Entry = HiddenBy[Object]
-		if not Entry then
-			Entry = { Transparency = Object.Transparency, Owners = 0 }
-			HiddenBy[Object] = Entry
-		end
-		Entry.Owners += 1
-		State.Hidden[Object] = true
-		Object.Transparency = 1
-	end
-
-	local function Unhide(State, Object)
-		if not State.Hidden[Object] then
-			return
-		end
-		State.Hidden[Object] = nil
-		local Entry = HiddenBy[Object]
-		if Entry then
-			Entry.Owners -= 1
-			if Entry.Owners <= 0 then
-				HiddenBy[Object] = nil
-				if Object.Parent then
-					Object.Transparency = Entry.Transparency
+		local function Prepare(Object)
+			for Index, Part in { Object, table.unpack(Object:GetDescendants()) } do
+				if Part:IsA("BasePart") then
+					Part.Anchored = false
+					Part.CanCollide = false
+					Part.CanQuery = false
+					Part.CanTouch = false
+					Part.Massless = true
 				end
 			end
 		end
-	end
 
-	local TypeMatch = {
-		Hats = { "Hat" },
-		Hair = { "Hair" },
-		FacialHair = { "Beard", "Mustache", "Facial", "Eyebrow" },
-		Glasses = { "Glass", "Visor", "Shades" },
-		Chain = { "Chain", "Necklace", "Pendant" },
-		Backpack = { "Backpack", "Bag" },
-	}
-
-	local function Matches(Object, Type)
-		local Words = TypeMatch[Type]
-		if not Words then
-			return false
+		local function Scale(Character, Object, Weld, Original)
+			local Width, Height, Depth = GetScales(Character)
+			Object.Size = Object.Size * Vector3.new(Width, Height, Depth)
+			local _, _, _, R00, R01, R02, R10, R11, R12, R20, R21, R22 = Original:GetComponents()
+			Weld.C1 = CFrame.new(Original.X * Width, Original.Y / 1.135 * Height, Original.Z * Depth, R00, R01, R02, R10, R11, R12, R20, R21, R22)
 		end
-		local Name = string.lower(Object.Name)
-		for Index, Word in Words do
-			if string.find(Name, string.lower(Word), 1, true) then
-				return true
+
+		local HiddenBy = {}
+		local Followers = {}
+
+		Connect(RunService.RenderStepped, function()
+			for Index = #Followers, 1, -1 do
+				local Follower = Followers[Index]
+				if not Follower.Model.Parent then
+					table.remove(Followers, Index)
+				else
+					for Index2, Link in Follower.Links do
+						if Link.Original.Parent then
+							Link.Part.CFrame = Link.Original.CFrame * Link.Offset
+						end
+					end
+				end
 			end
-		end
-		return false
-	end
+		end)
 
-	local function Clear(Type)
-		local State = Applied[Type]
-		if not State then
-			return
+		local function Hide(State, Object)
+			if not Object:IsA("BasePart") or State.Hidden[Object] then
+				return
+			end
+			local Entry = HiddenBy[Object]
+			if not Entry then
+				Entry = { Transparency = Object.Transparency, Owners = 0 }
+				HiddenBy[Object] = Entry
+			end
+			Entry.Owners += 1
+			State.Hidden[Object] = true
+			Object.Transparency = 1
 		end
-		Applied[Type] = nil
-		for Object in State.Hidden do
-			Unhide(State, Object)
-		end
-		for Index, Object in State.Objects do
-			if Object.Parent then
+
+		local function Clear(Type)
+			local State = Applied[Type]
+			if not State then
+				return
+			end
+			for Index, Object in State.Objects do
 				Object:Destroy()
 			end
-		end
-	end
-
-	local function ClearAll()
-		for Type in Applied do
-			Clear(Type)
-		end
-	end
-
-	local function FindSource(Type, Name)
-		local Folder = Accessories and Accessories:FindFirstChild(Type)
-		if not Folder then
-			return nil
-		end
-		for Index, Item in Folder:GetDescendants() do
-			if Item:IsA("BasePart") and Item.Name == Name and Item:FindFirstChildOfClass("Attachment") then
-				return Item
+			for Object in State.Hidden do
+				local Entry = HiddenBy[Object]
+				if Entry then
+					Entry.Owners -= 1
+					if Entry.Owners <= 0 then
+						HiddenBy[Object] = nil
+						if Object.Parent then
+							Object.Transparency = Entry.Transparency
+						end
+					end
+				end
 			end
+			Applied[Type] = nil
 		end
-		return nil
-	end
 
-	local function AnchorFor(Character, Type)
-		local Name = AttachParts[Type] or "Head"
-		return Character:FindFirstChild(Name)
-			or Character:FindFirstChild("UpperTorso")
-			or Character:FindFirstChild("Torso")
-			or Character:FindFirstChild("HumanoidRootPart")
-	end
-
-	local function Attach(Character, Type, Source, State)
-		local Anchor = AnchorFor(Character, Type)
-		local Attachment = Source:FindFirstChildOfClass("Attachment")
-		if not Anchor or not Attachment then
-			return
+		local function Weld(Part0, Part1, C0, C1)
+			local Joint = Instance.new("Weld")
+			Joint.Name = "AttachmentWeld"
+			Joint.Part0 = Part0
+			Joint.Part1 = Part1
+			Joint.C0 = C0
+			Joint.C1 = C1
+			Joint.Parent = Part1
+			return Joint
 		end
-		local Copy = Source:Clone()
-		Copy.Name = "Aural_" .. Type
-		Prepare(Copy)
-		Copy.Parent = Character
-		local Weld = Instance.new("Motor6D")
-		Weld.Name = "Aural_" .. Type
-		Weld.Part0 = Anchor
-		Weld.Part1 = Copy
-		Weld.C0 = Attachment.CFrame
-		Weld.Parent = Anchor
-		if not Unscaled[Type] then
-			Scale(Character, Copy, Weld, Attachment.CFrame)
-		end
-		table.insert(State.Objects, Copy)
-	end
 
-	local function ApplyType(Character, Type, Name)
-		Clear(Type)
-		if not Character or not Name or Name == "None" then
-			return
-		end
-		local State = { Hidden = {}, Objects = {} }
-		Applied[Type] = State
-
-		-- Hide whatever the game already put on you of this type.
-		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-		for Index, Object in (Humanoid and Humanoid:GetAccessories() or Character:GetChildren()) do
-			if Object:IsA("Accessory") and Matches(Object, Type) then
-				for Index2, Part in Object:GetDescendants() do
-					if Part:IsA("BasePart") then
-						Hide(State, Part)
+		local function HideOwn(Character, State, Type)
+			local Folder = Character:FindFirstChild("Accessories")
+			if Type == "Shoes" then
+				for Index, Side in { "LeftShoe", "RightShoe" } do
+					local Shoe = Character:FindFirstChild(Side)
+					if Shoe then
+						Hide(State, Shoe)
+					end
+				end
+			elseif Folder then
+				for Index, Object in Folder:GetChildren() do
+					if Object:GetAttribute("Type") == Type and not Object:GetAttribute("Aural") then
+						Hide(State, Object)
 					end
 				end
 			end
 		end
 
-		local Source = FindSource(Type, Name)
-		if Source then
-			Attach(Character, Type, Source, State)
-		end
-	end
-
-	-- Shoes are variants under Accessories.Shoes; every part of the variant is welded to the matching foot.
-	local function ApplyShoes(Character, Name)
-		Clear("Shoes")
-		if not Character or not Name or Name == "None" then
-			return
-		end
-		local Variant = ShoeLookup[Name]
-		if not Variant then
-			return
-		end
-		local State = { Hidden = {}, Objects = {} }
-		Applied.Shoes = State
-		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-		for Index, Object in (Humanoid and Humanoid:GetAccessories() or Character:GetChildren()) do
-			if Object:IsA("Accessory") and Matches(Object, "Shoes") then
-				for Index2, Part in Object:GetDescendants() do
-					if Part:IsA("BasePart") then
-						Hide(State, Part)
+		local function ApplyAccessory(Character, Type, Name)
+			local Source = Accessories[Type]:FindFirstChild(Name, true)
+			local Part = Character:FindFirstChild(AttachParts[Type])
+			local Folder = Character:FindFirstChild("Accessories")
+			local Attachment = Source and Source:FindFirstChildOfClass("Attachment")
+			if not (Part and Folder and Attachment) then
+				return nil
+			end
+			local Rig = Part:FindFirstChild(Attachment.Name)
+			if not Rig then
+				for Index, Object in Character:GetDescendants() do
+					if Object:IsA("Attachment") and Object.Name == Attachment.Name and Object.Parent:IsA("BasePart") and not Object.Parent:IsDescendantOf(Folder) then
+						Rig = Object
+						break
 					end
 				end
 			end
+			if not Rig then
+				return nil
+			end
+			local Clone = Source:Clone()
+			Clone:SetAttribute("Aural", true)
+			Clone:SetAttribute("Type", Type)
+			Prepare(Clone)
+			local Joint = Weld(Rig.Parent, Clone, Rig.CFrame, Clone:FindFirstChildOfClass("Attachment").CFrame)
+			if not Unscaled[Type] then
+				Scale(Character, Clone, Joint, Joint.C1)
+			end
+			Clone.Parent = Folder
+			return { Clone }
 		end
-		for Index, Source in Variant:GetChildren() do
-			if Source:IsA("BasePart") then
-				local Side = string.find(string.lower(Source.Name), "left", 1, true) and "Left" or "Right"
+
+		local function ApplyShoes(Character, Key)
+			local Variant = ShoeLookup[Key]
+			if not Variant then
+				return nil
+			end
+			local Objects = {}
+			for Index, Side in { "Left", "Right" } do
+				local Source = Variant:FindFirstChild(Side .. "Shoe")
 				local Foot = Character:FindFirstChild(Side .. "Foot")
-					or Character:FindFirstChild(Side .. "Leg")
-					or Character:FindFirstChild("HumanoidRootPart")
-				local Attachment = Source:FindFirstChildOfClass("Attachment")
-				if Foot and Attachment then
-					local Copy = Source:Clone()
-					Copy.Name = "Aural_Shoe"
-					Prepare(Copy)
-					Copy.Parent = Character
-					local Weld = Instance.new("Motor6D")
-					Weld.Part0 = Foot
-					Weld.Part1 = Copy
-					Weld.C0 = Attachment.CFrame
-					Weld.Parent = Foot
-					table.insert(State.Objects, Copy)
+				local Ankle = Foot and Foot:FindFirstChild(Side .. "AnkleRigAttachment")
+				local Rig = Source and Source:FindFirstChild("RigAttachment")
+				if Ankle and Rig then
+					local Clone = Source:Clone()
+					Clone.Name = "Aural" .. Side .. "Shoe"
+					Prepare(Clone)
+					local Joint = Weld(Foot, Clone, Ankle.CFrame, Clone.RigAttachment.CFrame)
+					Scale(Character, Clone, Joint, Joint.C1)
+					Clone.Parent = Character
+					table.insert(Objects, Clone)
+				end
+			end
+			return Objects
+		end
+
+		local function ApplyMascot(Character, Name, State)
+			local Source = CustomMascotSources[Name] or Accessories.Mascots:FindFirstChild(Name)
+			if not Source and CustomMascotIds[Name] then
+				LoadCustomMascot(Name)
+			end
+			local MascotRoot = Source and Source:FindFirstChild("HumanoidRootPart")
+			local Root = Character:FindFirstChild("HumanoidRootPart")
+			if not (MascotRoot and Root) then
+				return nil
+			end
+			local Width, Height, Depth, HeadScale = GetScales(Character)
+			local Vertical = Height / 1.135
+			local Neck = nil
+			local UpperTorso = Character:FindFirstChild("UpperTorso")
+			local NeckAttachment = UpperTorso and (UpperTorso:FindFirstChild("NeckRigAttachment") or UpperTorso:FindFirstChild("NeckAttachment"))
+			if NeckAttachment then
+				Neck = Root.CFrame:PointToObjectSpace(NeckAttachment.WorldPosition)
+			end
+
+			local Whole = CustomMascotSources[Name] ~= nil
+			local Model = nil
+			local Rig = {}
+			if Whole then
+				Model = Source:Clone()
+				Model.Name = "AuralMascotModel"
+				local ModelRoot = Model:FindFirstChild("HumanoidRootPart")
+				local ModelLower = Model:FindFirstChild("LowerTorso")
+				local Reference = Accessories.Mascots:GetChildren()[1]
+				local ReferenceRoot = Reference and Reference:FindFirstChild("HumanoidRootPart")
+				local ReferenceLower = Reference and Reference:FindFirstChild("LowerTorso")
+				local RootToLower = (ReferenceRoot and ReferenceLower) and ReferenceRoot.CFrame:ToObjectSpace(ReferenceLower.CFrame) or CFrame.identity
+				for Index, Piece in Model:GetChildren() do
+					if ModelLower and Piece:IsA("BasePart") and Piece ~= ModelRoot then
+						Rig[Piece] = RootToLower * ModelLower.CFrame:ToObjectSpace(Piece.CFrame)
+					end
+				end
+				for Index, Object in Model:GetDescendants() do
+					if Object:IsA("Motor6D") or Object:IsA("BaseScript") then
+						Object:Destroy()
+					end
+				end
+				for Index, Object in Model:GetChildren() do
+					if Object:IsA("Humanoid") or Object:IsA("BodyColors") then
+						Object:Destroy()
+					end
+				end
+				Prepare(Model)
+				MascotRoot = Model:FindFirstChild("HumanoidRootPart")
+				for Index, Object in Model:GetChildren() do
+					if Object:IsA("BasePart") then
+						Object.Anchored = true
+					end
+				end
+			end
+			local Links = {}
+
+			local Objects = {}
+			for Index, Piece in (Whole and Model or Source):GetChildren() do
+				local Original = Piece:IsA("BasePart") and Piece ~= MascotRoot and Character:FindFirstChild(Piece.Name)
+				if Original and Original:IsA("BasePart") then
+					local BaseOffset = Whole and (Rig[Piece] or MascotRoot.CFrame:ToObjectSpace(Piece.CFrame)) or MascotRoot.CFrame:ToObjectSpace(Piece.CFrame)
+					local Position = BaseOffset.Position
+					local IsHead = Piece.Name == "Head"
+					local Target, Size
+					if IsHead and Neck then
+						Target = Neck + (Position - Vector3.new(Neck.X / Width, Neck.Y / Vertical, Neck.Z / Depth)) * HeadScale
+						Size = Vector3.new(HeadScale, HeadScale, HeadScale)
+					else
+						Target = Vector3.new(Position.X * Width, Position.Y * Vertical, Position.Z * Depth)
+						Size = Vector3.new(Width, Vertical, Depth)
+					end
+
+					local Chain = CFrame.identity
+					local Current = Original
+					while Current ~= Root do
+						local Motor = Current:FindFirstChildOfClass("Motor6D")
+						if not (Motor and Motor.Part0 and Motor.Part1 == Current) then
+							break
+						end
+						Chain = Motor.C0 * Motor.C1:Inverse() * Chain
+						Current = Motor.Part0
+					end
+
+					local Clone = Whole and Piece or Piece:Clone()
+					if not Whole then
+						Clone.Name = Piece.Name .. "_AuralMascot"
+						Prepare(Clone)
+					end
+					Clone.Size = Piece.Size * Size
+					local Mesh = Clone:FindFirstChildOfClass("SpecialMesh")
+					if Mesh then
+						Mesh.Scale = Mesh.Scale * Size
+					end
+					local Offset = Chain:Inverse() * CFrame.new(Target) * (BaseOffset - Position)
+					if Whole then
+						table.insert(Links, { Part = Clone, Original = Original, Offset = Offset })
+					else
+						Weld(Original, Clone, Offset, CFrame.identity)
+						Clone.Parent = Original.Parent
+						table.insert(Objects, Clone)
+					end
+					Hide(State, Original)
+				end
+			end
+
+			if Whole then
+				table.insert(Links, { Part = MascotRoot, Original = Root, Offset = CFrame.identity })
+				MascotRoot.Transparency = 1
+				Model.Parent = workspace.CurrentCamera
+				table.insert(Followers, { Model = Model, Links = Links })
+				table.insert(Objects, Model)
+			end
+
+			for Index, PartName in { "Nose", "LeftEar", "RightEar", "LeftShoe", "RightShoe", "AuralLeftShoe", "AuralRightShoe" } do
+				local Part = Character:FindFirstChild(PartName)
+				if Part then
+					Hide(State, Part)
+				end
+			end
+			local Folder = Character:FindFirstChild("Accessories")
+			if Folder then
+				for Index, Object in Folder:GetChildren() do
+					Hide(State, Object)
+				end
+			end
+			return Objects
+		end
+
+		local function Ensure(Character, Type)
+			local Choice = Aural.Cosmetics[Type]
+			local State = Applied[Type]
+			if not Choice or Choice == "None" then
+				Clear(Type)
+				return
+			end
+			if State and State.Character == Character and State.Choice == Choice then
+				for Index, Object in State.Objects do
+					if not Object.Parent then
+						State = nil
+						break
+					end
+				end
+			else
+				State = nil
+			end
+			if State then
+				if Type == "Mascot" then
+					local Folder = Character:FindFirstChild("Accessories")
+					if Folder then
+						for Index, Object in Folder:GetChildren() do
+							Hide(State, Object)
+						end
+					end
+				else
+					HideOwn(Character, State, Type)
+				end
+				return
+			end
+
+			Clear(Type)
+			State = { Character = Character, Choice = Choice, Objects = {}, Hidden = {} }
+			local Objects
+			if Type == "Shoes" then
+				Objects = ApplyShoes(Character, Choice)
+			elseif Type == "Mascot" then
+				Objects = ApplyMascot(Character, Choice, State)
+			else
+				Objects = ApplyAccessory(Character, Type, Choice)
+			end
+			if Type == "Mascot" and not Objects then
+				return
+			end
+			State.Objects = Objects or {}
+			if Type ~= "Mascot" then
+				HideOwn(Character, State, Type)
+			end
+			Applied[Type] = State
+		end
+
+		local Order = { "Hats", "Hair", "FacialHair", "Glasses", "Chain", "Backpack", "Shoes", "Mascot" }
+
+		RefreshCosmetics = function()
+			local Character = GetCharacter()
+			if not Character or not Accessories then
+				return
+			end
+			for Index, Type in Order do
+				local Ok, Problem = pcall(Ensure, Character, Type)
+				if not Ok then
+					Applied[Type] = nil
 				end
 			end
 		end
-	end
 
-	-- A mascot hides the whole body and wears a replacement instead.
-	local function ApplyMascot(Character, Name)
-		Clear("Mascot")
-		if not Character or not Name or Name == "None" then
-			return
-		end
-		local Model = Accessories and Accessories:FindFirstChild("Mascots") and Accessories.Mascots:FindFirstChild(Name)
-		if not Model then
-			return
-		end
-		local State = { Hidden = {}, Objects = {} }
-		Applied.Mascot = State
-		local Root = Character:FindFirstChild("HumanoidRootPart")
-		for Index, Part in Character:GetDescendants() do
-			if Part:IsA("BasePart") and Part ~= Root then
-				Hide(State, Part)
-			end
-		end
-		for Index, Part in Model:GetDescendants() do
-			if Part:IsA("BasePart") then
-				local Copy = Part:Clone()
-				Copy.Name = "Aural_Mascot"
-				Prepare(Copy)
-				Copy.Parent = Character
-				if Root then
-					local Weld = Instance.new("Motor6D")
-					Weld.Part0 = Root
-					Weld.Part1 = Copy
-					Weld.C0 = Root.CFrame:ToObjectSpace(Part.CFrame)
-					Weld.Parent = Root
-				end
-				table.insert(State.Objects, Copy)
-			end
-		end
-	end
-
-	RefreshCosmetics = function()
-		local Character = GetCharacter()
-		if not Character then
-			return
-		end
-		for Index, Type in AccessoryTypes do
-			ApplyType(Character, Type, Aural.Cosmetics[Type])
-		end
-		ApplyShoes(Character, Aural.Cosmetics.Shoes)
-		ApplyMascot(Character, Aural.Cosmetics.Mascot)
-	end
-
-	local LastCosmeticCharacter = nil
-	Connect(RunService.Heartbeat, function()
-		local Character = GetCharacter()
-		if Character ~= LastCosmeticCharacter then
-			LastCosmeticCharacter = Character
-			ClearAll()
-			if Character then
+		task.spawn(function()
+			while Running do
 				RefreshCosmetics()
+				task.wait(1)
 			end
-		end
-	end)
+		end)
 
-	table.insert(Connections, { Disconnect = function()
-		ClearAll()
-	end })
+		table.insert(Connections, { Disconnect = function()
+			for Index, Type in Order do
+				Clear(Type)
+			end
+		end })
+	end
 end
 
 -- // Ready
