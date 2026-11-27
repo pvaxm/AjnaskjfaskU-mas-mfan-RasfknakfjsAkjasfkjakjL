@@ -7,6 +7,14 @@ local Aural = {
 		ReleasePoint = 97,
 		TimingOffset = -5,
 		AutoGreen = true,
+		ShotGlide = false,
+		ShotGlideSpeed = 10,
+		ShotGlideTime = 300,
+		ShotGlideStrength = 100,
+		GatherGlide = false,
+		GatherGlideSpeed = 10,
+		GatherGlideTime = 400,
+		GatherGlideStrength = 100,
 
 		AutoAlign = true,
 		DistanceScaling = true,
@@ -18,6 +26,28 @@ local Aural = {
 		ShootRange = 27,
 		RangeCircle = false,
 		RangeCircleColor = Color3.fromRGB(255, 92, 146),
+	},
+
+	Reflex = {
+		AutoGreen = false,
+		GreenOffset = 0,
+		TapShoot = false,
+
+		ContestOn = false,
+		ContestHead = true,
+		ContestGlow = true,
+		ContestGround = true,
+		ContestFoes = true,
+		ContestOnlyBall = false,
+		ContestHeight = 4.4,
+		ContestRange = 6,
+		GlowStrength = 60,
+
+		CustomMeter = false,
+		MeterShape = "Equipped",
+		MeterSize = 1,
+		MeterCustomColor = false,
+		MeterColor = Color3.fromRGB(100, 235, 145),
 	},
 
 	Dribbling = {
@@ -51,6 +81,11 @@ local Aural = {
 		GuardDistance = 4,
 		GuardStrength = 70,
 		GuardRange = 45,
+		AutoSteal = false,
+		StealRange = 8,
+		StealFacing = false,
+		StealAlways = false,
+		AvoidFouls = true,
 	},
 
 	Ball = {
@@ -7952,15 +7987,4017 @@ do
 	Ping:AddSlider({ Title = "Latency Compensation", Description = "How much of your ping to compensate for (100% = full ping)", Min = 0, Max = 150, Default = Aural.Shooting.PingMultiplier, Suffix = "%", Flag = "PingMultiplier", Callback = function(V) Aural.Shooting.PingMultiplier = V end })
 	Ping:AddSlider({ Title = "Timing Offset", Description = "Fine-tune: negative releases earlier, positive later", Min = -60, Max = 60, Default = Aural.Shooting.TimingOffset, Suffix = "ms", Flag = "TimingOffset", Callback = function(V) Aural.Shooting.TimingOffset = V end })
 
-	local Meter = ShootingTab:CreateSection({ Title = "Shot Meter", Icon = Icons.Meter })
-	Meter:AddDropdown({ Title = "Change Meter", Description = "Switches your shot meter type", Options = MeterTypes, Flag = "MeterType", Callback = function(V)
-		if V then
-			SetCurrentMeter(V)
-			Fire(Remotes.UpdateSetting, { "Meter" }, "Type", V)
-			Notify("Meter", "Meter set to " .. V .. ".")
+	local Meter = ShootingTab:CreateSection({ Title = "Custom Meter", Icon = Icons.Meter })
+	Meter:AddToggle({ Title = "Customize Meter", Description = "Appearance controls are separate from Auto Green", Flag = "RfxCustomMeter", Default = Aural.Reflex.CustomMeter, Callback = function(V) Aural.Reflex.CustomMeter = V end })
+	Meter:AddDropdown({ Title = "Meter Shape", Description = "Equipped keeps your own meter, any other shape swaps it", Options = { "Equipped", "Vertical", "Bat", "Rocket", "Funnel", "Funnel2", "Pill", "Arrow", "Hoop", "Roblox", "Tube", "Diamond" }, Default = Aural.Reflex.MeterShape, Flag = "RfxMeterShape", Callback = function(V) Aural.Reflex.MeterShape = V or "Equipped" end })
+	Meter:AddSlider({ Title = "Meter Size", Description = "Scales the meter", Min = 0.4, Max = 3, Default = Aural.Reflex.MeterSize, Step = 0.1, Decimals = 1, Suffix = "x", Flag = "RfxMeterSize", Callback = function(V) Aural.Reflex.MeterSize = V end })
+	Meter:AddToggle({ Title = "Custom Fill Color", Description = "Tints the meter fill with the color below", Flag = "RfxMeterCustomColor", Default = Aural.Reflex.MeterCustomColor, Callback = function(V) Aural.Reflex.MeterCustomColor = V end })
+	Meter:AddColorPicker({ Title = "Fill Color", Default = Aural.Reflex.MeterColor, Flag = "RfxMeterColor", Callback = function(V) Aural.Reflex.MeterColor = V end })
+
+	local GreenV2 = ShootingTab:CreateSection({ Title = "Auto Green V2", Icon = Icons.Timer })
+	GreenV2:AddToggle({ Title = "Auto Green V2", Description = "Automatic release with ping compensation and self-calibration. Shoot with your normal shoot key", Flag = "RfxAutoGreen", Default = Aural.Reflex.AutoGreen, Callback = function(V)
+		Aural.Reflex.AutoGreen = V
+		if V and (Aural.Shooting.PerfectTiming or Aural.Shooting.AutoGreen) then
+			Aural.Shooting.PerfectTiming = false
+			Aural.Shooting.AutoGreen = false
+			if PerfTimingToggle then pcall(function() PerfTimingToggle:Set(false, true) end) end
+			if AutoGreenToggle then pcall(function() AutoGreenToggle:Set(false, true) end) end
+			Notify("Auto Green V2", "Auto Time and Auto Green were switched off so only one auto green releases your shots.")
 		end
 	end })
+	Aural.ReflexStatus = GreenV2:AddLabel("status: off")
+	GreenV2:AddSlider({ Title = "Release Timing", Description = "Negative releases earlier, positive releases later", Min = -60, Max = 60, Default = Aural.Reflex.GreenOffset, Suffix = " ms", Flag = "RfxGreenOffset", Callback = function(V) Aural.Reflex.GreenOffset = V end })
+	GreenV2:AddToggle({ Title = "Tap To Shoot", Description = "A quick tap on shoot becomes a full held shot", Flag = "RfxTapShoot", Default = Aural.Reflex.TapShoot, Callback = function(V) Aural.Reflex.TapShoot = V end })
+
+	local ContestUI = ShootingTab:CreateSection({ Title = "Open Contest", Icon = Icons.Target })
+	ContestUI:AddToggle({ Title = "Open Contest", Description = "Green: open. Amber: pressure. Red: covered", Flag = "RfxContestOn", Default = Aural.Reflex.ContestOn, Callback = function(V) Aural.Reflex.ContestOn = V end })
+	ContestUI:AddToggle({ Title = "Number Above Head", Description = "Contest label over each player", Flag = "RfxContestHead", Default = Aural.Reflex.ContestHead, Callback = function(V) Aural.Reflex.ContestHead = V end })
+	ContestUI:AddToggle({ Title = "Color On Player", Description = "Glows the player with the contest color", Flag = "RfxContestGlow", Default = Aural.Reflex.ContestGlow, Callback = function(V) Aural.Reflex.ContestGlow = V end })
+	ContestUI:AddToggle({ Title = "Ground Marker", Description = "Colored disc on the floor under the player", Flag = "RfxContestGround", Default = Aural.Reflex.ContestGround, Callback = function(V) Aural.Reflex.ContestGround = V end })
+	ContestUI:AddToggle({ Title = "Show On Opponents", Description = "Also shows the contest on your opponents", Flag = "RfxContestFoes", Default = Aural.Reflex.ContestFoes, Callback = function(V) Aural.Reflex.ContestFoes = V end })
+	ContestUI:AddToggle({ Title = "Only While Holding Ball", Description = "Hides the contest unless that player has the ball", Flag = "RfxContestOnlyBall", Default = Aural.Reflex.ContestOnlyBall, Callback = function(V) Aural.Reflex.ContestOnlyBall = V end })
+	ContestUI:AddSlider({ Title = "Label Height", Description = "How high the label sits above the player", Min = 1, Max = 8, Default = Aural.Reflex.ContestHeight, Step = 0.1, Decimals = 1, Suffix = " studs", Flag = "RfxContestHeight", Callback = function(V) Aural.Reflex.ContestHeight = V end })
+	ContestUI:AddSlider({ Title = "Contest Distance", Description = "How close a defender has to be to count", Min = 3, Max = 15, Default = Aural.Reflex.ContestRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "RfxContestRange", Callback = function(V) Aural.Reflex.ContestRange = V end })
+	ContestUI:AddSlider({ Title = "Player Color Strength", Description = "How strong the glow is", Min = 10, Max = 100, Default = Aural.Reflex.GlowStrength, Suffix = "%", Flag = "RfxGlowStrength", Callback = function(V) Aural.Reflex.GlowStrength = V end })
 end
+
+-- // Reflex port  [Shooting tab]  Auto Green V2 + Open Contest + Custom Meter
+-- The Reflex modules below are embedded unchanged. Only the small shim around them is Hoopz specific.
+task.spawn(function()
+local env = (getgenv and getgenv()) or shared or _G
+if type(env.HoopzReflexPort) == "table" and type(env.HoopzReflexPort.Unload) == "function" then pcall(env.HoopzReflexPort.Unload) end
+local R = {Running = true, S = Aural.Reflex, Connections = {}, Cleanup = {}, Errors = {}, Status = {}, Prefs = {}, Loading = false}
+env.HoopzReflexPort = R
+R.Env, R.Pure = env, {}
+for _, name in ipairs({"Players", "RunService", "UserInputService", "HttpService", "ReplicatedStorage"}) do
+	R[name] = game:GetService(name)
+end
+R.Player = R.Players.LocalPlayer
+R.RootPath = "HoopzReflex/" .. tostring(R.Player.UserId)
+pcall(function() makefolder("HoopzReflex") end)
+pcall(function() makefolder(R.RootPath) end)
+function R.Bind(signal, callback)
+	local c = signal:Connect(function(...)
+		if R.Running then return callback(...) end
+	end)
+	if not R.Running then c:Disconnect() else table.insert(R.Connections, c) end
+	return c
+end
+function R.DeferCleanup(callback) table.insert(R.Cleanup, callback) end
+function R.Error(name, reason)
+	local message = tostring(reason)
+	if R.Errors[name] ~= message then warn("[Hoopz Reflex] " .. name .. ": " .. message) end
+	R.Errors[name] = message
+	R.Status[name] = "Error: " .. message:sub(1, 150)
+end
+function R.Try(name, fn, ...)
+	local result = table.pack(pcall(fn, ...))
+	if not result[1] then R.Error(name, result[2]) end
+	return table.unpack(result, 1, result.n)
+end
+function R.Notify(title, content) Notify(title, tostring(content)) end
+function R.New(class, props, parent)
+	local o = Instance.new(class)
+	for key, value in pairs(props or {}) do o[key] = value end
+	o.Parent = parent; return o
+end
+function R.Character()
+	if R.Game and R.Game.CharacterObject then
+		local object=R.Game.CharacterObject()
+		local model=object and object.data and object.data.model
+		if typeof(model)=="Instance" and model:IsA("Model") and model.Parent then return model end
+	end
+	local chars = workspace:FindFirstChild("Characters")
+	return (chars and chars:FindFirstChild(R.Player.Name)) or R.Player.Character
+end
+function R.Root(character)
+	character = character or R.Character()
+	if not character or not character:IsA("Model") then return nil end
+	return character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+end
+function R.Flat(v) return Vector3.new(v.X, 0, v.Z) end
+function R.Unload()
+	if not R.Running then return end
+	R.Running = false
+	for _, c in ipairs(R.Connections) do pcall(c.Disconnect, c) end
+	for i = #R.Cleanup, 1, -1 do pcall(R.Cleanup[i]) end
+	if env.HoopzReflexPort == R then env.HoopzReflexPort = nil end
+end
+local Pure = R.Pure
+function Pure.finite(n)
+	return type(n) == "number" and n == n and math.abs(n) < math.huge
+end
+function Pure.contest(distance)
+	distance=Pure.finite(distance) and math.max(0,distance) or 30
+	local percentage=math.floor(math.clamp((10-distance)/10,0,1)*100+0.5)
+	return percentage, distance<=5 and "COVERED" or (distance<=10 and "CLOSE" or "OPEN")
+end
+local modules, cache = {}, {}
+local function import(name)
+	if cache[name] then return cache[name] end
+	assert(modules[name], "Missing Reflex module: " .. name)
+	local value = modules[name](import); cache[name] = value; return value
+end
+
+modules["env"] = function(...)
+
+local Env = {}
+
+local httpService: any = game:GetService("HttpService")
+
+local function pick(value: any): any
+    return if type(value) == "function" then value else nil
+end
+
+local globals: any = nil
+if type(getgenv) == "function" then
+    local ok, env = pcall(getgenv)
+    if ok and type(env) == "table" then
+        globals = env
+    end
+end
+if type(globals) ~= "table" then
+    globals = if type(_G) == "table" then _G else {}
+end
+
+Env.G = globals
+Env.hookmetamethod = pick(hookmetamethod)
+Env.newcclosure = pick(newcclosure)
+Env.clonefunction = pick(clonefunction)
+Env.restorefunction = pick(restorefunction)
+Env.getnamecallmethod = pick(getnamecallmethod)
+Env.getrawmetatable = pick(getrawmetatable)
+Env.setreadonly = pick(setreadonly)
+Env.checkcaller = pick(checkcaller)
+Env.keypress = pick(keypress)
+Env.keyrelease = pick(keyrelease)
+Env.filtergc = pick(filtergc)
+Env.gethui = pick(gethui)
+Env.getgc = pick(getgc)
+Env.setidentity = pick(setthreadidentity) or pick(set_thread_identity) or pick(setidentity)
+Env.getidentity = pick(getthreadidentity) or pick(get_thread_identity) or pick(getidentity)
+
+local canRead = type(isfile) == "function" and type(readfile) == "function"
+local canWrite = type(writefile) == "function"
+
+function Env.get(name: string): any
+    return globals[name]
+end
+
+function Env.set(name: string, value: any)
+    globals[name] = value
+end
+
+local function readJson(path: string): any
+    if not isfile(path) then
+        return nil
+    end
+    return httpService:JSONDecode(readfile(path))
+end
+
+function Env.readJson(path: string): any
+    if not canRead then
+        return nil
+    end
+    local ok, value = pcall(readJson, path)
+    return if ok and type(value) == "table" then value else nil
+end
+
+local function writeJson(path: string, value: any)
+    writefile(path, httpService:JSONEncode(value))
+end
+
+function Env.writeJson(path: string, value: any): boolean
+    if not canWrite then
+        return false
+    end
+    return (pcall(writeJson, path, value))
+end
+
+return Env
+end
+
+modules["config"] = function(...)
+
+local Config = {}
+
+Config.PEAKS = {
+    Bat = -0.99,
+    Funnel2 = -0.985,
+    Rocket = -0.91,
+    Vertical = -1.48,
+} :: { [string]: number }
+
+Config.GUARD_BALL = "Ball Handler"
+Config.GUARD_NEAREST = "Nearest Player"
+Config.GUARD_TARGETS = { Config.GUARD_BALL, Config.GUARD_NEAREST }
+
+Config.COMBO_NAMES = {
+    "Cross Tween", "Hesi Cross", "Behind Back Spin", "Double Cross Snatch", "Breakdown Stepback", "Half Spin Cross",
+    "Halo Spin", "Double Behind Snatch", "Signature Combo", "Big Drop Step", "Big Spin Out", "Big Face Up",
+}
+Config.COMBOS = {
+    ["Cross Tween"] = { "Crossover", "Tween", "Crossover" },
+    ["Hesi Cross"] = { "Hesitation", "Crossover", "Hesitation" },
+    ["Behind Back Spin"] = { "BehindBack", "Spin" },
+    ["Double Cross Snatch"] = { "DoubleCrossover", "SnatchBack" },
+    ["Breakdown Stepback"] = { "Breakdown", "Crossover", "StepBack" },
+    ["Half Spin Cross"] = { "HalfSpin", "Crossover" },
+    ["Halo Spin"] = { "BehindBack", "HalfSpin", "Spin" },
+    ["Double Behind Snatch"] = { "DoubleBehindBack", "SnatchBack" },
+    ["Signature Combo"] = { "Combo" },
+    ["Big Drop Step"] = { "Hesitation", "HalfSpin", "StepBack" },
+    ["Big Spin Out"] = { "Crossover", "Spin", "SnatchBack" },
+    ["Big Face Up"] = { "Breakdown", "Hesitation", "DoubleCrossover" },
+} :: { [string]: { string } }
+
+Config.MOVE_INPUTS = {
+    Crossover = { R = "Z", L = "C" },
+    Hesitation = { R = "C", L = "Z" },
+    Tween = { R = "ZZ", L = "CC" },
+    DoubleCrossover = { R = "CC", L = "ZZ" },
+    BehindBack = { R = "CX", L = "ZX" },
+    Spin = { R = "CXZ", L = "ZXC" },
+    StepBack = { R = "X", L = "X" },
+    SnatchBack = { R = "XX", L = "XX" },
+    HalfSpin = { R = "V", L = "V" },
+    Breakdown = { R = "VC", L = "VZ" },
+    DoubleBehindBack = { R = "XC", L = "XZ" },
+    Combo = { R = "VV", L = "VV" },
+    SwitchHand = { R = "H", L = "H" },
+} :: { [string]: { [string]: string } }
+
+Config.MOVE_KEYS = {
+    { "Crossover", "Crossover" },
+    { "Hesitation", "Hesitation" },
+    { "Tween", "Tween" },
+    { "Double Cross", "DoubleCrossover" },
+    { "Behind Back", "BehindBack" },
+    { "Spin", "Spin" },
+    { "Step Back", "StepBack" },
+    { "Snatch Back", "SnatchBack" },
+    { "Half Spin", "HalfSpin" },
+    { "Breakdown", "Breakdown" },
+    { "Double Behind", "DoubleBehindBack" },
+    { "Signature", "Combo" },
+    { "Switch Hand", "SwitchHand" },
+} :: { { string } }
+
+
+Config.DUNK_BOTH = "Both"
+Config.DUNK_DRIVING = "Driving Only"
+Config.DUNK_STANDING = "Standing Only"
+Config.DUNK_TYPES = { Config.DUNK_BOTH, Config.DUNK_DRIVING, Config.DUNK_STANDING }
+
+Config.CONTEST_STYLES = { "Percent", "Bar" }
+Config.CONTEST_COLORS = { "Contest Colors", "Custom" }
+
+Config.TIMINGS = { "Very Early", "Early", "Slightly Early", "Good", "Perfect", "Slightly Late", "Late", "Very Late" }
+
+Config.PARENT = {
+    OpenShotGlow = "OpenShot", OpenShotNumber = "OpenShot", OpenShotBall = "OpenShot",
+    ContestWho = "OpenShot", ContestFoeMark = "OpenShot",
+    OpenOnly = "AutoShoot",
+    DunkMove = "AutoDunk", DunkOpenOnly = "AutoDunk",
+    GuardMove = "AutoGuard", GuardFacing = "AutoGuard",
+    StealFacing = "AutoSteal", AvoidFouls = "AutoSteal",
+    ReadFakes = "AutoBlock",
+    BallMagnet = "AutoRebound",
+    BlockDribbleKeys = "MoveKeys",
+    ComboOnce = "DribbleCombo", ComboGuarded = "DribbleCombo",
+    TapShoot = "AutoGreen", AutoCalibrate = "AutoGreen", RimFront = "AutoGreen", NotifyRelease = "AutoGreen", SafeMode = "AutoGreen",
+    AutoPing = "AutoGreen", PlantedShot = "AutoShoot",
+    StealAlways = "AutoSteal",
+    AntiAnkle = "AutoGuard",
+    EspTeam = "Esp", EspStamina = "Esp", EspBallOnly = "Esp",
+} :: { [string]: string }
+
+Config.DEFAULTS = {
+    AutoGreen = false,
+    GreenOffset = 0,
+    PingComp = 100,
+    AutoCalibrate = true,
+    SafeMode = false,
+    TapShoot = false,
+    LayupGreen = true,
+    RimFront = true,
+    NotifyRelease = false,
+    PerfectChance = 100,
+    OpenOnly = false,
+    OpenRange = 6,
+    MaxContest = 35,
+    MinShot = 0,
+    MaxShot = 120,
+    AutoShoot = false,
+    AutoDunk = false,
+    DunkRange = 30,
+    DunkType = "Both",
+    DunkMove = false,
+    DunkOpenOnly = false,
+    ShootRange = 24,
+    ShootDelay = 300,
+    AutoSteal = false,
+    StealRange = 8,
+    AutoGuard = false,
+    GuardRange = 16,
+    GuardTarget = "Ball Handler",
+    GuardMove = false,
+    GuardGap = 10,
+    GuardFacing = false,
+    ReadFakes = true,
+    StealFacing = true,
+    AvoidFouls = true,
+    AlwaysSprint = false,
+    CustomSpeed = false,
+    WalkSpeed = 16,
+    NoStun = false,
+    NoDebounce = false,
+    NoCold = false,
+    ThreePointLine = false,
+    DunkZones = false,
+    RangeViz = false,
+    ShotRangeViz = false,
+    ShotColor = Color3.fromRGB(255, 255, 255),
+    StealColor = Color3.fromRGB(255, 90, 90),
+    GuardColor = Color3.fromRGB(90, 160, 255),
+    BlockColor = Color3.fromRGB(255, 200, 70),
+    FullSpeed = false,
+    AutoBlock = false,
+    BlockRange = 10,
+    BlockDelay = 0,
+    AutoRebound = false,
+    ReboundRange = 8,
+    BallMagnet = false,
+    MagnetRange = 12,
+    AutoPass = false,
+    PassPressure = 6,
+    AutoDribble = false,
+    DribbleRange = 7,
+    DribbleCombo = false,
+    ComboMoves = "Cross Tween",
+    ComboGuarded = true,
+    DribbleGlide = false,
+    GatherGlide = false,
+    ShotGlide = false,
+    DribbleGlideSpeed = 10,
+    DribbleGlideTime = 350,
+    DribbleGlideStrength = 30,
+    GatherGlideSpeed = 14,
+    GatherGlideTime = 500,
+    GatherGlideStrength = 100,
+    ShotGlideSpeed = 10,
+    ShotGlideTime = 440,
+    ShotGlideStrength = 60,
+    ComboOnce = true,
+    MoveKeys = false,
+    BlockDribbleKeys = false,
+    OpenShot = false,
+    OpenShotGlow = true,
+    OpenShotNumber = false,
+    ContestStyle = "Percent",
+    ContestWho = true,
+    ContestFoeMark = false,
+    ContestTextSize = 13,
+    ContestHeight = 4.2,
+    ContestColorMode = "Contest Colors",
+    ContestLabelColor = Color3.fromRGB(255, 255, 255),
+    ContestViewRange = 120,
+    ContestOpacity = 0.85,
+    GlowStrength = 60,
+    OpenShotBall = true,
+    ContestRange = 6,
+    InfStamina = false,
+    Esp = false,
+    EspTeam = false,
+    EspStamina = true,
+    EspBallOnly = false,
+    EspDistance = 300,
+    EspTextSize = 13,
+    EspBackground = 0.2,
+    ColorEnemy = Color3.fromRGB(255, 105, 105),
+    ColorTeam = Color3.fromRGB(105, 235, 135),
+    ColorHolder = Color3.fromRGB(255, 215, 80),
+    ColorBackground = Color3.fromRGB(16, 16, 22),
+    AutoPing = true,
+    IgnoreContest = 0,
+    PlantedShot = false,
+    StealAlways = false,
+    AutoAnkle = false,
+    AntiAnkle = false,
+    AutoSpot = false,
+    AutoQueue = false,
+} :: { [string]: any }
+
+Config.CHOICES = {
+    GuardTarget = Config.GUARD_TARGETS,
+    DunkType = Config.DUNK_TYPES,
+    ContestStyle = Config.CONTEST_STYLES,
+    ContestColorMode = Config.CONTEST_COLORS,
+    ComboMoves = Config.COMBO_NAMES,
+} :: { [string]: { string } }
+
+return Config
+end
+
+modules["court"] = function(...)
+
+local import: (string) -> any = ...
+local Env: typeof(require("./env")) = import("env")
+
+local Court = {}
+
+type Map = { [string]: any }
+
+local players: any = game:GetService("Players")
+local replicatedStorage: any = game:GetService("ReplicatedStorage")
+local userInput: any = game:GetService("UserInputService")
+local stats: any = game:GetService("Stats")
+
+local MOVE_KEYS = { Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right }
+local FAR_RIM = 30
+local HOOK = "__ReflexShotHook"
+local BALL_REACH = 6
+
+Court.Now = 0
+Court.Mine = nil :: any
+Court.Root = nil :: any
+Court.Action = nil :: any
+Court.HasBall = false
+Court.Count = 0
+Court.Chars = {} :: { any }
+Court.Roots = {} :: { any }
+Court.Foe = {} :: { boolean }
+Court.Carry = {} :: { boolean }
+Court.TeamBall = false
+Court.FoeBall = false
+Court.Ping = 0.08
+Court.Sending = 0
+Court.Held = false
+Court.Keys = false
+Court.KeysOff = -math.huge
+Court.Focused = true
+Court.UserMoving = false
+Court.Dead = false
+Court.Forced = false
+Court.HandsOff = false
+Court.WalkAt = -math.huge
+Court.FreeAt = -math.huge
+Court.Foul = false
+Court.Ball = {} :: { boolean }
+Court.FoeHeld = false
+Court.Motion = {} :: { Vector3 }
+Court.Touched = {} :: { string }
+
+local function flat(vector: Vector3): Vector3
+    return Vector3.new(vector.X, 0, vector.Z)
+end
+
+Court.flat = flat
+
+local records: { [any]: Map } = setmetatable({}, { __mode = "k" }) :: any
+
+local function record(character: any): Map
+    local entry = records[character]
+    if not entry then
+        entry = {}
+        records[character] = entry
+    end
+    return entry
+end
+
+local function track(character: any, root: any, now: number): Vector3
+    local entry = record(character)
+    local real = if root.Anchored then Vector3.zero else root.AssemblyLinearVelocity
+    local position = root.Position
+    local last: Vector3? = entry.Seen
+    local at: number = entry.SeenAt or now
+    local smooth: Vector3 = entry.Motion or Vector3.zero
+    local dt = now - at
+    if last and dt < 0.2 and (position - last).Magnitude < 0.01 then
+        return if real.Magnitude > 0.5 then real else smooth
+    end
+    if last and dt > 0.01 and dt <= 0.5 then
+        local step = (position - last) / dt
+        if step.Magnitude > 120 then
+            step = Vector3.zero
+        end
+        smooth = smooth:Lerp(step, math.min(dt * 12, 1))
+        entry.Seen, entry.SeenAt = position, now
+    elseif not last or dt > 0.5 then
+        entry.Seen, entry.SeenAt = position, now
+        smooth = Vector3.zero
+    end
+    entry.Motion = smooth
+    return if real.Magnitude > 0.5 then real else smooth
+end
+
+function Court.velocity(part: any): Vector3
+    return track(part, part, Court.Now)
+end
+
+function Court.root(character: any): any?
+    local entry = record(character)
+    local root = entry.Root
+    if root and root.Parent == character then
+        return root
+    end
+    root = character:FindFirstChild("HumanoidRootPart")
+    if root and root:IsA("BasePart") then
+        entry.Root = root
+        return root
+    end
+    entry.Root = nil
+    return nil
+end
+
+function Court.humanoid(character: any): any?
+    local entry = record(character)
+    local humanoid = entry.Humanoid
+    if humanoid and humanoid.Parent == character then
+        return humanoid
+    end
+    humanoid = character:FindFirstChildOfClass("Humanoid")
+    entry.Humanoid = humanoid
+    return humanoid
+end
+
+function Court.holds(character: any): boolean
+    local entry = record(character)
+    local inner = entry.Inner
+    if not inner or not inner:IsDescendantOf(character) then
+        local folder = character:FindFirstChild("Attributes")
+        inner = if folder then folder:FindFirstChild("Basketball") else nil
+        entry.Inner = inner
+    end
+    if inner and inner:IsA("ObjectValue") and inner.Value ~= nil then
+        return true
+    end
+    local outer = entry.Outer
+    if not outer or outer.Parent ~= character then
+        outer = character:FindFirstChild("Basketball")
+        entry.Outer = outer
+    end
+    if outer and outer:IsA("ObjectValue") and outer.Value ~= nil then
+        return true
+    end
+    local carried = character:GetAttribute("Basketball")
+    if carried ~= nil and carried ~= false and carried ~= "" then
+        return true
+    end
+    return character:GetAttribute("TripleThreat") == true or character:GetAttribute("Action") == "Dribbling"
+end
+
+function Court.free(character: any): boolean
+    if character:GetAttribute("Stunned") == true then
+        return false
+    end
+    return character:GetAttribute("CanMove") ~= false or character:GetAttribute("Action") == "Dribbling"
+end
+
+local OWN_MOVES: { [string]: boolean } = {
+    Dribbling = true, Shooting = true, Gathering = true, Dunking = true, ContactLayup = true, Layup = true, Passing = true,
+    Stealing = true, Blocking = true, Jumping = true, Rebounding = true, CatchingPass = true, PassTransition = true,
+    CatchingLob = true, AwaitingPass = true, Diving = true, Pushing = true, MovingShot = true,
+}
+
+function Court.forced(character: any): boolean
+    if not character then
+        return false
+    end
+    local action = character:GetAttribute("Action")
+    if action == "Moving" or action == "Fouled" or action == "Inbounding" or action == "Stunned" then
+        return true
+    end
+    if character:GetAttribute("CanMove") == false then
+        return not (type(action) == "string" and OWN_MOVES[action])
+    end
+    return false
+end
+
+local WALKS: { [string]: boolean } = { Moving = true, Fouled = true, Inbounding = true }
+
+function Court.walking(character: any): boolean
+    if not character then
+        return false
+    end
+    local action = character:GetAttribute("Action")
+    return type(action) == "string" and WALKS[action] == true
+end
+
+local GRACE = 0.5
+Court.GRACE = GRACE
+
+function Court.held(character: any): boolean
+    if not character then
+        return false
+    end
+    if Court.walking(character) or character:GetAttribute("Stunned") == true or character:GetAttribute("Action") == "Stunned" then
+        return true
+    end
+    return os.clock() - (Court.FreeAt or -math.huge) < GRACE
+end
+
+function Court.handsOff(character: any): boolean
+    if not character then
+        return false
+    end
+    return Court.forced(character) or Court.held(character)
+end
+
+function Court.touch(what: string)
+    local list = Court.Touched
+    if #list < 24 and not table.find(list, what) then
+        table.insert(list, what)
+    end
+end
+
+function Court.enemy(mine: any, character: any): boolean
+    if character:GetAttribute("TeamIndex") ~= mine:GetAttribute("TeamIndex") then
+        return true
+    end
+    local theirs = character:GetAttribute("Team")
+    return string.sub(character.Name, 1, 2) == "AI" and theirs ~= nil and theirs ~= mine:GetAttribute("Team")
+end
+
+local roster: { any } = {}
+local rosterFolder: any = nil
+local rosterLinks: { any } = {}
+local nextSync = 0
+local ROSTER_SYNC = 0.5
+
+local function unbindRoster()
+    for _, link in rosterLinks do
+        pcall(link.Disconnect, link)
+    end
+    table.clear(rosterLinks)
+    table.clear(roster)
+    rosterFolder = nil
+end
+
+local function bindRoster(folder: any)
+    unbindRoster()
+    if not folder then
+        return
+    end
+    rosterFolder = folder
+    for _, child in folder:GetChildren() do
+        table.insert(roster, child)
+    end
+    rosterLinks[1] = folder.ChildAdded:Connect(function(child: any)
+        if not table.find(roster, child) then
+            table.insert(roster, child)
+        end
+    end)
+    rosterLinks[2] = folder.ChildRemoved:Connect(function(child: any)
+        local index = table.find(roster, child)
+        if index then
+            local last = #roster
+            roster[index] = roster[last]
+            roster[last] = nil
+        end
+    end)
+end
+
+local function characters(now: number): any?
+    local folder = rosterFolder
+    if not folder or folder.Parent ~= workspace then
+        folder = workspace:FindFirstChild("Characters")
+        bindRoster(folder)
+        nextSync = now + ROSTER_SYNC
+        return folder
+    end
+    if now >= nextSync then
+        nextSync = now + ROSTER_SYNC
+        table.clear(roster)
+        for _, child in folder:GetChildren() do
+            table.insert(roster, child)
+        end
+    end
+    return folder
+end
+
+function Court.mine(): any?
+    local folder = rosterFolder
+    if not folder or folder.Parent ~= workspace then
+        folder = workspace:FindFirstChild("Characters")
+    end
+    local player = players.LocalPlayer
+    if not folder or not player then
+        return nil
+    end
+    return folder:FindFirstChild(player.Name)
+end
+
+local pingItem: any = nil
+local nextPing = 0
+local pingSeeded = false
+local PING_SMOOTH = 0.2
+
+local pingWindow: { number } = {}
+local PING_WINDOW = 6
+
+local function samplePing(value: number)
+    local clamped = math.min(value, 0.6)
+    table.insert(pingWindow, clamped)
+    if #pingWindow > PING_WINDOW then
+        table.remove(pingWindow, 1)
+    end
+    local sorted = table.clone(pingWindow)
+    table.sort(sorted)
+    local half = math.ceil(#sorted / 2)
+    local low = 0
+    for index = 1, half do
+        low += sorted[index]
+    end
+    low /= half
+    if pingSeeded then
+        Court.Ping += (low - Court.Ping) * PING_SMOOTH
+    else
+        pingSeeded = true
+        Court.Ping = low
+    end
+end
+
+local function dataPing(): number
+    local item = pingItem
+    if not item then
+        item = stats.Network.ServerStatsItem["Data Ping"]
+        pingItem = item
+    end
+    return item:GetValue()
+end
+
+local function networkPing(): number
+    return players.LocalPlayer:GetNetworkPing()
+end
+
+local function updatePing(now: number)
+    if now < nextPing then
+        return
+    end
+    nextPing = now + 0.25
+    local ok, value = pcall(dataPing)
+    if ok and type(value) == "number" and value == value and value > 0 then
+        samplePing(value / 1000)
+        return
+    end
+    pingItem = nil
+    local got, seconds = pcall(networkPing)
+    if got and type(seconds) == "number" and seconds == seconds and seconds > 0 then
+        samplePing(seconds * 2)
+    end
+end
+
+local serviceFolder: any = nil
+local inputs: { [string]: any } = {}
+
+local function service(name: string): any?
+    local aero = replicatedStorage:FindFirstChild("Aero")
+    local remotes = if aero then aero:FindFirstChild("AeroRemoteServices") else nil
+    return if remotes then remotes:FindFirstChild(name) else nil
+end
+
+Court.service = service
+
+function Court.input(name: string): any?
+    local remote = inputs[name]
+    if remote and remote.Parent ~= nil then
+        return remote
+    end
+    local folder = serviceFolder
+    if not folder or folder.Parent == nil then
+        folder = service("InputService")
+        serviceFolder = folder
+    end
+    remote = if folder then folder:FindFirstChild(name) else nil
+    inputs[name] = remote
+    return remote
+end
+
+local function shotRelease(remote: any, first: any): boolean
+    return remote.Name == "Shoot" and type(first) == "table" and rawget(first, "Shoot") == false
+end
+
+Court.Closing = false
+
+function Court.send(remote: any, ...: any): boolean
+    if Court.HandsOff and not Court.Closing and not shotRelease(remote, (...)) then
+        Court.touch("held back " .. tostring(remote.Name))
+        return false
+    end
+    Court.Sending += 1
+    local ok = pcall(remote.FireServer, remote, ...)
+    Court.Sending -= 1
+    return ok
+end
+
+function Court.copied(name: string): any?
+    local hook = Env.get(HOOK)
+    if type(hook) ~= "table" then
+        return nil
+    end
+    if name == "Sprint" and hook.SprintOn then
+        return hook.SprintOn
+    end
+    local press = hook.Press
+    return if type(press) == "table" then press[name] else nil
+end
+
+local learnedForm: { [string]: number } = {}
+local tryForm: { [string]: number } = {}
+local trials: { [string]: Map } = {}
+
+function Court.fire(name: string, forms: { (any) -> ...any }, check: ((any) -> boolean)?, adapt: ((any, any) -> any)?, context: any): boolean
+    if Court.HandsOff and not Court.Closing then
+        Court.touch("held back " .. name)
+        return false
+    end
+    local remote = Court.input(name)
+    if not remote then
+        return false
+    end
+    local copied = Court.copied(name)
+    if type(copied) == "table" then
+        local args = if adapt then adapt(copied, context) else copied
+        return Court.send(remote, table.unpack(args, 1, args.n or #args))
+    end
+    local index = learnedForm[name] or tryForm[name] or 1
+    if index > #forms then
+        index = 1
+    end
+    local sent = Court.send(remote, forms[index](context))
+    if check and not learnedForm[name] then
+        local trial = trials[name]
+        if not trial then
+            trial = {}
+            trials[name] = trial
+        end
+        trial.Index = index
+        trial.Count = #forms
+        trial.Until = os.clock() + 0.6
+        trial.Check = check
+        trial.Context = context
+        trial.Live = true
+    end
+    return sent
+end
+
+local function settleTrials(now: number)
+    for name, trial in trials do
+        if trial.Live then
+            local ok, worked = pcall(trial.Check, trial.Context)
+            if ok and worked == true then
+                learnedForm[name] = trial.Index
+                trial.Live = false
+                trial.Context = nil
+            elseif not ok or now >= trial.Until then
+                tryForm[name] = trial.Index % trial.Count + 1
+                trial.Live = false
+                trial.Context = nil
+            end
+        end
+    end
+end
+
+local virtualInput: any = nil
+local virtualTried = false
+local keyChannel = 0
+local keyDead = false
+
+local KEYS: { [string]: { any } } = {
+    W = { Enum.KeyCode.W, 0x57 },
+    A = { Enum.KeyCode.A, 0x41 },
+    S = { Enum.KeyCode.S, 0x53 },
+    D = { Enum.KeyCode.D, 0x44 },
+}
+local pressed: { [string]: boolean } = {}
+
+local function virtualKey(down: boolean, code: any)
+    virtualInput:SendKeyEvent(down, code, false, game)
+end
+
+local function channel(): number
+    if keyChannel ~= 0 then
+        return keyChannel
+    end
+    if not virtualTried then
+        virtualTried = true
+        local ok, found = pcall(game.GetService, game, "VirtualInputManager")
+        if ok and found then
+            virtualInput = found
+        end
+    end
+    if virtualInput then
+        keyChannel = 1
+    elseif Env.keypress and Env.keyrelease then
+        keyChannel = 2
+    end
+    return keyChannel
+end
+
+local function send(name: string, down: boolean): boolean
+    local entry = KEYS[name]
+    local way = channel()
+    if way == 1 then
+        if pcall(virtualKey, down, entry[1]) then
+            return true
+        end
+        virtualInput = nil
+        keyChannel = 0
+        way = channel()
+    end
+    if way == 2 then
+        if not down or Court.Focused then
+            return (pcall(if down then Env.keypress else Env.keyrelease, entry[2]))
+        end
+        return false
+    end
+    keyDead = true
+    return false
+end
+
+local holders: { [string]: { [string]: boolean } } = {}
+
+local function applyKeys()
+    local wanted: { [string]: boolean } = {}
+    for _, set in holders do
+        for name, down in set do
+            if down then
+                wanted[name] = true
+            end
+        end
+    end
+    if keyDead or Court.Forced or Court.HandsOff or not Court.Focused or userInput.KeyboardEnabled == false or userInput:GetFocusedTextBox() ~= nil then
+        table.clear(wanted)
+    end
+    for name in KEYS do
+        local want = wanted[name] == true
+        if (pressed[name] == true) ~= want then
+            if want then
+                pressed[name] = send(name, true) or nil
+            else
+                pressed[name] = nil
+                send(name, false)
+            end
+        end
+    end
+    Court.Held = pressed.W == true
+    local any = next(pressed) ~= nil
+    if Court.Keys and not any then
+        Court.KeysOff = os.clock()
+    end
+    Court.Keys = any
+end
+
+local function applyKey()
+    applyKeys()
+end
+
+function Court.hold(owner: string, down: boolean)
+    if not down and not holders[owner] then
+        return
+    end
+    holders[owner] = if down then { W = true } else nil
+    applyKeys()
+end
+
+function Court.canPress(): boolean
+    return not keyDead and channel() ~= 0 and Court.Focused and userInput.KeyboardEnabled ~= false
+end
+
+function Court.keysIgnored()
+    keyDead = true
+    applyKeys()
+end
+
+function Court.holdKeys(owner: string, set: { [string]: boolean }?)
+    if not set and not holders[owner] then
+        return
+    end
+    holders[owner] = set
+    applyKeys()
+end
+
+function Court.steering(mine: any): boolean
+    if Court.UserMoving then
+        return true
+    end
+    if not Court.Keys and os.clock() - Court.KeysOff > 0.3 then
+        local humanoid = Court.humanoid(mine)
+        if humanoid and humanoid.MoveDirection.Magnitude > 0.1 then
+            return true
+        end
+    end
+    return Court.userKeys()
+end
+
+function Court.userKeys(): boolean
+    if userInput:GetFocusedTextBox() then
+        return false
+    end
+    for _, key in MOVE_KEYS do
+        local own = (pressed.W and (key == Enum.KeyCode.W)) or (pressed.A and key == Enum.KeyCode.A) or (pressed.S and key == Enum.KeyCode.S) or (pressed.D and key == Enum.KeyCode.D)
+        if not own and userInput:IsKeyDown(key) then
+            return true
+        end
+    end
+    return false
+end
+local proxyPart: any = nil
+local proxyMover: any = nil
+
+function Court.proxy(): (any?, any?)
+    local part = proxyPart
+    if not part or part.Parent ~= workspace then
+        part = workspace:FindFirstChild("ProxyCharacter")
+        proxyPart = part
+        proxyMover = nil
+    end
+    if not part or not part:IsA("BasePart") then
+        return nil, nil
+    end
+    local mover = proxyMover
+    if not mover or mover.Parent ~= part then
+        mover = part:FindFirstChild("MovementVelocity")
+        proxyMover = if mover and mover:IsA("BodyVelocity") then mover else nil
+        mover = proxyMover
+    end
+    return part, mover
+end
+
+function Court.heading(): Vector3?
+    if userInput:GetFocusedTextBox() then
+        return nil
+    end
+    local camera = workspace.CurrentCamera
+    if not camera then
+        return nil
+    end
+    local x, z = 0, 0
+    if userInput:IsKeyDown(Enum.KeyCode.W) or userInput:IsKeyDown(Enum.KeyCode.Up) then
+        z += 1
+    end
+    if userInput:IsKeyDown(Enum.KeyCode.S) or userInput:IsKeyDown(Enum.KeyCode.Down) then
+        z -= 1
+    end
+    if userInput:IsKeyDown(Enum.KeyCode.D) then
+        x += 1
+    end
+    if userInput:IsKeyDown(Enum.KeyCode.A) then
+        x -= 1
+    end
+    if x == 0 and z == 0 then
+        if userInput.TouchEnabled and Court.UserMoving then
+            local part = Court.proxy()
+            local velocity = if part then flat(part.AssemblyLinearVelocity) else Vector3.zero
+            if velocity.Magnitude > 1 then
+                return velocity.Unit
+            end
+        end
+        return nil
+    end
+    local frame = camera.CFrame
+    local forward = flat(frame.LookVector)
+    if forward.Magnitude < 0.01 then
+        forward = flat(frame.UpVector)
+    end
+    if forward.Magnitude < 0.01 then
+        return nil
+    end
+    forward = forward.Unit
+    local right = Vector3.new(-forward.Z, 0, forward.X)
+    return (forward * z + right * x).Unit
+end
+
+function Court.sprintHeld(): boolean
+    local hook = Env.get(HOOK)
+    local calls = if type(hook) == "table" then hook.Calls else nil
+    local last = if type(calls) == "table" then calls.Sprint else nil
+    if type(last) == "table" and last[1] == true then
+        return true
+    end
+    return userInput:GetFocusedTextBox() == nil and userInput:IsKeyDown(Enum.KeyCode.LeftShift)
+end
+
+local rimCache: { any } = {}
+local fronts: { [any]: any } = {}
+local hoopsFolder: any = nil
+local nextRimScan = 0
+local rimWait = 0.5
+local scopedRims: { any } = {}
+local scopeKey: number? = nil
+local scopeFirst: any = nil
+local myCourt: any = nil
+local courtsFolder: any = nil
+local nextCourtScan = 0
+local courtBoxes: { [any]: any } = {}
+
+local function clearRims()
+    table.clear(rimCache)
+    table.clear(fronts)
+    table.clear(scopedRims)
+    scopeKey = nil
+    hoopsFolder = nil
+end
+
+local function courtModels(): any?
+    local folder = courtsFolder
+    if folder and folder.Parent then
+        return folder
+    end
+    courtsFolder = nil
+    local now = os.clock()
+    if now < nextCourtScan then
+        return nil
+    end
+    nextCourtScan = now + 3
+    local map = workspace:FindFirstChild("Map")
+    folder = if map then map:FindFirstChild("Courts") else nil
+    courtsFolder = folder
+    return folder
+end
+
+local function boxOf(court: any): any?
+    local box = courtBoxes[court]
+    if box == nil then
+        local ok, frame, size = pcall(court.GetBoundingBox, court)
+        box = if ok then { frame, size } else false
+        courtBoxes[court] = box
+    end
+    return box or nil
+end
+
+local function inside(box: any, position: Vector3, margin: number): boolean
+    local offset = box[1]:PointToObjectSpace(position)
+    local half = box[2] / 2
+    return math.abs(offset.X) <= half.X + margin and math.abs(offset.Z) <= half.Z + margin
+end
+
+local function scope(mine: any)
+    local number = if mine then mine:GetAttribute("CourtNumber") else nil
+    local key = if type(number) == "number" and number > 0 then number * 1000 + #rimCache else nil
+    if key == scopeKey and scopeFirst == rimCache[1] then
+        return
+    end
+    table.clear(scopedRims)
+    myCourt = nil
+    scopeKey = nil
+    scopeFirst = rimCache[1]
+    if not key then
+        return
+    end
+    local folder = courtModels()
+    if not folder then
+        return
+    end
+    scopeKey = key
+    for _, court in folder:GetChildren() do
+        if court:GetAttribute("CourtNumber") == number then
+            myCourt = court
+            break
+        end
+    end
+    local hoops = if myCourt then myCourt:GetAttribute("Hoops") else nil
+    if type(hoops) ~= "string" or not hoopsFolder then
+        return
+    end
+    local names: { [string]: boolean } = {}
+    for name in string.gmatch(hoops, "[^,;%s]+") do
+        names[name] = true
+    end
+    local box = boxOf(myCourt)
+    for _, rim in rimCache do
+        local model = rim
+        while model.Parent and model.Parent ~= hoopsFolder do
+            model = model.Parent
+        end
+        if (model.Parent == hoopsFolder and names[model.Name]) or (box and inside(box, rim.Position, 4)) then
+            table.insert(scopedRims, rim)
+        end
+    end
+end
+
+local function foreign(position: Vector3): boolean
+    local folder = courtsFolder
+    if not myCourt or not folder or not folder.Parent then
+        return false
+    end
+    local own = boxOf(myCourt)
+    if not own or inside(own, position, 6) then
+        return false
+    end
+    for _, court in folder:GetChildren() do
+        if court ~= myCourt and court:GetAttribute("CourtNumber") ~= nil then
+            local box = boxOf(court)
+            if box and inside(box, position, 0) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function Court.rims(): { any }
+    if scopedRims[1] then
+        return scopedRims
+    end
+    if rimCache[1] then
+        return rimCache
+    end
+    local now = os.clock()
+    if now < nextRimScan then
+        return rimCache
+    end
+    local hoops = workspace:FindFirstChild("Hoops", true)
+    if hoops then
+        hoopsFolder = hoops
+        for _, descendant in hoops:GetDescendants() do
+            if descendant.Name == "Rim" and descendant:IsA("BasePart") then
+                table.insert(rimCache, descendant)
+            end
+        end
+    end
+    rimWait = if rimCache[1] then 0.5 else math.min(rimWait * 1.5, 4)
+    nextRimScan = now + rimWait
+    return rimCache
+end
+
+function Court.rimDistance(position: Vector3): (number?, any?)
+    local best: number? = nil
+    local bestRim: any? = nil
+    for _, rim in Court.rims() do
+        local offset = rim.Position - position
+        local distance = math.sqrt(offset.X * offset.X + offset.Z * offset.Z)
+        if not best or distance < best then
+            best = distance
+            bestRim = rim
+        end
+    end
+    return best, bestRim
+end
+
+function Court.facingRim(root: any, facing: number, range: number): (any?, number)
+    local look = flat(root.CFrame.LookVector)
+    local origin = root.Position
+    local best: any? = nil
+    local bestDistance = math.huge
+    for _, rim in Court.rims() do
+        local toRim = flat(rim.Position - origin)
+        local away = toRim.Magnitude
+        local dot = if away > 0.01 then look:Dot(toRim) / away else 1
+        if dot >= facing and away <= range and away < bestDistance then
+            best = rim
+            bestDistance = away
+        end
+    end
+    return best, bestDistance
+end
+
+local function boardFront(rim: any): (Vector3?, Vector3?)
+    local hoops = hoopsFolder
+    if not hoops then
+        return nil, nil
+    end
+    local model = rim
+    while model.Parent and model.Parent ~= hoops do
+        model = model.Parent
+    end
+    if model == rim or model.Parent ~= hoops then
+        return nil, nil
+    end
+    local origin = rim.Position
+    local board: any = nil
+    local sum = Vector3.zero
+    local weight = 0
+    for _, descendant in model:GetDescendants() do
+        if descendant ~= rim and descendant:IsA("BasePart") then
+            local offset = flat(descendant.Position - origin)
+            if offset.Magnitude > 14 then
+                return nil, nil
+            end
+            local name = string.lower(descendant.Name)
+            if not board and (string.find(name, "board", 1, true) or string.find(name, "glass", 1, true)) then
+                board = descendant
+            end
+            if name ~= "rim" and not string.find(name, "net", 1, true) then
+                local size = descendant.Size
+                local volume = size.X * size.Y * size.Z
+                sum += offset * volume
+                weight += volume
+            end
+        end
+    end
+    local named: Vector3? = nil
+    if board then
+        local away = flat(origin - board.Position)
+        if away.Magnitude > 0.3 then
+            named = away.Unit
+        end
+    end
+    local massed: Vector3? = nil
+    if weight > 0 then
+        local away = sum / -weight
+        if away.Magnitude > 0.3 then
+            massed = away.Unit
+        end
+    end
+    return named, massed
+end
+
+local function oppositeFront(rim: any): (Vector3?, boolean)
+    local origin = rim.Position
+    local first: any = nil
+    local best: any = nil
+    local bestDistance = math.huge
+    local single = true
+    for _, other in rimCache do
+        if other ~= rim then
+            local distance = flat(other.Position - origin).Magnitude
+            if distance >= FAR_RIM then
+                if not first then
+                    first = other
+                elseif (other.Position - first.Position).Magnitude > 25 then
+                    single = false
+                end
+                if distance < bestDistance then
+                    best = other
+                    bestDistance = distance
+                end
+            end
+        end
+    end
+    if not best then
+        return nil, false
+    end
+    return flat(best.Position - origin).Unit, single
+end
+
+function Court.front(rim: any): Vector3?
+    local known = fronts[rim]
+    if known ~= nil then
+        return if known then known else nil
+    end
+    local found: Vector3? = nil
+    local ok, named, massed = pcall(boardFront, rim)
+    local across, single = oppositeFront(rim)
+    if ok and named then
+        found = named
+    elseif across and single then
+        found = across
+    elseif ok and massed then
+        found = massed
+    else
+        found = across
+    end
+    fronts[rim] = found or false
+    return found
+end
+
+function Court.frontOf(rim: any, position: Vector3): (number?, number)
+    local front = Court.front(rim)
+    if not front then
+        return nil, 0
+    end
+    local offset = flat(position - rim.Position)
+    local ahead = offset:Dot(front)
+    return ahead, (offset - front * ahead).Magnitude
+end
+
+function Court.goal(character: any): any?
+    local entry = record(character)
+    local value = entry.Goal
+    if not value or not value:IsDescendantOf(character) then
+        local folder = character:FindFirstChild("Attributes")
+        value = if folder then folder:FindFirstChild("Goal") else nil
+        entry.Goal = value
+    end
+    if not value or not value:IsA("ObjectValue") then
+        return nil
+    end
+    local target = value.Value
+    local position: Vector3? = nil
+    if target and target:IsA("BasePart") then
+        position = target.Position
+    elseif target and target:IsA("Model") then
+        position = target:GetPivot().Position
+    end
+    if not position then
+        return nil
+    end
+    local distance, rim = Court.rimDistance(position)
+    return if distance and distance < 20 then rim else nil
+end
+
+function Court.nearestFoe(position: Vector3): number
+    local best = math.huge
+    local roots = Court.Roots
+    local foe = Court.Foe
+    for index = 1, Court.Count do
+        if foe[index] then
+            local distance = (roots[index].Position - position).Magnitude
+            if distance < best then
+                best = distance
+            end
+        end
+    end
+    return best
+end
+
+local ballFolder: any = nil
+local ballPart: any = nil
+local nextBall = 0
+
+function Court.ball(): any?
+    local now = Court.Now
+    local ball = ballPart
+    if ball and now < nextBall and ballFolder and ball:IsDescendantOf(ballFolder) then
+        return ball
+    end
+    nextBall = now + 0.25
+    ballPart = nil
+    local folder = ballFolder
+    if not folder or folder.Parent ~= workspace then
+        folder = workspace:FindFirstChild("Basketballs")
+        ballFolder = folder
+    end
+    if not folder then
+        return nil
+    end
+    local origin = if Court.Root then Court.Root.Position else nil
+    local bestDistance = math.huge
+    for _, child in folder:GetChildren() do
+        local part: any = nil
+        if child:IsA("BasePart") then
+            part = child
+        elseif child:IsA("Model") then
+            part = child.PrimaryPart
+        end
+        if part and not foreign(part.Position) then
+            local distance = if origin then (part.Position - origin).Magnitude else 0
+            if distance < bestDistance then
+                bestDistance = distance
+                ballPart = part
+            end
+        end
+    end
+    return ballPart
+end
+
+function Court.ballNear(position: Vector3, reach: number): boolean?
+    Court.ball()
+    local folder = ballFolder
+    if not folder then
+        return nil
+    end
+    local any = false
+    for _, child in folder:GetChildren() do
+        local part: any = nil
+        if child:IsA("BasePart") then
+            part = child
+        elseif child:IsA("Model") then
+            part = child.PrimaryPart
+        end
+        if part then
+            any = true
+            if (part.Position - position).Magnitude <= reach then
+                return true
+            end
+        end
+    end
+    return if any then false else nil
+end
+
+local lastBall: Vector3? = nil
+
+local function trackDead(inbound: boolean)
+    if inbound then
+        Court.Dead = true
+    elseif Court.TeamBall or Court.FoeBall then
+        Court.Dead = false
+        lastBall = nil
+        return
+    end
+    local ball = Court.ball()
+    if not ball then
+        lastBall = nil
+        return
+    end
+    local where: Vector3 = ball.Position
+    local before = lastBall
+    lastBall = where
+    if not before or where.Y >= before.Y then
+        return
+    end
+    for _, rim in Court.rims() do
+        local center: Vector3 = rim.Position
+        local dx, dz = where.X - center.X, where.Z - center.Z
+        if dx * dx + dz * dz < 1.44 and before.Y >= center.Y - 0.3 and where.Y < center.Y - 0.3 then
+            Court.Dead = true
+        end
+    end
+end
+
+local function trim(list: { any }, from: number, to: number)
+    for index = from, to do
+        list[index] = nil
+    end
+end
+
+local function sameCourt(mine: any, character: any): boolean
+    local court = mine:GetAttribute("CourtNumber")
+    local theirs = character:GetAttribute("CourtNumber")
+    if type(court) == "number" and court > 0 and type(theirs) == "number" and theirs > 0 and theirs ~= court then
+        return false
+    end
+    if (type(court) ~= "number" or court == 0) and type(theirs) == "number" and theirs > 0 and string.sub(character.Name, 1, 2) ~= "AI" then
+        return false
+    end
+    if string.sub(character.Name, 1, 2) == "AI" or character:GetAttribute("TeamIndex") ~= 0 then
+        return true
+    end
+    if mine:GetAttribute("OnCourt") == true and character:GetAttribute("OnCourt") == false then
+        return false
+    end
+    if mine:GetAttribute("InGame") == true and character:GetAttribute("InGame") == false then
+        return false
+    end
+    return true
+end
+
+function Court.refresh(now: number)
+    Court.Now = now
+    updatePing(now)
+    settleTrials(now)
+    local first = rimCache[1]
+    if first and not first:IsDescendantOf(workspace) then
+        clearRims()
+    end
+    local folder = characters(now)
+    local player = players.LocalPlayer
+    local mine = Court.mine()
+    local root = if mine then Court.root(mine) else nil
+    Court.Mine = mine
+    Court.Root = root
+    scope(mine)
+    Court.Action = if mine then mine:GetAttribute("Action") else nil
+    Court.HasBall = mine ~= nil and Court.holds(mine)
+    local forced = Court.forced(mine)
+    if mine and (Court.walking(mine) or mine:GetAttribute("Stunned") == true or Court.Action == "Stunned") then
+        Court.FreeAt = now
+    end
+    if mine and Court.walking(mine) then
+        Court.WalkAt = now
+    end
+    local hands = mine ~= nil and (forced or now - (Court.FreeAt or -math.huge) < GRACE)
+    if not hands then
+        table.clear(Court.Touched)
+    end
+    if forced ~= Court.Forced or hands ~= Court.HandsOff then
+        Court.Forced = forced
+        Court.HandsOff = hands
+        applyKeys()
+    end
+    local chars, roots, foe, carry, held = Court.Chars, Court.Roots, Court.Foe, Court.Carry, Court.Ball
+    local count = 0
+    local teamBall = Court.HasBall
+    local foeBall = false
+    local foul = Court.Action == "Fouled"
+    local inbound = Court.Action == "Inbounding"
+    if folder and mine then
+        for _, character in roster do
+            if character ~= mine and character.Parent == folder and character.Name ~= "InvisCharacter" and character.Name ~= "ProxyCharacter" and sameCourt(mine, character) then
+                local other = Court.root(character)
+                if other then
+                    count += 1
+                    local theirAction = character:GetAttribute("Action")
+                    if theirAction == "Inbounding" or character:GetAttribute("Inbounding") == true then
+                        inbound = true
+                    end
+                    if theirAction == "Fouled" then
+                        foul = true
+                    end
+                    local enemy = Court.enemy(mine, character)
+                    local has = Court.holds(character)
+                    chars[count] = character
+                    roots[count] = other
+                    Court.Motion[count] = track(character, other, now)
+                    foe[count] = enemy
+                    carry[count] = has
+                    held[count] = has and Court.ballNear(other.Position, BALL_REACH) ~= false
+                    if has then
+                        if enemy then
+                            foeBall = true
+                        else
+                            teamBall = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    local before = Court.Count
+    if before > count then
+        trim(chars, count + 1, before)
+        trim(roots, count + 1, before)
+        trim(foe, count + 1, before)
+        trim(carry, count + 1, before)
+        trim(held, count + 1, before)
+        trim(Court.Motion, count + 1, before)
+    end
+    Court.Count = count
+    Court.TeamBall = teamBall
+    Court.FoeBall = foeBall
+    Court.Foul = foul
+    local foeHeld = false
+    for index = 1, count do
+        if foe[index] and held[index] then
+            foeHeld = true
+            break
+        end
+    end
+    Court.FoeHeld = foeHeld
+    trackDead(inbound)
+end
+
+local links: { any } = {}
+
+function Court.start()
+    local ok = pcall(function()
+        table.insert(links, userInput.WindowFocusReleased:Connect(function()
+            Court.Focused = false
+            applyKey()
+        end))
+        table.insert(links, userInput.WindowFocused:Connect(function()
+            Court.Focused = true
+        end))
+    end)
+    if not ok then
+        Court.Focused = true
+    end
+end
+
+function Court.stop()
+    table.clear(holders)
+    applyKey()
+    for _, link in links do
+        pcall(link.Disconnect, link)
+    end
+    table.clear(links)
+    unbindRoster()
+    table.clear(trials)
+end
+
+return Court
+end
+
+modules["aero"] = function(...)
+
+local import: (string) -> any = ...
+local Env: typeof(require("./env")) = import("env")
+
+local Aero = {}
+
+type Map = { [string]: any }
+
+local NAME = "__ReflexInputWrap"
+local VERSION = 1
+local WRAP = { "Shoot", "Sprint", "Steal", "Pass", "Dribble", "Jump", "Clutch", "HoldG" }
+local GC_CHUNK = 4000
+
+
+local function inputOf(services: any): any?
+    if type(services) ~= "table" then
+        return nil
+    end
+    local input = rawget(services, "InputService")
+    if type(input) ~= "table" then
+        return nil
+    end
+    local shoot = rawget(input, "Shoot")
+    if type(shoot) ~= "table" or type(rawget(shoot, "Fire")) ~= "function" then
+        return nil
+    end
+    return input
+end
+
+local function fromGc(): any?
+    local filter = Env.filtergc
+    if filter then
+        local ok, found = pcall(filter, "table", { Keys = { "InputService", "GameplayService" } }, true)
+        if ok then
+            return inputOf(found)
+        end
+        return nil
+    end
+    local walk = Env.getgc
+    if not walk then
+        return nil
+    end
+    local ok, list = pcall(walk, true)
+    if not ok or type(list) ~= "table" then
+        return nil
+    end
+    for index, value in list do
+        if type(value) == "table" then
+            local found = inputOf(value)
+            if found then
+                return found
+            end
+        end
+        if index % GC_CHUNK == 0 then
+            task.wait()
+        end
+    end
+    return nil
+end
+
+function Aero.find(light: boolean?): any?
+    if type(getrenv)=="function" then
+        local ok, live=pcall(function() local a=getrenv()._G.Aero;return a and inputOf(a.Services) end)
+        if ok and live then return live end
+    end
+    local a=Env.get("Aero")
+    local live=type(a)=="table" and inputOf(a.Services)
+    if live then return live end
+    local existing = Env.get(NAME)
+    if type(existing) == "table" and existing.Version == VERSION and type(existing.Input) == "table" then
+        return existing.Input
+    end
+    if light then
+        return nil
+    end
+    return fromGc()
+end
+
+function Aero.install(handler: (string, ...any) -> boolean, light: boolean?): (Map?, string?)
+    local input = Aero.find(light)
+    if not input then
+        return nil, "unsupported"
+    end
+    local existing = Env.get(NAME)
+    local reuse = type(existing) == "table" and existing.Version == VERSION and existing.Input == input
+    if reuse then
+        for name, wrapper in existing.Wrappers do
+            local signal = rawget(input, name)
+            if type(signal) ~= "table" or rawget(signal, "Fire") ~= wrapper then
+                reuse = false
+            end
+        end
+    end
+    if type(existing) == "table" and not reuse then
+        existing.Off = true
+        existing.Handler = nil
+    end
+    local state: Map = if reuse then existing else { Version = VERSION, Input = input, Originals = {}, Wrappers = {} }
+    state.Handler = handler
+    state.Off = nil
+    for _, name in WRAP do
+        local signal = rawget(input, name)
+        local current = if type(signal) == "table" then rawget(signal, "Fire") else nil
+        if type(current) == "function" and current ~= state.Wrappers[name] then
+            local original = current
+            local function wrapper(self: any, ...: any): ...any
+                if not state.Off then
+                    local handle = state.Handler
+                    if handle then
+                        local ok, hold = pcall(handle, name, ...)
+                        if ok and hold == true then
+                            return
+                        end
+                    end
+                end
+                return original(self, ...)
+            end
+            state.Originals[name] = original
+            state.Wrappers[name] = wrapper
+            rawset(signal, "Fire", wrapper)
+        end
+    end
+    Env.set(NAME, state)
+    return state, nil
+end
+
+function Aero.intact(): boolean
+    local state = Env.get(NAME)
+    if type(state) ~= "table" or state.Off or type(state.Input) ~= "table" then
+        return false
+    end
+    local signal = rawget(state.Input, "Shoot")
+    return type(signal) == "table" and rawget(signal, "Fire") == state.Wrappers.Shoot
+end
+
+function Aero.remove()
+    local state = Env.get(NAME)
+    if type(state) ~= "table" or state.Version ~= VERSION then
+        return
+    end
+    state.Off = true
+    state.Handler = nil
+    local input = state.Input
+    local clean = true
+    for name, wrapper in state.Wrappers do
+        local signal = if type(input) == "table" then rawget(input, name) else nil
+        if type(signal) == "table" then
+            if rawget(signal, "Fire") == wrapper then
+                rawset(signal, "Fire", state.Originals[name])
+            else
+                clean = false
+            end
+        end
+    end
+    if clean then
+        Env.set(NAME, nil)
+    end
+end
+
+return Aero
+end
+
+modules["hook"] = function(...)
+
+local import: (string) -> any = ...
+local Env: typeof(require("./env")) = import("env")
+local Court: typeof(require("./court")) = import("court")
+local Aero: typeof(require("./aero")) = import("aero")
+
+local Hook = {}
+
+type Map = { [string]: any }
+
+local NAME = "__ReflexShotHook"
+local VERSION = 6
+
+local CAPTURE = { Sprint = true, Steal = true, Pass = true, Dribble = true, Jump = true, Clutch = true, HoldG = true }
+
+local getMethod: any = Env.getnamecallmethod
+local ours: any = Env.checkcaller
+local stopped = false
+
+local function isPress(args: any): boolean
+    for index = 1, args.n do
+        local value = args[index]
+        if type(value) == "boolean" then
+            return value
+        end
+        if type(value) == "table" then
+            for _, inner in value do
+                if type(inner) == "boolean" then
+                    return inner
+                end
+            end
+        end
+    end
+    return true
+end
+
+local function dribbleKey(args: any): string
+    for index = 1, args.n do
+        local value = args[index]
+        if type(value) == "string" then
+            return value
+        end
+        if type(value) == "table" then
+            for _, inner in value do
+                if type(inner) == "string" then
+                    return inner
+                end
+            end
+        end
+    end
+    return "any"
+end
+
+local function capture(state: Map, name: string, args: any)
+    local press = isPress(args)
+    state.Calls[name] = args
+    if press then
+        state.Press[name] = args
+    end
+    if name == "Dribble" then
+        local key = dribbleKey(args)
+        if press or not state.Dribbles[key] then
+            state.Dribbles[key] = args
+        end
+    end
+    if name == "Sprint" and press then
+        task.wait(0.25)
+        local mine = Court.mine()
+        if mine ~= nil and mine:GetAttribute("Sprinting") == true then
+            state.SprintOn = args
+        end
+    end
+end
+
+local function watch(state: Map, remote: any, ...: any): boolean
+    if not getMethod or getMethod() ~= "FireServer" or typeof(remote) ~= "Instance" then
+        return false
+    end
+    if Court.Sending > 0 or (ours and ours()) then
+        return false
+    end
+    local parent = remote.Parent
+    if not parent or parent.Name ~= "InputService" then
+        return false
+    end
+    local name = remote.Name
+    if CAPTURE[name] then
+        local args = table.pack(...)
+        local queue = state.Queue
+        if #queue < 32 then
+            queue[#queue + 1] = { name, args }
+        end
+        local owner = state.Owner
+        if name == "Dribble" and type(owner) == "table" and type(owner.BlockDribble) == "function" then
+            return owner.BlockDribble(args) == true
+        end
+        return false
+    end
+    if name ~= "Shoot" then
+        return false
+    end
+    local owner = state.Owner
+    if type(owner) ~= "table" then
+        return false
+    end
+    local data = ...
+    if type(data) ~= "table" then
+        return false
+    end
+    local flag = rawget(data, "Shoot")
+    if flag == true then
+        owner.KeyDown = true
+        owner.Swallow = false
+        owner.ServerDown = true
+        owner.PressPending = true
+        owner.DunkPress = rawget(data, "UseSpace") == true
+        return false
+    end
+    if flag ~= false then
+        return false
+    end
+    owner.KeyDown = false
+    if rawget(data, "Input") ~= nil then
+        owner.ServerDown = false
+        return false
+    end
+    if owner.Swallow == true then
+        owner.Swallow = false
+        return true
+    end
+    if owner.holding(owner) then
+        if owner.Held == nil then
+            owner.Held = os.clock()
+        end
+        return true
+    end
+    owner.ServerDown = false
+    owner.passed(owner)
+    return false
+end
+
+local function wrapped(state: Map, name: string, ...: any): boolean
+    if CAPTURE[name] then
+        local args = table.pack(...)
+        task.spawn(capture, state, name, args)
+        local owner = state.Owner
+        if name == "Dribble" and type(owner) == "table" then
+            if type(owner.BlockDribble) == "function" and owner.BlockDribble(args) == true then
+                return true
+            end
+            if type(owner.onDribble) == "function" then
+                pcall(owner.onDribble, owner)
+            end
+        end
+        return false
+    end
+    if name ~= "Shoot" then
+        return false
+    end
+    local owner = state.Owner
+    if type(owner) ~= "table" or type(owner.shootCall) ~= "function" then
+        return false
+    end
+    return owner:shootCall((...)) == true
+end
+
+function Hook.drain()
+    local state = Env.get(NAME)
+    if type(state) ~= "table" or state.Claim ~= Hook then
+        return
+    end
+    local queue = state.Queue
+    if type(queue) ~= "table" or #queue == 0 then
+        return
+    end
+    state.Queue = {}
+    for _, item in queue do
+        task.spawn(capture, state, item[1], item[2])
+    end
+end
+
+local function bindWrap(owner: any, light: boolean?): boolean
+    local existing = Env.get(NAME)
+    local state: Map = if type(existing) == "table" and existing.Mode == "wrap" and existing.Version == VERSION
+        then existing
+        else { Version = VERSION, Mode = "wrap", SprintOn = nil, Calls = {}, Queue = {}, Press = {}, Dribbles = {} }
+    if type(existing) == "table" and existing ~= state then
+        existing.Owner = nil
+    end
+    local installed = Aero.install(function(name: string, ...: any): boolean
+        return wrapped(state, name, ...)
+    end, light)
+    if not installed then
+        return false
+    end
+    state.Claim = Hook
+    state.Off = nil
+    state.Owner = owner
+    Env.set(NAME, state)
+    return true
+end
+
+function Hook.bind(owner: any, allowHook: boolean?, light: boolean?): (boolean, string?)
+    local done, wrappedOk = pcall(bindWrap, owner, light)
+    if done and wrappedOk then
+        return true, "wrap"
+    end
+    return false, "safe"
+end
+
+function Hook.owned(owner: any): boolean
+    local state = Env.get(NAME)
+    if type(state) ~= "table" or state.Claim ~= Hook or state.Owner ~= owner or state.Off then
+        return false
+    end
+    if state.Mode == "wrap" then
+        return Aero.intact()
+    end
+    return true
+end
+
+function Hook.mode(): string?
+    local state = Env.get(NAME)
+    if type(state) ~= "table" or state.Claim ~= Hook or state.Off then
+        return nil
+    end
+    return if state.Mode == "wrap" then "wrap" else "hook"
+end
+
+function Hook.remove()
+    stopped = true
+    local state = Env.get(NAME)
+    if type(state) ~= "table" or state.Version ~= VERSION or state.Claim ~= Hook then
+        return
+    end
+    if state.Mode == "wrap" then
+        state.Off = true
+        state.Owner = nil
+        Aero.remove()
+        Env.set(NAME, nil)
+        return
+    end
+    state.Off = true
+    state.Owner = nil
+end
+
+return Hook
+end
+
+modules["autogreen"] = function(...)
+
+local import: (string) -> any = ...
+local Config: typeof(require("./config")) = import("config")
+local Court: typeof(require("./court")) = import("court")
+local Env: typeof(require("./env")) = import("env")
+local Hook: typeof(require("./hook")) = import("hook")
+
+local AutoGreen = {}
+AutoGreen.__index = AutoGreen
+
+type Map = { [string]: any }
+
+local LEARNED = "__ReflexGreenPeaks:" .. tostring(Env.get("__ReflexRootPath") or "")
+local PEAK_FILE = (Env.get("__ReflexRootPath") or "Reflex/PracticalBasketball") .. "/green-peaks.json"
+local TIMING_PERFECT = 5
+
+local TAP_TIMEOUT = 0.8
+local HOLD_TIMEOUT = 4.5
+local DUNK_TIMEOUT = 0.9
+local LAYUP_RANGE = 13
+local LOST_GRACE = 0.3
+local SERVER_STEP = 1 / 60
+local STALL = 0.075
+
+local METERED: { [string]: boolean } = { Shooting = true, Dunking = true, ContactLayup = true, ClutchLayup = true }
+local PRESHOT: { [string]: boolean } = { Gathering = true, CatchingPass = true, PassTransition = true, CatchingLob = true, AwaitingPass = true }
+local WAITING: { [string]: boolean } = { Dribbling = true, Gathering = true, CatchingPass = true, PassTransition = true, CatchingLob = true, AwaitingPass = true }
+
+local PRESS = { Shoot = true, Input = "E" }
+local PRESS_SPACE = { Shoot = true, Input = "E", UseSpace = true }
+local RELEASE = { Shoot = false }
+
+local LOG_FILE = (Env.get("__ReflexRootPath") or "Reflex/PracticalBasketball") .. "/greenlog.txt"
+local LOG_LIMIT = 6000
+
+AutoGreen.METERED = METERED
+AutoGreen.PRESHOT = PRESHOT
+
+local function learned(): Map
+    local store = Env.get(LEARNED)
+    if type(store) ~= "table" then
+        store = Env.readJson(PEAK_FILE) or {}
+        Env.set(LEARNED, store)
+    end
+    return store
+end
+
+local function shotSpeed(character: any): number
+    local value = character:GetAttribute("ShotSpeed")
+    return if type(value) == "number" and value > 0.05 then value else 1
+end
+
+local function meterKind(character: any, meters: { any }): string?
+    for index = #meters, 1, -1 do
+        local gui = meters[index]
+        if not gui:IsDescendantOf(character) then
+            table.remove(meters, index)
+        elseif gui.Enabled and string.sub(gui.Name, -5) == "Meter" then
+            return string.sub(gui.Name, 1, -6)
+        end
+    end
+    return nil
+end
+
+local function hiddenKind(meters: { any }): string?
+    local found: string? = nil
+    for _, gui in meters do
+        local name = gui.Name
+        if string.sub(name, -5) == "Meter" then
+            local kind = string.sub(name, 1, -6)
+            local value = Config.PEAKS[kind] or learned()[kind]
+            if type(value) == "number" then
+                if found and found ~= kind then
+                    return nil
+                end
+                found = kind
+            end
+        end
+    end
+    return found
+end
+
+local function liveShot(character: any, action: any, meters: { any }): boolean
+    if METERED[action] then
+        return true
+    end
+    if character:GetAttribute("ReleasedShot") ~= false or WAITING[action] then
+        return false
+    end
+    return meterKind(character, meters) ~= nil
+end
+
+AutoGreen.liveShot = liveShot
+
+function AutoGreen.trace(self: any, text: string)
+    if self.Tracing ~= true then
+        return
+    end
+    local lines = self.TraceLines
+    if not lines then
+        lines = {}
+        self.TraceLines = lines
+        self.TraceZero = os.clock()
+    end
+    if #lines >= LOG_LIMIT then
+        return
+    end
+    local line = string.format("%8.3f  %s", os.clock() - self.TraceZero, text)
+    lines[#lines + 1] = line
+    self.TraceDirty = true
+end
+
+function AutoGreen.traceState(self: any, now: number, action: any)
+    local shot: any = self.Shot
+    local rimText = ""
+    local root = Court.Root
+    if root then
+        local distance, rim = Court.rimDistance(root.Position)
+        if distance and rim and distance <= 20 then
+            local ahead, aside = Court.frontOf(rim, root.Position)
+            rimText = string.format(" rim=%d ahead=%d side=%d", distance, ahead or -99, aside or -99)
+        end
+    end
+    local text = string.format(
+        "state action=%s ball=%s armed=%s press=%s held=%s own=%s holdOk=%s early=%s pending=%s key=%s hook=%s shot=%s%s",
+        tostring(action), tostring(Court.HasBall), tostring(self.Armed), tostring(self.Press ~= nil), tostring(self.Held ~= nil),
+        tostring(self.Own), tostring(self.HoldOk), tostring(self.EarlyAt ~= nil), tostring(self.PressPending == true),
+        tostring(self.KeyDown), tostring(self.HookMode or self.HookFailed), if shot then (shot.Kind or "?") else "none",
+        if shot and shot.Fired then " fired" else ""
+    ) .. rimText
+    if text ~= self.TraceLast then
+        self.TraceLast = text
+        self:trace(text)
+    end
+    if self.TraceDirty and now - (self.TraceFlush or 0) > 0.5 then
+        self.TraceFlush = now
+        self.TraceDirty = false
+        if type(writefile) == "function" then
+            pcall(writefile, LOG_FILE, table.concat(self.TraceLines, "\n"))
+        end
+    end
+end
+
+function AutoGreen.new(read: (string) -> any, notify: (string) -> ()): any
+    return setmetatable({
+        Read = read,
+        Notify = notify,
+        Links = {} :: { any },
+        Meters = {} :: { any },
+        Character = nil :: any,
+        Shot = nil :: any,
+        LastAuto = -math.huge,
+        LastPress = -math.huge,
+        IdleAt = 0,
+        LostAt = nil :: any,
+        Warned = {} :: Map,
+        Press = nil :: any,
+        Held = nil :: any,
+        Own = false,
+        Armed = false,
+        HasBall = false,
+        HoldOk = false,
+        KeyDown = nil :: any,
+        LastKind = nil :: any,
+        Hooked = false,
+        HookBound = false,
+        HookMode = nil :: any,
+        TriedHook = false,
+        Binding = false,
+        HookCheck = 0,
+        HookFailed = nil :: any,
+        Stopped = false,
+        Feedback = nil :: any,
+        Stats = { Total = 0, Perfect = 0, Streak = 0, Last = "-" },
+        Rates = {} :: { [string]: number },
+        StatsText = nil :: any,
+        ServerDown = false,
+        TeamBallAt = -math.huge,
+        TapConvert = nil :: any,
+        PlantUntil = nil :: any,
+        PlantRestore = nil :: any,
+    }, AutoGreen)
+end
+
+function AutoGreen.ignore(self: any): number
+    local value = tonumber(self.Read("IgnoreContest")) or 0
+    return math.clamp(value / 100, 0, 1)
+end
+
+function AutoGreen.seesCalls(self: any): boolean
+    return self.HookBound == true
+end
+
+local START_PING_SCALE = 1
+local PING_FLOOR = 0.012
+local PING_KEY = "%lead"
+
+function AutoGreen.pingLead(self: any): number
+    local ping = Court.Ping
+    local read = self.Read
+    if read("AutoPing") == false then
+        return ping * (read("PingComp") or 100) / 100
+    end
+    local scale = learned()[PING_KEY]
+    if type(scale) ~= "number" or scale ~= scale then
+        scale = START_PING_SCALE
+    end
+    return math.max(0, ping * math.clamp(scale, 0.5, 1.4) - PING_FLOOR)
+end
+
+function AutoGreen.learnPing(self: any, step: number)
+    local ping = Court.Ping
+    if self.Read("AutoPing") == false or ping < 0.02 then
+        return
+    end
+    local store = learned()
+    local scale = if type(store[PING_KEY]) == "number" then store[PING_KEY] else START_PING_SCALE
+    store[PING_KEY] = math.clamp(scale - step / ping * 0.5, 0.5, 1.4)
+end
+
+function AutoGreen.expectsPass(self: any): boolean
+    local now = os.clock()
+    if Court.FoeBall or Court.FoeHeld or now - (self.FoeBallAt or -math.huge) < 1.5 then
+        return false
+    end
+    if Court.TeamBall or now - (self.TeamBallAt or -math.huge) < 1.2 or Court.Dead then
+        return true
+    end
+    local root = Court.Root
+    return root ~= nil and Court.ballNear(root.Position, 12) == true
+end
+
+function AutoGreen.plant(self: any, mine: any)
+    if self.Read("PlantedShot") ~= true or self.DunkPress == true then
+        return
+    end
+    local root = Court.root(mine)
+    local rimAt = if root then Court.rimDistance(root.Position) else nil
+    if rimAt ~= nil and rimAt <= LAYUP_RANGE then
+        return
+    end
+    local now = os.clock()
+    self.PlantUntil = now + 1.4
+    self.PlantRestore = now + 3
+    local remote = Court.input("MoveDirection")
+    if remote then
+        Court.send(remote, Vector3.zero)
+    end
+end
+
+function AutoGreen.physics(self: any)
+    local limit: number? = self.PlantUntil
+    if not limit then
+        return
+    end
+    local now = os.clock()
+    local action = Court.Action
+    local shotOn = self.Press ~= nil or (self.Shot ~= nil and not self.Shot.Fired)
+    if now < limit and shotOn and not METERED[action] then
+        local _, mover = Court.proxy()
+        if mover then
+            mover.Velocity = Vector3.zero
+        end
+        return
+    end
+    if shotOn and now < limit then
+        return
+    end
+    local remote = Court.input("MoveDirection")
+    local sent = remote ~= nil and Court.send(remote, Court.heading() or Vector3.zero)
+    if sent or now > (self.PlantRestore or now) then
+        self.PlantUntil = nil
+        self.PlantRestore = nil
+    end
+end
+
+function AutoGreen.onDribble(self: any)
+    if self.Press == nil or self.KeyDown == true then
+        return
+    end
+    local shot: any = self.Shot
+    if shot and shot.Fired then
+        return
+    end
+    local character = self.Character
+    if character and liveShot(character, character:GetAttribute("Action"), self.Meters) then
+        return
+    end
+    self:trace("  dribble move while a short press was held, it stays a fake")
+    self:settle()
+end
+
+function AutoGreen.allowed(self: any): boolean
+    return true
+end
+
+function AutoGreen.peak(self: any, kind: string): number?
+    local value = Config.PEAKS[kind] or learned()[kind]
+    return if type(value) == "number" then value else nil
+end
+
+function AutoGreen.canHold(self: any): boolean
+    return self:allowed()
+end
+
+function AutoGreen.fire(self: any, args: Map): boolean
+    local remote = Court.input("Shoot")
+    if not remote then
+        if not self.Warned.Remote then
+            self.Warned.Remote = true
+            self.Notify("The shoot remote was not found, Auto Green cannot release")
+        end
+        return false
+    end
+    return Court.send(remote, args)
+end
+
+function AutoGreen.send(self: any)
+    self:trace("  SEND release")
+    self.Planned = self.NextPlan
+    self.NextPlan = nil
+    self.Swallow = self.KeyDown == true
+    self.Press = nil
+    self.Held = nil
+    self.Own = false
+    self.LostAt = nil
+    local shot: any = self.Shot
+    if shot then
+        shot.Fired = true
+    end
+    local owed = self.ServerDown == true or not self:seesCalls()
+    self.ServerDown = false
+    if not owed then
+        self:trace("  release skipped, the server already has the key up")
+        return
+    end
+    if self:fire(RELEASE) then
+        self.LastAuto = os.clock()
+    end
+end
+
+function AutoGreen.settle(self: any)
+    self:trace("  settle held=" .. tostring(self.Held ~= nil))
+    if self.Held ~= nil then
+        self:send()
+    else
+        self.Press = nil
+        self.Own = false
+        self.LostAt = nil
+    end
+end
+
+function AutoGreen.release(self: any)
+    local shot: any = self.Shot
+    if not shot or shot.Fired then
+        return
+    end
+    shot.Fired = true
+    local character = self.Character
+    if not character or not liveShot(character, character:GetAttribute("Action"), self.Meters) then
+        self:settle()
+        return
+    end
+    local steady = (shot.Gap or 0) < math.max(STALL, 0.04 + Court.Ping * 0.6) and (shot.LongFrame or 0) < STALL
+    self.NextPlan = { Kind = shot.Kind, Clean = shot.ReleaseAt ~= nil and shot.Timed == true and shot.Sloppy == nil and steady }
+    self:send()
+end
+
+function AutoGreen.onPress(self: any)
+    local read = self.Read
+    if self.Stopped or read("AutoGreen") ~= true then
+        self:trace("  onPress ignored, Auto Green off")
+        return
+    end
+    local mine = Court.mine()
+    if not mine or (not Court.holds(mine) and not PRESHOT[mine:GetAttribute("Action")]) then
+        if mine and (self.KeyDown == true or self.Held ~= nil) and self:expectsPass() then
+            self.EarlyAt = os.clock()
+        end
+        self:trace("  onPress no ball yet, early=" .. tostring(self.EarlyAt ~= nil))
+        return
+    end
+    self.EarlyAt = nil
+    local shot: any = self.Shot
+    if shot and shot.Fired then
+        self:trace("  onPress ignored, shot already fired")
+        return
+    end
+    if self.Press ~= nil then
+        self:trace("  onPress repeat, already owned")
+        return
+    end
+    local now = os.clock()
+    self.Press = now
+    self.LastPress = now
+    self.IdleAt = now
+    self.LostAt = nil
+    local nearRim = false
+    if read("LayupGreen") == false then
+        local root = Court.root(mine)
+        local rimAt = if root then Court.rimDistance(root.Position) else nil
+        nearRim = rimAt ~= nil and rimAt <= LAYUP_RANGE
+    end
+    self.HoldOk = not nearRim and (self.DunkPress == true or self:canHold())
+    self:plant(mine)
+    self:trace("  onPress OWNED, holdOk=" .. tostring(self.HoldOk))
+end
+
+function AutoGreen.begin(self: any, useSpace: boolean?, force: boolean?): boolean
+    if self.Stopped or self.Read("AutoGreen") ~= true or self.Press ~= nil then
+        return false
+    end
+    if not useSpace and not force and not self:canHold() then
+        return false
+    end
+    self.DunkPress = useSpace == true
+    self:onPress()
+    local press = self.Press
+    if press == nil then
+        return false
+    end
+    if not self:fire(if useSpace then PRESS_SPACE else PRESS) then
+        self.Press = nil
+        return false
+    end
+    self.ServerDown = true
+    self.Held = press
+    self.DunkPress = useSpace == true
+    self.Own = true
+    self.HoldOk = true
+    return true
+end
+
+function AutoGreen.earlyWindow(self: any): number
+    return math.max(0.3, math.min(Court.Ping, 0.6) + 0.15)
+end
+
+function AutoGreen.holding(self: any): boolean
+    if self.Armed ~= true then
+        return false
+    end
+    local early = self.EarlyAt
+    if early ~= nil and self.Press == nil and os.clock() - early < self:earlyWindow() then
+        return true
+    end
+    if self.PressPending == true and self.Press == nil then
+        return self.HoldMode ~= true
+    end
+    return self.Press ~= nil and self.HoldOk == true
+end
+
+function AutoGreen.shootCall(self: any, data: any): boolean
+    if type(data) ~= "table" then
+        return false
+    end
+    local flag = rawget(data, "Shoot")
+    if self.Tracing then
+        self:trace(string.format("CALL Shoot=%s Input=%s UseSpace=%s", tostring(flag), tostring(rawget(data, "Input")), tostring(rawget(data, "UseSpace"))))
+    end
+    if flag == true then
+        self.KeyDown = true
+        self.Swallow = false
+        self.ServerDown = true
+        self.DunkPress = rawget(data, "UseSpace") == true
+        self:onPress()
+        return false
+    end
+    if flag ~= false then
+        return false
+    end
+    self.KeyDown = false
+    if rawget(data, "Input") ~= nil then
+        self.TapAt = os.clock()
+        if self:convertsTap(data) then
+            self.TapConvert = { Data = data, At = os.clock() }
+            self:trace("  TAP held, it is pressed for you on the next frame")
+            return true
+        end
+        self.ServerDown = false
+        return false
+    end
+    if self.Swallow == true then
+        self.Swallow = false
+        self:trace("  release swallowed, the script already let go")
+        return true
+    end
+    if self:holding() then
+        if self.Held == nil then
+            self.Held = os.clock()
+        end
+        self:trace("  release HELD back")
+        return true
+    end
+    self:trace("  release passed through")
+    self.ServerDown = false
+    self:passed()
+    return false
+end
+
+function AutoGreen.convertsTap(self: any, data: any): boolean
+    if self.Armed ~= true or self.HasBall ~= true or rawget(data, "Input") ~= "E" then
+        return false
+    end
+    if self.Press ~= nil or self.Held ~= nil or self.Shot ~= nil or self.TapConvert ~= nil then
+        return false
+    end
+    local action = Court.Action
+    if action == "Dribbling" or action == "Dunking" or METERED[action] then
+        return false
+    end
+    return self.Read("TapShoot") == true
+end
+
+function AutoGreen.passed(self: any)
+    if self.Held == nil then
+        self.Press = nil
+        self.LostAt = nil
+    end
+end
+
+function AutoGreen.sample(self: any, character: any)
+    if character ~= self.Character then
+        return
+    end
+    local offset: any = character:GetAttribute("meterOffset")
+    local kindOf = typeof(offset)
+    if kindOf ~= "Vector2" then
+        return
+    end
+    local value: number = offset.Y
+    local action = character:GetAttribute("Action")
+    if not liveShot(character, action, self.Meters) then
+        self.Shot = nil
+        return
+    end
+    local now = os.clock()
+    local read = self.Read
+    local shot: any = self.Shot
+    if not shot then
+        local sloppy: number? = nil
+        if math.random() > (read("PerfectChance") or 100) / 100 then
+            sloppy = (if math.random() < 0.5 then -1 else 1) * (0.04 + math.random() * 0.05)
+        end
+        local nearRim = false
+        if not self.Own and read("LayupGreen") == false then
+            local root = Court.root(character)
+            local rimAt = if root then Court.rimDistance(root.Position) else nil
+            nearRim = rimAt ~= nil and rimAt <= LAYUP_RANGE
+        end
+        self.Shot = {
+            T0 = now,
+            V0 = value,
+            Low = value,
+            Scale = shotSpeed(character),
+            Fired = false,
+            Kind = nil,
+            Sloppy = sloppy,
+            Timed = not nearRim and (self.DunkPress == true or action == "Dunking" or self.HoldOk == true or self:allowed()),
+            DunkAt = if action == "Dunking" then now + DUNK_TIMEOUT else nil,
+        }
+        return
+    end
+    if value < shot.Low then
+        shot.Low = value
+    end
+    if not shot.Fired then
+        shot.Gap = math.max(shot.Gap or 0, now - (shot.SeenAt or now))
+        shot.SeenAt = now
+    end
+    if value - shot.Low > 0.012 then
+        shot.Turned = true
+    elseif not shot.Turned and now > shot.T0 then
+        local at = now - shot.T0
+        if not shot.Ln then
+            shot.Ln, shot.Lt, shot.Lv, shot.Ltt, shot.Ltv = 1, 0, shot.V0, 0, 0
+        end
+        shot.Ln += 1
+        shot.Lt += at
+        shot.Lv += value
+        shot.Ltt += at * at
+        shot.Ltv += at * value
+    end
+    if shot.Fired then
+        if shot.Kind and not shot.NewRate and not shot.Turned and (shot.Ln or 0) >= 8 then
+            self:learnRate(shot)
+        end
+        return
+    end
+    if read("AutoGreen") ~= true or not shot.Timed then
+        if self.Held ~= nil then
+            self:release()
+        end
+        return
+    end
+    local elapsed = now - shot.T0
+    if elapsed < 0.02 then
+        if now == shot.T0 then
+            shot.V0 = value
+        end
+        return
+    end
+    local kind: string = shot.Kind or meterKind(character, self.Meters) or ""
+    if kind ~= "" and not shot.Kind then
+        local store = learned()
+        if store["@last"] ~= kind then
+            store["@last"] = kind
+            Env.writeJson(PEAK_FILE, store)
+        end
+    end
+    if kind == "" then
+        if elapsed < 0.12 then
+            return
+        end
+        local last = learned()["@last"]
+        kind = hiddenKind(self.Meters) or (if type(last) == "string" and self:peak(last) then last else nil) or (if action == "Dunking" then "Dunk" else "Shot")
+    end
+    if not shot.Kind then
+        shot.Kind = kind
+        self.LastKind = kind
+    end
+    local peak = self:peak(kind)
+    if not peak then
+        if value - shot.Low > 0.012 then
+            local store = learned()
+            store[kind] = shot.Low
+            Env.writeJson(PEAK_FILE, store)
+            self:release()
+        end
+        return
+    end
+    if value - shot.Low > 0.012 then
+        self:release()
+        return
+    end
+    shot.Peak = peak
+    shot.Latest = value
+    shot.Fresh = true
+end
+
+function AutoGreen.plan(self: any, now: number)
+    local shot: any = self.Shot
+    shot.Fresh = false
+    local value: number = shot.Latest
+    local peak: number = shot.Peak
+    local kind: string = shot.Kind
+    local read = self.Read
+    local elapsed = now - shot.T0
+    if not shot.N then
+        shot.N, shot.St, shot.Sv, shot.Stt, shot.Stv = 1, 0, shot.V0, 0, 0
+    end
+    shot.N += 1
+    shot.St += elapsed
+    shot.Sv += value
+    shot.Stt += elapsed * elapsed
+    shot.Stv += elapsed * value
+    local speed = (value - shot.V0) / elapsed
+    local level = value
+    local spread = shot.N * shot.Stt - shot.St * shot.St
+    local saved = learned()["#" .. kind]
+    local scale: number = shot.Scale or 1
+    local base: number? = self.Rates[kind] or (if type(saved) == "number" then saved else nil)
+    local known: number? = if base then base * scale else nil
+    if shot.N >= 6 and spread > 1e-9 then
+        speed = (shot.N * shot.Stv - shot.St * shot.Sv) / spread
+        level = (shot.Sv - speed * shot.St) / shot.N + speed * elapsed
+        if shot.N >= 8 then
+            local measured = speed / scale
+            self.Rates[kind] = if base then base + (measured - base) * 0.5 else measured
+            shot.NewRate = self.Rates[kind]
+        end
+    elseif known then
+        speed = known
+        level = (shot.Sv - speed * shot.St) / shot.N + speed * elapsed
+    elseif shot.N >= 4 and spread > 1e-9 then
+        speed = (shot.N * shot.Stv - shot.St * shot.Sv) / spread
+        level = (shot.Sv - speed * shot.St) / shot.N + speed * elapsed
+    end
+    if speed >= -0.05 or shot.Frozen then
+        return
+    end
+    local remaining = (peak - level) / speed
+    local delay = remaining - math.min(self.FrameDt or 0, 1 / 60) * 0.5 - SERVER_STEP * 0.5 - self:pingLead() + (read("GreenOffset") or 0) / 1000 + (shot.Sloppy or 0) + self:bias(kind)
+    shot.Value = value
+    shot.SampleAt = now
+    shot.Speed = speed
+    shot.Peak = peak
+    local trusted = shot.N >= 6 or known ~= nil
+    if not trusted and shot.N < 3 then
+        return
+    end
+    shot.ReleaseAt = now + delay
+    if delay <= 0 then
+        self:release()
+    elseif delay < 0.03 and trusted then
+        shot.Frozen = true
+    end
+end
+
+function AutoGreen.learnRate(self: any, shot: any)
+    local n = shot.Ln
+    local spread = n * shot.Ltt - shot.Lt * shot.Lt
+    if spread <= 1e-9 then
+        return
+    end
+    local speed = (n * shot.Ltv - shot.Lt * shot.Lv) / spread
+    if speed >= -0.05 then
+        return
+    end
+    local kind: string = shot.Kind
+    local measured = speed / (shot.Scale or 1)
+    local saved = learned()["#" .. kind]
+    local base: number? = self.Rates[kind] or (if type(saved) == "number" then saved else nil)
+    self.Rates[kind] = if base then base + (measured - base) * 0.2 else measured
+    shot.NewRate = self.Rates[kind]
+    local store = learned()
+    store["#" .. kind] = shot.NewRate
+    Env.writeJson(PEAK_FILE, store)
+end
+
+function AutoGreen.bias(self: any, kind: string): number
+    if self.Read("AutoCalibrate") == false then
+        return 0
+    end
+    local value = learned()["~" .. kind]
+    return if type(value) == "number" then value else 0
+end
+
+local CALIBRATION = { [1] = 0.018, [2] = 0.009, [3] = 0.0035, [6] = -0.0035, [7] = -0.009, [8] = -0.018 }
+
+function AutoGreen.calibrate(self: any, kind: string?, timing: number)
+    local step = CALIBRATION[timing]
+    if not kind or kind == "" or not step or self.Read("AutoCalibrate") == false then
+        return
+    end
+    local store = learned()
+    local key = "~" .. kind
+    local current = if type(store[key]) == "number" then store[key] else 0
+    local share = step
+    if self.Read("AutoPing") ~= false and Court.Ping >= 0.02 then
+        self:learnPing(step * 0.5)
+        share = step * 0.5
+    end
+    store[key] = math.clamp(current * 0.97 + share, -0.08, 0.08)
+    Env.writeJson(PEAK_FILE, store)
+end
+
+function AutoGreen.resetCalibration(self: any)
+    local store = learned()
+    local keys: { string } = {}
+    for key, value in store do
+        if type(key) == "string" and (string.sub(key, 1, 1) == "~" or type(value) == "number") then
+            table.insert(keys, key)
+        end
+    end
+    for _, key in keys do
+        store[key] = nil
+    end
+    local saved = Env.writeJson(PEAK_FILE, store)
+    pcall(self.Notify, if saved then "Calibration reset" else "Calibration reset, could not save the file")
+end
+
+function AutoGreen.rated(self: any, timing: number)
+    local shot: any = self.Shot
+    local mine = os.clock() - self.LastAuto < 2
+    local plan: any = self.Planned
+    self.Planned = nil
+    if mine and plan and plan.Clean and plan.Kind then
+        self:calibrate(plan.Kind, timing)
+    end
+    if shot and shot.Kind and timing == TIMING_PERFECT and not self:peak(shot.Kind) then
+        local store = learned()
+        store[shot.Kind] = shot.Low
+        Env.writeJson(PEAK_FILE, store)
+    end
+    local record = self.Stats
+    self.StatsText = nil
+    record.Total += 1
+    record.Last = Config.TIMINGS[timing] or "?"
+    if self.Read("NotifyRelease") == true and mine then
+        self.Notify(record.Last)
+    end
+    if timing == TIMING_PERFECT then
+        record.Perfect += 1
+        record.Streak += 1
+    else
+        record.Streak = 0
+    end
+end
+
+function AutoGreen.detach(self: any)
+    for _, link in self.Links do
+        pcall(link.Disconnect, link)
+    end
+    table.clear(self.Links)
+    table.clear(self.Meters)
+    if self.Press ~= nil or self.Held ~= nil then
+        self:settle()
+    end
+    self.Character = nil
+    self.Shot = nil
+end
+
+function AutoGreen.attach(self: any, character: any)
+    self:detach()
+    if not character or self.Stopped then
+        return
+    end
+    self.Character = character
+    local links: { any } = self.Links
+    local meters: { any } = self.Meters
+    local function consider(descendant: any)
+        if descendant:IsA("BillboardGui") and not table.find(meters, descendant) then
+            table.insert(meters, descendant)
+        end
+    end
+    table.insert(links, character:GetAttributeChangedSignal("meterOffset"):Connect(function()
+        self:sample(character)
+    end))
+    table.insert(links, character:GetAttributeChangedSignal("Action"):Connect(function()
+        if self.Character == character and self.Shot and not liveShot(character, character:GetAttribute("Action"), meters) then
+            self.Shot = nil
+        end
+    end))
+    table.insert(links, character:GetAttributeChangedSignal("ReleasedShot"):Connect(function()
+        local shot: any = self.Shot
+        if shot and self.Character == character and character:GetAttribute("ReleasedShot") == true then
+            shot.ReleasedAt = os.clock()
+        end
+    end))
+    table.insert(links, character.DescendantAdded:Connect(consider))
+    for _, descendant in character:GetDescendants() do
+        consider(descendant)
+    end
+end
+
+function AutoGreen.step(self: any, now: number, dt: number)
+    local on = self.Read("AutoGreen") == true
+    local action0 = Court.Action
+    local character = Court.Mine
+    if character ~= self.Character then
+        self:attach(character)
+    end
+    self.Armed = on and character ~= nil
+    self.HasBall = on and Court.HasBall
+    self.Tracing = Env.get("ReflexGreenLog") == true
+    if self.Tracing then
+        self:traceState(now, action0)
+    end
+    self.HoldMode = true
+    if self.Hooked then
+        Hook.drain()
+    end
+    self.FrameDt = math.min(dt, 0.1)
+    local watch: any = self.WatchHook
+    if watch then
+        watch.Sum += dt
+        watch.Count += 1
+        if now >= watch.Until then
+            self.WatchHook = nil
+            local average = watch.Sum / math.max(watch.Count, 1)
+            if average > math.max(watch.Base * 1.8, 1 / 30) and self.HookMode == "hook" then
+                pcall(Hook.remove)
+                self.HookBound = false
+                self.HookMode = nil
+                self.HookFailed = "slow"
+                self.Warned.Hook = true
+                self.Notify("Auto Green turned its hook off, it slowed this executor down. Hold the shoot key until the green")
+            end
+        end
+    else
+        self.FrameAvg = (self.FrameAvg or dt) + (math.min(dt, 0.25) - (self.FrameAvg or dt)) * 0.05
+    end
+    if self.PressPending then
+        self.PressPending = false
+        self:onPress()
+        if self.Held ~= nil and self.Press ~= nil and self.HoldOk ~= true then
+            self:send()
+        end
+    end
+    if Court.TeamBall and not Court.HasBall then
+        self.TeamBallAt = now
+    end
+    if Court.FoeBall then
+        self.FoeBallAt = now
+    end
+    local convert: any = self.TapConvert
+    if convert then
+        self.TapConvert = nil
+        local started = false
+        if on and Court.HasBall and self.Press == nil and self.Held == nil and self.Shot == nil and self.KeyDown ~= true then
+            started = self:begin(false, true)
+        end
+        if started then
+            self:trace("  TAP turned into a held shot, action=" .. tostring(action0))
+        else
+            self:trace("  TAP passed on as it was, action=" .. tostring(action0))
+            local remote = Court.input("Shoot")
+            if remote then
+                Court.send(remote, convert.Data)
+            end
+            self.ServerDown = false
+        end
+    end
+    local early: number? = self.EarlyAt
+    if early then
+        if now - early > self:earlyWindow() or (self.KeyDown ~= true and self.Held == nil) or not on then
+            self.EarlyAt = nil
+        elseif Court.HasBall then
+            self.EarlyAt = nil
+            self:onPress()
+        end
+    end
+    if self.Hooked and not self.HookFailed and now >= self.HookCheck then
+        self.HookCheck = now + 2
+        if self.HookBound and not Hook.owned(self) then
+            self.HookBound = false
+            self.Hooked = false
+        end
+    end
+    if on and self.HookFailed and not self.Binding and now >= (self.WrapRetry or 0) and (self.Retries or 0) < 8 then
+        self.Retries = (self.Retries or 0) + 1
+        self.WrapRetry = now + 5 * self.Retries
+        task.spawn(function()
+            if self.Stopped or self.HookBound or self.Binding then
+                return
+            end
+            self.Binding = true
+            local ok, mode = Hook.bind(self, false, true)
+            self.Binding = false
+            if self.Stopped then
+                pcall(Hook.remove)
+            elseif ok then
+                self.HookBound = true
+                self.HookMode = mode
+                self.HookFailed = nil
+            end
+        end)
+    end
+    local action = action0
+    local live = character ~= nil and liveShot(character, action, self.Meters)
+    local shot: any = self.Shot
+    if shot then
+        if not live or (shot.ReleasedAt and now - shot.ReleasedAt >= 1.5) then
+            self.Shot = nil
+            shot = nil
+        elseif not shot.Fired and on then
+            shot.LongFrame = math.max(shot.LongFrame or 0, dt)
+            if shot.Fresh then
+                self:plan(now)
+            end
+            local at: number? = if shot.Fired then nil else shot.ReleaseAt
+            if at then
+                if now + math.min(dt, 0.05) * 0.5 >= at then
+                    self:release()
+                end
+            elseif shot.Timed and shot.DunkAt and now >= shot.DunkAt then
+                self:release()
+            end
+        end
+    end
+    local press: number? = self.Press
+    if press then
+        if not on or not character then
+            self:settle()
+        else
+            local waiting = WAITING[action] == true and (action ~= "Dribbling" or now - press < 1.2)
+            local busy = self.Shot ~= nil or live or waiting
+            if busy then
+                self.IdleAt = now
+            end
+            local lost = self.Held ~= nil and not busy and not Court.HasBall
+            if not lost then
+                self.LostAt = nil
+            elseif not self.LostAt then
+                self.LostAt = now
+            end
+            local limit = TAP_TIMEOUT
+            if Court.HasBall and not busy then
+                local root = Court.Root
+                local rimAt = if root then Court.rimDistance(root.Position) else nil
+                if rimAt ~= nil and rimAt <= 45 then
+                    limit = 2
+                end
+            end
+            if action == "Dunking" and self.Held ~= nil then
+                self.DunkSince = self.DunkSince or now
+                local planned: any = self.Shot
+                local cap = if planned and planned.ReleaseAt and not planned.Fired then 1.8 else 0.9
+                if now - self.DunkSince >= cap then
+                    self.DunkSince = nil
+                    self:send()
+                    return
+                end
+            else
+                self.DunkSince = nil
+            end
+            if now - self.IdleAt >= limit or now - press >= HOLD_TIMEOUT or (lost and now - self.LostAt >= LOST_GRACE) then
+                self:settle()
+            end
+        end
+    elseif self.Held ~= nil and self.EarlyAt == nil then
+        self:send()
+    end
+end
+
+function AutoGreen.greenWindow(self: any, now: number): boolean
+    local shot: any = self.Shot
+    if shot and not shot.Fired and shot.ReleaseAt and math.abs(shot.ReleaseAt - now) <= 0.08 then
+        return true
+    end
+    return now - self.LastAuto < 0.35
+end
+
+function AutoGreen.hook(self: any, allowHook: boolean?)
+    if self.Stopped or self.Binding or self.HookBound then
+        return
+    end
+    if self.Hooked and (self.TriedHook or allowHook ~= true) then
+        return
+    end
+    self.Binding = true
+    local ok, mode = Hook.bind(self, allowHook == true)
+    self.Binding = false
+    if self.Stopped then
+        pcall(Hook.remove)
+        return
+    end
+    self.Hooked = true
+    self.TriedHook = allowHook == true
+    if ok then
+        self.HookBound = true
+        self.HookMode = mode
+        self.HookFailed = nil
+        if mode == "hook" then
+            self.WatchHook = { Until = os.clock() + 3, Base = self.FrameAvg or (1 / 60), Sum = 0, Count = 0 }
+        end
+    else
+        self.HookMode = nil
+        self.HookFailed = mode or "unsupported"
+    end
+end
+
+function AutoGreen.bind(self: any)
+    task.spawn(function()
+        local folder = Court.service("InterfaceService")
+        local waited = 0
+        while not folder and waited < 30 and not self.Stopped do
+            waited += task.wait(1)
+            folder = Court.service("InterfaceService")
+        end
+        if not folder or self.Stopped then
+            return
+        end
+        local ok, remote = pcall(folder.WaitForChild, folder, "ShowFeedback", 30)
+        if not ok or not remote or self.Stopped then
+            return
+        end
+        self.Feedback = remote.OnClientEvent:Connect(function(character: any, _: any, timing: any)
+            if character ~= nil and character == self.Character then
+                local index = tonumber(timing)
+                if index then
+                    self:rated(index)
+                end
+            end
+        end)
+    end)
+end
+
+function AutoGreen.shutdown(self: any)
+    self.Stopped = true
+    self.Armed = false
+    self.HasBall = false
+    pcall(self.detach, self)
+    self.Press = nil
+    self.Held = nil
+    local feedback = self.Feedback
+    if feedback then
+        self.Feedback = nil
+        pcall(feedback.Disconnect, feedback)
+    end
+    if self.PlantUntil then
+        local remote = Court.input("MoveDirection")
+        if remote then
+            Court.send(remote, Court.heading() or Vector3.zero)
+        end
+        self.PlantUntil = nil
+        self.PlantRestore = nil
+    end
+    pcall(Hook.remove)
+end
+
+return AutoGreen
+end
+
+modules["contest"] = function(...)
+
+local import: (string) -> any = ...
+local Court: typeof(require("./court")) = import("court")
+local Env: typeof(require("./env")) = import("env")
+
+local Contest = {}
+Contest.__index = Contest
+
+local OPEN = Color3.fromRGB(70, 230, 110)
+local CLOSE = Color3.fromRGB(255, 200, 70)
+local TIGHT = Color3.fromRGB(255, 80, 80)
+local DARK = Color3.fromRGB(14, 16, 20)
+local EASE = 10
+local FADE = 6
+local FILL = 0.84
+local OUTLINE = 0.3
+local OPEN_BELOW = 0.35
+
+local function holder(): any?
+    local hui = Env.gethui
+    if hui then
+        local ok, folder = pcall(hui)
+        if ok and folder then
+            return folder
+        end
+    end
+    local ok, core = pcall(game.GetService, game, "CoreGui")
+    return if ok then core else nil
+end
+
+local function mix(from: Color3, to: Color3, share: number): Color3
+    return Color3.new(from.R + (to.R - from.R) * share, from.G + (to.G - from.G) * share, from.B + (to.B - from.B) * share)
+end
+
+function Contest.new(read: (string) -> any, autoGreen: any?): any
+    return setmetatable({ Read = read, AutoGreen = autoGreen, Light = nil :: any, Color = OPEN, Glow = 0, Value = 0, Gap = math.huge, Open = true }, Contest)
+end
+
+function Contest.measure(self: any, root: any, lead: number?, subject: any?): (number, number)
+    local range: number = self.Read("ContestRange") or 6
+    local here: Vector3 = root.Position
+    local mine = subject or Court.Mine
+    local rim: any = if mine then Court.goal(mine) else nil
+    if not rim then
+        local _, nearest = Court.rimDistance(here)
+        rim = nearest
+    end
+    local toRim: Vector3? = nil
+    if rim then
+        local flat = Court.flat(rim.Position - here)
+        toRim = if flat.Magnitude > 0.5 then flat.Unit else nil
+    end
+    local myLook = Court.flat(root.CFrame.LookVector)
+    local ahead: Vector3? = toRim or (if myLook.Magnitude > 0.1 then myLook.Unit else nil)
+    local worst, gap = 0, math.huge
+    local who, whoRoot = nil, nil
+    local roots, foe, chars = Court.Roots, Court.Foe, Court.Chars
+    for index = 1, Court.Count + (if subject then 1 else 0) do
+        local character = if index <= Court.Count then chars[index] else Court.Mine
+        local candidate = if index <= Court.Count then roots[index] else Court.Root
+        local enemy = Court.contestEnemy or Court.enemy
+        if character and candidate and character ~= mine and enemy(mine, character) then
+            local offset = Court.flat(candidate.Position - here)
+            local distance = offset.Magnitude
+            if distance < gap then
+                gap = distance
+            end
+            if distance - (lead or 0) * 20 < range * 1.5 + 2 then
+                local away = if distance > 0.1 then offset / distance else Vector3.zero
+                local theirRoot = candidate
+                local motion = Court.Motion[index] or Court.flat(theirRoot.AssemblyLinearVelocity)
+                local closing = math.clamp(-motion:Dot(away), -6, if lead then 20 else 12)
+                local effective = math.max(distance - closing * (lead or 0.15), 0)
+                local closeness = math.clamp((range * 1.5 - effective) / range, 0, 1)
+                local front = 0.6
+                if ahead and distance > 0.1 then
+                    local side = away:Dot(ahead)
+                    front = math.clamp((side - 0.15) / 0.55, 0, 1)
+                    if front > 0 and myLook.Magnitude > 0.1 and toRim then
+                        local lookSide = away:Dot(myLook.Unit)
+                        if lookSide < -0.2 then
+                            front *= math.clamp((lookSide + 0.6) / 0.4, 0, 1)
+                        end
+                    end
+                elseif distance <= 0.1 then
+                    front = 1
+                end
+                local look = Court.flat(theirRoot.CFrame.LookVector)
+                local facing = if look.Magnitude > 0.1 and distance > 0.1 then math.clamp(-look.Unit:Dot(away) * 0.5 + 0.5, 0, 1) else 0.5
+                local share = closeness * front * (0.6 + 0.4 * facing)
+                if share > worst then
+                    worst = share
+                    who, whoRoot = character, theirRoot
+                end
+            end
+        end
+    end
+    if not subject then self.Who, self.WhoRoot = who, whoRoot end
+    return worst, gap
+end
+
+function Contest.estimate(self: any, root: any, lead: number?): number
+    local value, gap = self:measure(root, lead)
+    if not lead then
+        self.Value, self.Gap = value, gap
+    end
+    return value
+end
+
+function Contest.clear(self: any)
+    local light = self.Light
+    if light then
+        self.Light = nil
+        pcall(light.Destroy, light)
+    end
+end
+
+function Contest.shade(self: any): Color3
+    if self.Open then
+        return OPEN
+    end
+    return if self.Value < 0.65 then CLOSE else TIGHT
+end
+
+function Contest.step(self: any, now: number, dt: number)
+    local read = self.Read
+    local mine, root = Court.Mine, Court.Root
+    local contestOn = read("OpenShot") == true
+    if not mine or not root or not contestOn then
+        if root and read("AutoShoot") == true then
+            self:estimate(root)
+        end
+        self.Shown = false
+        self.Glow = 0
+        self:clear()
+        return
+    end
+    local step = math.min(dt, 0.1)
+    local value, gap = self:measure(root)
+    self.Value, self.Gap = value, gap
+    if self.Open then
+        self.Open = value < OPEN_BELOW + 0.05
+    else
+        self.Open = value < OPEN_BELOW - 0.05
+    end
+    local ball = Court.HasBall
+    local showing = contestOn and (read("OpenShotBall") ~= true or ball)
+    self.Shown = showing
+    local goal: Color3? = nil
+    if showing and read("OpenShotGlow") == true then
+        goal = self:shade()
+    end
+    self.Goal = goal
+    if goal then
+        self.Color = mix(self.Color, goal, 1 - math.exp(-EASE * step))
+    end
+    local strength = if goal then 1 else 0
+    self.Glow += math.clamp(strength - self.Glow, -FADE * step, FADE * step)
+    if self.Glow <= 0.005 then
+        self:clear()
+        return
+    end
+    local light = self.Light
+    if (not light or light.Parent == nil or light.Adornee ~= mine) and now >= (self.RetryAt or 0) then
+        self:clear()
+        self.RetryAt = now + 2
+        local ok, made = pcall(function(): any
+            local item = Instance.new("Highlight")
+            item.Name = "ReflexShotContest"
+            item.DepthMode = Enum.HighlightDepthMode.Occluded
+            item.FillTransparency = 1
+            item.OutlineTransparency = 1
+            item.Adornee = mine
+            item.Parent = holder() or mine
+            return item
+        end)
+        light = if ok then made else nil
+        self.Light = light
+    end
+    if light then
+        local strength = math.clamp((tonumber(self.Read("GlowStrength")) or 60) / 100, 0.05, 1)
+        local glow = self.Glow * strength
+        light.FillColor = self.Color
+        light.OutlineColor = self.Color
+        light.FillTransparency = 1 - (1 - FILL) * glow
+        light.OutlineTransparency = 1 - (1 - OUTLINE) * glow
+    end
+end
+
+local function percentOf(value: number): string
+    return math.floor(value * 100 + 0.5) .. "%"
+end
+
+local function wording(open: boolean, value: number): string
+    if open then
+        return "OPEN"
+    end
+    return if value < 0.65 then "CONTESTED" else "SMOTHERED"
+end
+
+local FOLLOW = 12
+local REACH = 4
+
+local function lift(self: any, key: string, want: number, dt: number): number
+    local alpha: number = self[key] or 0
+    alpha += math.clamp(want - alpha, -REACH * dt, REACH * dt)
+    self[key] = alpha
+    return alpha
+end
+
+function Contest.draw(self: any, canvas: any, chip: any)
+    local read = self.Read
+    local now = os.clock()
+    local dt = math.clamp(now - (self.DrawAt or now), 0, 0.1)
+    self.DrawAt = now
+    local root = Court.Root
+    local height = tonumber(read("ContestHeight")) or 4.2
+    local range = tonumber(read("ContestViewRange")) or 120
+    local opacity = math.clamp(tonumber(read("ContestOpacity")) or 0.85, 0.1, 1)
+    local labelOn = self.Shown and root ~= nil and canvas ~= nil and chip ~= nil and read("OpenShotNumber") == true
+    local point: Vector2? = nil
+    local want = 0
+    if labelOn then
+        local found, depth = canvas.project(root.Position + Vector3.new(0, height, 0))
+        if found and type(depth) == "number" and depth > 0 and depth <= range then
+            point, want = found, opacity
+        end
+    end
+    local alpha = lift(self, "LabelAlpha", want, dt)
+    local follow = 1 - math.exp(-FOLLOW * dt)
+    self.Eased = (self.Eased or self.Value) + (self.Value - (self.Eased or self.Value)) * follow
+    local custom: any = read("ContestLabelColor")
+    local goal = if read("ContestColorMode") == "Custom" and typeof(custom) == "Color3" then custom else self:shade()
+    self.Tone = if self.Tone then mix(self.Tone, goal, follow) else goal
+    local scale = math.clamp(tonumber(read("ContestTextSize")) or 13, 8, 30) / 13
+    local number = percentOf(self.Eased)
+    local tone: Color3 = self.Tone
+    if alpha > 0.01 and point and chip then
+        local who = self.Who
+        local runs = { { Text = number, Color = "Text" } }
+        if read("ContestWho") == true and who and not self.Open then
+            runs[2] = { Text = "by " .. tostring(who.Name), Color = "Sub" }
+        end
+        self.LastPoint = point
+        local shown = Vector2.new(point.X, point.Y - (1 - math.clamp(alpha / math.max(want, 0.1), 0, 1)) * 8)
+        if read("ContestStyle") == "Bar" then
+            chip("contest", shown, {}, alpha, scale, { Value = self.Eased, Color = tone, Only = true })
+        else
+            chip("contest", shown, { { { Text = wording(self.Open, self.Value), Color = tone } }, runs }, alpha, scale, nil)
+        end
+    end
+    local theirs = self.WhoRoot
+    local marking = labelOn and read("ContestFoeMark") == true and theirs ~= nil and not self.Open and theirs.Parent ~= nil
+    local markPoint: Vector2? = nil
+    local markWant = 0
+    if marking then
+        local found, depth = canvas.project(theirs.Position + Vector3.new(0, height, 0))
+        if found and type(depth) == "number" and depth > 0 and depth <= range then
+            markPoint, markWant = found, opacity
+        end
+    end
+    local markAlpha = lift(self, "MarkAlpha", markWant, dt)
+    if markAlpha > 0.01 and chip then
+        local at = markPoint or self.MarkPoint
+        if at then
+            self.MarkPoint = at
+            if read("ContestStyle") == "Bar" then
+                chip("mark", at, {}, markAlpha, scale * 0.8, { Value = self.Eased, Color = tone, Only = true })
+            else
+                chip("mark", at, { { { Text = number, Color = tone } } }, markAlpha, scale * 0.8, nil)
+            end
+        end
+    end
+end
+
+function Contest.shutdown(self: any)
+    self.Shown = false
+    self.Glow = 0
+    self:clear()
+end
+
+return Contest
+end
+
+local Court, Config = import("court"), import("config")
+local E = {Court = Court, Config = Config}
+R.Game = E
+env.__ReflexRootPath = R.RootPath
+do
+	local fixed = {AutoPing = true, AutoCalibrate = true, OpenShotNumber = false}
+	local aliases = {OpenShot = "ContestOn", OpenShotGlow = "ContestGlow", OpenShotBall = "ContestOnlyBall"}
+	function R.FeatureRead(name)
+		if not R.Running then return false end
+		if fixed[name] ~= nil then return fixed[name] end
+		local value = R.S[aliases[name] or name]
+		if value ~= nil then return value end
+		local defaults = R.Game and R.Game.Config.DEFAULTS
+		return defaults and defaults[name]
+	end
+end
+local read = R.FeatureRead
+    function E.Aero()
+        if type(getrenv)=="function" then
+            local ok,value=pcall(function() local global=getrenv()._G;return global and global.Aero end)
+            if ok and type(value)=="table" then return value end
+        end
+        return type(R.Env.Aero)=="table" and R.Env.Aero or nil
+    end
+    function E.CharacterObject()
+        local controller = E.Controller("Player")
+        if controller and controller.Character then return controller.Character end
+        if type(getrenv) == "function" then
+            local ok, character = pcall(function() return getrenv()._G.Aero.Controllers.Player.Character end)
+            if ok then return character end
+        end
+    end
+
+-- Meter packets: the game's own Meter controller when reachable, else the same packets seen on the meter remotes
+local meterFallback = {ActivePackets = {}}
+task.spawn(function()
+	local folder, waited = Court.service("MeterService"), 0
+	while not folder and waited < 30 and R.Running do
+		waited += task.wait(1)
+		folder = Court.service("MeterService")
+	end
+	if not folder or not R.Running then return end
+	local okA, register = pcall(folder.WaitForChild, folder, "RegisterPacket", 30)
+	local okB, unregister = pcall(folder.WaitForChild, folder, "UnregisterPacket", 30)
+	if okA and register and R.Running then
+		R.Bind(register.OnClientEvent, function(model, meterType)
+			if typeof(model) == "Instance" then meterFallback.ActivePackets[model] = {meterType = meterType} end
+		end)
+	end
+	if okB and unregister and R.Running then
+		R.Bind(unregister.OnClientEvent, function(model)
+			if typeof(model) == "Instance" then meterFallback.ActivePackets[model] = nil end
+		end)
+	end
+end)
+local meterView = {ActivePackets = setmetatable({}, {__index = function(_, character)
+	local aero = E.Aero()
+	local controller = aero and aero.Controllers and aero.Controllers.Meter
+	local live = type(controller) == "table" and controller.ActivePackets
+	local packet = type(live) == "table" and live[character] or nil
+	return packet or meterFallback.ActivePackets[character]
+end})}
+function E.Controller(name)
+	if name == "Meter" then return meterView end
+	local aero = E.Aero()
+	local live = aero and aero.Controllers and aero.Controllers[name]
+	if type(live) == "table" then return live end
+	return nil
+end
+    local nextRoster, lastCharacter, lastAction, lastMove = 0, nil, nil, nil
+    local currentList = {}
+    function E.Characters()
+        local now = os.clock()
+        if now >= nextRoster then
+            nextRoster = now + 0.5; currentList = {}
+            local folder = workspace:FindFirstChild("Characters")
+            if folder then
+                for _, character in ipairs(folder:GetChildren()) do
+                    if character:IsA("Model") and character.Name~="InvisCharacter" and character.Name~="ProxyCharacter" and R.Root(character) then
+                        local humanoid=character:FindFirstChildOfClass("Humanoid")
+                        if humanoid and humanoid.Health>0 then table.insert(currentList,character) end
+                    end
+                end
+            else
+                for _, p in ipairs(R.Players:GetPlayers()) do if p.Character and R.Root(p.Character) then table.insert(currentList, p.Character) end end
+            end
+            local mine=R.Character()
+            if mine and R.Root(mine) and not table.find(currentList,mine) then table.insert(currentList,mine) end
+        end
+        return currentList
+    end
+    function E.Enemy(a, b)
+        if a == b then return false end
+        local at, bt = a:GetAttribute("HomeTeam"), b:GetAttribute("HomeTeam")
+        if at ~= nil and bt ~= nil then return at ~= bt end
+        at, bt = a:GetAttribute("TeamIndex"), b:GetAttribute("TeamIndex")
+        if at ~= nil and bt ~= nil then return at ~= bt end
+        local pa, pb = R.Players:GetPlayerFromCharacter(a) or R.Players:FindFirstChild(a.Name), R.Players:GetPlayerFromCharacter(b) or R.Players:FindFirstChild(b.Name)
+        if pa and pb and pa.Team ~= nil and pb.Team ~= nil then return pa.Team ~= pb.Team end
+        return true
+    end
+    function E.ContestEnemy(a,b)
+        if a==b then return false end
+        local teamA,teamB=a:GetAttribute("HomeTeam"),b:GetAttribute("HomeTeam")
+        -- Match the donor's practice-gym behavior: an unset side is unknown,
+        -- so a default TeamIndex shared by everybody does not hide defenders.
+        return teamA==nil or teamB==nil or teamA~=teamB
+    end
+
+-- Hoopz adaptations: sides come from the Team attribute (0 is free play, everybody is an opponent),
+-- the hoop you attack comes from Hoopz's own goal lookup, and a ball weld also counts as holding the ball.
+local function hoopzSides(a, b)
+	local teamA, teamB = a:GetAttribute("Team"), b:GetAttribute("Team")
+	if type(teamA) ~= "number" or type(teamB) ~= "number" then return nil end
+	if teamA == 0 or teamB == 0 then return true end
+	return teamA ~= teamB
+end
+local reflexEnemy, reflexContestEnemy = E.Enemy, E.ContestEnemy
+function E.Enemy(a, b)
+	if a == b then return false end
+	local sides = hoopzSides(a, b)
+	if sides ~= nil then return sides end
+	return reflexEnemy(a, b)
+end
+function E.ContestEnemy(a, b)
+	if a == b then return false end
+	local sides = hoopzSides(a, b)
+	if sides ~= nil then return sides end
+	return reflexContestEnemy(a, b)
+end
+local reflexHolds = Court.holds
+function Court.holds(character)
+	if reflexHolds(character) then return true end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local weld = root and root:FindFirstChild("Basketball")
+	return weld ~= nil and weld:IsA("Motor6D") and weld.Part1 ~= nil
+end
+function Court.goal(character)
+	local position = GetGoal(character)
+	return position and {Position = position} or nil
+end
+
+Court.enemy = E.Enemy
+Court.contestEnemy = E.ContestEnemy
+Court.mine = R.Character
+Court.start()
+
+local F = {}
+R.Features = F
+F.Green = import("autogreen").new(read, function(message) R.Notify("Auto Green V2", message) end)
+F.Contest = import("contest").new(read, F.Green)
+F.Parts = {{"Auto Green", F.Green}, {"Shot contest", F.Contest}}
+F.Green:bind()
+R.AfterSet = {}
+R.AfterSet.AutoGreen = function(on)
+	if on then return end
+	local green = F.Green
+	if green.Held ~= nil or green.Own then R.Try("Release owned shot", green.send, green) end
+	green.Armed = false; green.HasBall = false; green.Press = nil; green.Held = nil; green.Own = false
+	green.Swallow = false; green.EarlyAt = nil; green.NextPlan = nil
+	if green.Shot then green.Shot.Fired = true end
+end
+local nextHook, greenWasOn = 0, false
+local nextStatus, lastStatus, onSince, warnedHook, announced = 0, nil, 0, false, false
+function F.Step(now, dt, shotDt)
+	local on = R.S.AutoGreen == true
+	if greenWasOn and not on then R.Try("Auto Green off", R.AfterSet.AutoGreen, false) end
+	if on and not greenWasOn then onSince, warnedHook, announced = now, false, false end
+	greenWasOn = on
+	if on then
+		local green = F.Green
+		if green.HookBound and not announced then
+			announced = true
+			R.Notify("Auto Green V2", "Connected to the shoot input. Shoot with your normal shoot key.")
+		elseif not green.HookBound and not warnedHook and now - onSince > 12 then
+			warnedHook = true
+			R.Notify("Auto Green V2", "Could not connect to the game's shoot input (" .. tostring(green.HookFailed or "still connecting") .. "). It keeps retrying.")
+		end
+	end
+	if now >= nextStatus then
+		nextStatus = now + 0.5
+		local label = Aural.ReflexStatus
+		if label then
+			local green, text = F.Green, nil
+			if not on then text = "off"
+			elseif green.HookBound then text = string.format("ready | last: %s | greens: %d/%d", tostring(green.Stats.Last), green.Stats.Perfect, green.Stats.Total)
+			elseif green.HookFailed then text = "input unavailable, retrying"
+			else text = "connecting to the game's shoot input" end
+			if text ~= lastStatus then
+				lastStatus = text
+				pcall(label.Update, label, "status: " .. text)
+			end
+		end
+	end
+	if on and not F.Green.HookBound and not F.Green.Binding and now >= nextHook then
+		nextHook = now + 3
+		F.Green.Hooked = false; F.Green.TriedHook = false
+		task.spawn(function() if R.Running then R.Try("Shot input", F.Green.hook, F.Green, false) end end)
+	end
+	for _, item in ipairs(F.Parts) do
+		R.Try(item[1], item[2].step, item[2], now, item[2] == F.Green and (shotDt or dt) or dt)
+	end
+end
+
+local init_visuals = (function()
+return function(R)
+    local V = {Rows = {}, ContestRows = {}, Rings = {}, Predictions = {}, MeterRecords = {}, NameRecords = {}, Next = 0, NextSlow = 0}
+    R.Visuals = V
+    local function makeFolder()
+        if not V.Folder then V.Folder = R.New("Folder", {Name = "ReflexVisuals"}, workspace.CurrentCamera or workspace)
+        elseif not V.Folder:IsDescendantOf(workspace) then V.Folder.Parent=workspace.CurrentCamera or workspace end
+        return V.Folder
+    end
+    local function remove(o) if o then pcall(o.Destroy, o) end end
+    local function part(parent)
+        return R.New("Part", {Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Material = Enum.Material.Neon, Size = Vector3.new(1, 0.08, 0.13)}, parent)
+    end
+    local floorIgnore, nextIgnore = {}, 0
+    local helpers={characters=true,invischaracter=true,proxycharacter=true,hoops=true,hoop=true,basketballhoop=true,
+        basketballs=true,basketball=true,balls=true,ball=true,zones=true,threepoint=true,reflexvisuals=true}
+    local function helperRoot(object)
+        local current,ignored=object,nil
+        while current and current~=workspace do
+            if helpers[current.Name:lower()] or (current:IsA("Model") and current:FindFirstChildOfClass("Humanoid")) then ignored=current end
+            current=current.Parent
+        end
+        return ignored
+    end
+    function V.Floor(position,source)
+        local now=os.clock()
+        if now>=nextIgnore then
+            nextIgnore=now+1;floorIgnore={makeFolder()}
+            for _,name in ipairs({"Characters","InvisCharacter","ProxyCharacter","Hoops","Basketballs","Balls","Ball","Basketball"}) do
+                local object=workspace:FindFirstChild(name)
+                if object then table.insert(floorIgnore,object) end
+            end
+        end
+        local exclude=table.clone(floorIgnore)
+        local character=R.Character();if character then table.insert(exclude,character) end
+        if source then table.insert(exclude,helperRoot(source) or source) end
+        local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
+        params.RespectCanCollide=true;params.IgnoreWater=true
+        -- Start at the sample, not above the hoop/ball. Query helpers and moving
+        -- objects are not court surfaces, even when they have collision enabled.
+        for _=1,10 do
+            params.FilterDescendantsInstances=exclude
+            local hit=workspace:Raycast(position,Vector3.new(0,-160,0),params)
+            if not hit then return nil end
+            local object=hit.Instance
+            local ignored=helperRoot(object)
+            local solid=object:IsA("Terrain") or (object:IsA("BasePart") and object.CanCollide and object.Anchored)
+            if not ignored and solid and hit.Normal.Y>=0.75 then return hit.Position.Y+0.08 end
+            table.insert(exclude,ignored or object)
+        end
+        return nil
+    end
+    V.HoopFloors=setmetatable({},{__mode="k"})
+    function V.HoopFloor(rim)
+        local now,position=os.clock(),rim.Position
+        local known=V.HoopFloors[rim]
+        if known and now<known.untilTime and (known.position-position).Magnitude<0.1 then return known.y end
+        local heights={}
+        -- Survey the surrounding court below the rim, avoiding backboard stands
+        -- and raised trim. A median keeps one obstructed sample off the plane.
+        for _,offset in ipairs({Vector3.zero,Vector3.new(6,0,0),Vector3.new(-6,0,0),Vector3.new(0,0,6),Vector3.new(0,0,-6)}) do
+            local y=V.Floor(position+offset-Vector3.new(0,3,0),rim)
+            if y then table.insert(heights,y) end
+        end
+        table.sort(heights)
+        local y=#heights>0 and heights[math.ceil(#heights/2)] or nil
+        V.HoopFloors[rim]={position=position,y=y,untilTime=now+0.75}
+        return y
+    end
+    function V.Ring(key, center, radius, color, visible)
+        local row = V.Rings[key]
+        if not visible then
+            if row then remove(row.folder); V.Rings[key] = nil end
+            return
+        end
+        if not row then
+            row = {folder = R.New("Folder", {Name = key}, makeFolder()), parts = {}}
+            for _ = 1, 48 do table.insert(row.parts, part(row.folder)) end
+            V.Rings[key] = row
+        end
+        if row.center == center and row.radius == radius and row.color == color then return end
+        row.center, row.radius, row.color = center, radius, color
+        for i, p in ipairs(row.parts) do
+            local angle = (i - 1) * math.pi * 2 / #row.parts
+            p.Size = Vector3.new(2 * math.pi * radius / #row.parts * 1.04, 0.07, 0.13)
+            p.Color = color; p.Transparency = 0.12
+            p.CFrame = CFrame.new(center + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)) * CFrame.Angles(0, -angle + math.pi / 2, 0)
+        end
+    end
+    local function rowFor(character)
+        local row = V.Rows[character]
+        if row then return row end
+        local root = R.Root(character)
+        row = {}
+        row.gui = R.New("BillboardGui", {Name = "ReflexLabel", Adornee = character:FindFirstChild("Head") or root, Size = UDim2.fromOffset(230, 72), StudsOffset = Vector3.new(0, 3.1, 0), AlwaysOnTop = true, MaxDistance = 500}, makeFolder())
+        row.text = R.New("TextLabel", {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Font = Enum.Font.GothamSemibold, TextSize = 14, TextStrokeTransparency = 0.4, TextColor3 = Color3.new(1,1,1), Text = ""}, row.gui)
+        row.light = R.New("Highlight", {Name = "ReflexHighlight", Adornee = character, FillTransparency = 0.65, OutlineTransparency = 0.15, DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false}, makeFolder())
+        V.Rows[character] = row; return row
+    end
+    function V.UpdateContest()
+        local seen={}
+        if R.S.ContestOn then
+            local mine,all=R.Character(),R.Game.Characters()
+            for _,character in ipairs(all) do
+                local root=R.Root(character)
+                if root and (not R.S.ContestOnlyBall or R.Game.Court.holds(character)) and (character==mine or (R.S.ContestFoes and mine and R.Game.ContestEnemy(mine,character))) then
+                    local distance=math.huge
+                    for _,other in ipairs(all) do
+                        if R.Game.ContestEnemy(character,other) then
+                            local otherRoot=R.Root(other)
+                            if otherRoot then distance=math.min(distance,(root.Position-otherRoot.Position).Magnitude) end
+                        end
+                    end
+                    local percent,word=R.Pure.contest(distance)
+                    local color=word=="COVERED" and Color3.fromRGB(235,60,60) or (word=="CLOSE" and Color3.fromRGB(255,150,40) or Color3.fromRGB(70,220,110))
+                    local native=R.Features and R.Features.Contest
+                    if native then
+                        local value=character==mine and native.Value or native:measure(root,nil,character)
+                        percent=math.floor(math.clamp(value or 0,0,1)*100+0.5)
+                        word=percent<35 and "OPEN" or (percent<65 and "CLOSE" or "COVERED")
+                        color=percent<35 and Color3.fromRGB(70,230,110) or (percent<65 and Color3.fromRGB(255,200,70) or Color3.fromRGB(255,80,80))
+                    end
+                    local row=V.ContestRows[character]
+                    if not row then
+                        row={}
+                        row.gui=R.New("BillboardGui",{Name="ReflexContest",Size=UDim2.fromOffset(110,34),StudsOffset=Vector3.new(0,R.S.ContestHeight,0),AlwaysOnTop=true,Adornee=root},makeFolder())
+                        row.text=R.New("TextLabel",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=16,TextStrokeTransparency=0.3,Text=""},row.gui)
+                        row.light=R.New("Highlight",{Adornee=character,FillTransparency=0.65,OutlineTransparency=0.2,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop},makeFolder())
+                        row.ground=R.New("Part",{Name="ReflexContestGround",Shape=Enum.PartType.Cylinder,Size=Vector3.new(0.15,5,5),Anchored=true,CanCollide=false,CanQuery=false,CanTouch=false,CastShadow=false,Material=Enum.Material.Neon,Transparency=0.35},makeFolder())
+                        V.ContestRows[character]=row
+                    end
+                    seen[character]=true
+                    row.text.Text=word.." "..tostring(percent).."%";row.text.TextColor3=color
+                    row.gui.Adornee=root;row.gui.Enabled=R.S.ContestHead
+                    row.gui.StudsOffset=Vector3.new(0,R.S.ContestHeight,0)
+                    row.light.Enabled=R.S.ContestGlow and not (native and character==mine);row.light.FillColor=color;row.light.OutlineColor=color
+                    if native then
+                        row.light.DepthMode=Enum.HighlightDepthMode.Occluded
+                        row.light.FillTransparency=1-0.16*(R.S.GlowStrength or 60)/100
+                        row.light.OutlineTransparency=1-0.7*(R.S.GlowStrength or 60)/100
+                    end
+                    local floor=R.S.ContestGround and V.Floor(root.Position,character)
+                    row.ground.Color=color;row.ground.Transparency=floor and 0.35 or 1
+                    if floor then row.ground.CFrame=CFrame.new(root.Position.X,floor,root.Position.Z)*CFrame.Angles(0,0,math.rad(90)) end
+                end
+            end
+        end
+        for character,row in pairs(V.ContestRows) do
+            if not seen[character] then for _,object in pairs(row) do remove(object) end;V.ContestRows[character]=nil end
+        end
+    end
+    function V.UpdatePlayers()
+        if R.Features and R.Features.NativeESP then
+            for character,row in pairs(V.Rows) do remove(row.gui);remove(row.light);V.Rows[character]=nil end
+            return
+        end
+        if not R.S.PlayerESP and next(V.Rows)==nil then return end
+        local mine,all=R.Character(),R.Game.Characters()
+        local seen={};local root=R.Root()
+        if R.S.PlayerESP then for _,character in ipairs(all) do
+            local target=R.Root(character)
+            local distance=root and target and (root.Position-target.Position).Magnitude or math.huge
+            local opponent=mine and R.Game.Enemy(mine,character)
+            local holder=R.Game.Court.holds(character)
+            if target and character~=mine and (opponent or R.S.ESPTeam) and distance<=R.S.ESPDistance and (not R.S.ESPBallOnly or holder) then
+                seen[character]=true
+                local row=rowFor(character)
+                local color=holder and R.S.ESPHolderColor or (opponent and R.S.ESPEnemyColor or R.S.ESPTeamColor)
+                local lines={};local player=R.Players:FindFirstChild(character.Name)
+                local display=(player and player.DisplayName) or character.Name
+                if R.Privacy and (R.S.FriendNameOn or R.S.HideServerNames) then display=R.Privacy.Name(character) end
+                table.insert(lines,(R.S.ESPNames and display or "")..(R.S.ESPDistanceText and string.format("  %.0f studs",distance) or ""))
+                local stamina=character:GetAttribute("Stamina")
+                if R.S.ESPStamina and type(stamina)=="number" then table.insert(lines,string.format("Stamina %.0f",stamina)) end
+                row.text.Text=table.concat(lines,"\n");row.text.TextColor3=color;row.text.TextSize=R.S.ESPTextSize
+                row.gui.Adornee=character:FindFirstChild("Head") or target
+                row.gui.StudsOffset=Vector3.new(0,R.S.ContestOn and 5 or 3.1,0)
+                row.light.Enabled=R.S.ESPHighlight and not (R.S.ContestOn and R.S.ContestGlow and (R.S.ContestFoes or character==mine))
+                row.light.FillColor=color;row.light.OutlineColor=color
+            end
+        end end
+        for character,row in pairs(V.Rows) do if not seen[character] then remove(row.gui);remove(row.light);V.Rows[character]=nil end end
+    end
+    function V.Prediction(key, point, color, visible)
+        local p = V.Predictions[key]
+        if not visible then if p then remove(p); V.Predictions[key] = nil end; return end
+        if not p then p = part(makeFolder()); p.Shape = Enum.PartType.Ball; p.Size = Vector3.new(0.5,0.5,0.5); V.Predictions[key] = p end
+        p.Position = point; p.Color = color
+    end
+    function V.UpdateCourt()
+        if not R.S.ESP3 and not R.S.ESPDunk and not R.S.ESPRange and not R.S.BallPrediction and not R.S.PlayerPrediction and not (R.S.ReboundMarker and R.S.AutoRebound) and next(V.Rings)==nil and next(V.Predictions)==nil then return end
+        local root = R.Root()
+        local wanted = {}
+        if not (R.Features and R.Features.Rings) then
+        for i, rim in ipairs(R.Game.Court.rims()) do
+            local y=(R.S.ESP3 or R.S.ESPDunk) and rim:IsDescendantOf(workspace) and V.HoopFloor(rim)
+            local center = Vector3.new(rim.Position.X, y or 0, rim.Position.Z)
+            for _, definition in ipairs({{"three", R.S.ESP3, R.S.ESP3Distance, R.S.ESP3Color}, {"dunk", R.S.ESPDunk, R.S.ESPDunkDistance, R.S.ESPDunkColor}}) do
+                local key = definition[1] .. i; wanted[key] = definition[2] and y~=nil and y~=false
+                V.Ring(key, center, definition[3], definition[4], wanted[key])
+            end
+        end
+        for key in pairs(V.Rings) do if (key:match("^three") or key:match("^dunk")) and not wanted[key] then V.Ring(key, Vector3.zero,1,Color3.new(),false) end end
+        local rangeY=root and R.S.ESPRange and V.Floor(root.Position,root)
+        V.Ring("myrange",rangeY and Vector3.new(root.Position.X,rangeY,root.Position.Z) or Vector3.zero,R.S.ESPRangeDistance,R.S.ESPRangeColor,rangeY~=nil and rangeY~=false)
+        else
+            for key in pairs(V.Rings) do V.Ring(key,Vector3.zero,1,Color3.new(),false) end
+        end
+        local ball = R.Game.Court.ball()
+        local landing
+        if ball and ball:IsA("BasePart") and (R.S.BallPrediction or (R.S.ReboundMarker and R.S.AutoRebound)) then
+            local y=V.Floor(ball.Position,ball)
+            if y then
+                landing=R.Pure.landing(ball.Position,ball.AssemblyLinearVelocity,y,workspace.Gravity)
+                if landing then
+                    local landingY=V.Floor(Vector3.new(landing.X,ball.Position.Y,landing.Z),ball)
+                    landing=landingY and Vector3.new(landing.X,landingY,landing.Z) or nil
+                end
+            end
+        end
+        V.Prediction("ball", landing or Vector3.zero, R.S.BallPredictionColor, R.S.BallPrediction and landing ~= nil)
+        V.Prediction("rebound", landing or Vector3.zero, Color3.fromRGB(110,190,255), R.S.ReboundMarker and R.S.AutoRebound and landing ~= nil)
+        local active = {}
+        if R.S.PlayerPrediction then
+            for _, character in ipairs(R.Game.Characters()) do
+                local target = R.Root(character)
+                if target and character ~= R.Character() then
+                    local key = "player_" .. character.Name; active[key] = true
+                    local predicted=target.Position+R.Flat(target.AssemblyLinearVelocity)*R.S.PredictionTime
+                    local y=V.Floor(predicted,character)
+                    V.Prediction(key,y and Vector3.new(predicted.X,y,predicted.Z) or Vector3.zero,R.S.ESPEnemyColor,y~=nil)
+                end
+            end
+        end
+        for key in pairs(V.Predictions) do if key:match("^player_") and not active[key] then V.Prediction(key,Vector3.zero,Color3.new(),false) end end
+    end
+    -- Meter appearance changes only; meter timing/progress values are untouched.
+    local guiProps = {"Size","StudsOffset","ExtentsOffset","LightInfluence","AlwaysOnTop"}
+    local imageProps = {"Image","ImageRectOffset","ImageRectSize","ScaleType","SliceCenter","Size","Position","AnchorPoint","Rotation","ZIndex","ImageColor3"}
+    local function capture(o, list)
+        local values = {}; for _, prop in ipairs(list) do local ok, value = pcall(function() return o[prop] end); if ok then values[prop] = value end end; return values
+    end
+    local function apply(o, values) for prop, value in pairs(values) do pcall(function() o[prop] = value end) end end
+    local function meterOf(character, name)
+        local root, head = R.Root(character), character:FindFirstChild("Head")
+        return (root and root:FindFirstChild(name .. "Meter")) or (head and head:FindFirstChild(name .. "Meter"))
+    end
+    local function restoreMeter(gui)
+        local row = V.MeterRecords[gui]; if not row then return end
+        if row.gradientLink then row.gradientLink:Disconnect() end
+        if gui.Parent then apply(gui,row.gui); for object, values in pairs(row.children) do if object.Parent then apply(object,values) end end end
+        for _, object in ipairs(row.added) do remove(object) end
+        V.MeterRecords[gui] = nil
+    end
+    function V.UpdateMeter()
+        if not R.S.CustomMeter then for gui in pairs(V.MeterRecords) do restoreMeter(gui) end; return end
+        local character = R.Character(); if not character then return end
+        local controller = R.Game.Controller("Meter")
+        local packet = controller and controller.ActivePackets and controller.ActivePackets[character]
+        local name = packet and packet.meterType
+        local gui = name and meterOf(character,name)
+        if not gui then
+            R.Status.Meter = "Waiting for an active meter packet"
+            for old in pairs(V.MeterRecords) do if not old:IsDescendantOf(character) then restoreMeter(old) end end
+            return
+        end
+        for old in pairs(V.MeterRecords) do if old ~= gui then restoreMeter(old) end end
+        local wanted = R.S.MeterShape
+        if V.MeterRecords[gui] and (V.MeterRecords[gui].shape ~= wanted or (V.MeterRecords[gui].pending and meterOf(character,wanted))) then restoreMeter(gui) end
+        local row = V.MeterRecords[gui]
+        if not row then
+            row = {gui=capture(gui,guiProps), children={}, added={}, shape=wanted}; V.MeterRecords[gui] = row
+            for _, child in ipairs(gui:GetChildren()) do
+                if child:IsA("ImageLabel") then row.children[child] = capture(child,imageProps); row.children[child].Visible = child.Visible end
+            end
+            local template = wanted ~= "Equipped" and wanted ~= name and meterOf(character,wanted)
+            if template then
+                apply(gui,capture(template,guiProps))
+                for _, child in ipairs(template:GetChildren()) do
+                    if child:IsA("ImageLabel") then
+                        local target = gui:FindFirstChild(child.Name)
+                        if target and target:IsA("ImageLabel") then apply(target,capture(child,imageProps))
+                        elseif not target then target=child:Clone(); target.Parent=gui; table.insert(row.added,target) end
+                    end
+                end
+                for child in pairs(row.children) do if not template:FindFirstChild(child.Name) then child.Visible=false end end
+                local sourceGradient=template:FindFirstChild("FillGradient",true)
+                local gradient=gui:FindFirstChild("FillGradient",true)
+                if sourceGradient and gradient and sourceGradient:IsA("UIGradient") and gradient:IsA("UIGradient") then
+                    row.children[gradient]={Rotation=gradient.Rotation}
+                    local rotation=sourceGradient.Rotation
+                    gradient.Rotation=rotation
+                    row.gradientLink=gradient:GetPropertyChangedSignal("Rotation"):Connect(function()
+                        if V.MeterRecords[gui]==row and gradient.Rotation~=rotation then gradient.Rotation=rotation end
+                    end)
+                end
+            elseif wanted ~= "Equipped" and wanted ~= name then
+                row.pending=true
+                R.Status.Meter = wanted .. " template is not loaded; size/color still apply"
+            end
+            row.baseSize=gui.Size
+        end
+        local base, scale = row.baseSize, R.S.MeterSize
+        gui.Size = UDim2.new(base.X.Scale*scale,base.X.Offset*scale,base.Y.Scale*scale,base.Y.Offset*scale)
+        local fill = gui:FindFirstChild("Meter_Fill",true)
+        if fill and fill:IsA("ImageLabel") then
+            if not row.children[fill] then row.children[fill]=capture(fill,imageProps) end
+            fill.ImageColor3 = R.S.MeterCustomColor and R.S.MeterColor or row.children[fill].ImageColor3
+        end
+        if wanted == "Equipped" or wanted == name or meterOf(character,wanted) then R.Status.Meter="Using " .. (wanted=="Equipped" and name or wanted) .. " at " .. tostring(scale) .. "x" end
+    end
+    R.Game.Court.floor=V.Floor
+    R.Game.Court.hoopFloor=V.HoopFloor
+    R.Bind(R.RunService.Heartbeat,function()
+        local now=os.clock(); if now<V.Next then return end;V.Next=now+0.1
+        R.Try("Contest",V.UpdateContest)
+        R.Try("ESP",V.UpdatePlayers)
+        if now>=V.NextSlow then
+            V.NextSlow=now+0.25
+            R.Try("Court visuals",V.UpdateCourt);R.Try("Meter",V.UpdateMeter)
+        end
+    end)
+    R.DeferCleanup(function()
+        for gui in pairs(V.MeterRecords) do restoreMeter(gui) end
+        remove(V.Folder)
+    end)
+end
+
+end)()
+
+init_visuals(R)
+
+R.Bind(R.RunService.Heartbeat, function(dt)
+	local now = os.clock()
+	local elapsed = math.min(now - (E.LastTick or now - dt), 0.1)
+	E.LastTick = now
+	R.Try("Court", Court.refresh, now)
+	if not Court.Mine then Court.Mine = R.Character(); Court.Root = R.Root(); Court.HasBall = Court.Mine ~= nil and Court.holds(Court.Mine) end
+	F.Step(now, elapsed, dt)
+end)
+R.Bind(R.RunService.PreSimulation, function()
+	if not (Court.Mine and Court.held(Court.Mine)) then R.Try("Planted shot", F.Green.physics, F.Green) end
+end)
+R.DeferCleanup(function()
+	Court.Closing = true
+	if F.Green.Held ~= nil or F.Green.Own then pcall(F.Green.send, F.Green) end
+	pcall(F.Green.shutdown, F.Green)
+	pcall(F.Contest.shutdown, F.Contest)
+	pcall(Court.stop)
+end)
+end)
 
 -- // Auto Shoot  [Shooting tab]
 do
@@ -7994,6 +12031,35 @@ do
 		Aural.Dribbling.DribbleGlide = newVal
 	end })
 	Glide:AddSlider({ Title = "Glide Speed", Description = "Extra speed on every dribble move", Min = 0, Max = 100, Default = Aural.Dribbling.GlideSpeed, Suffix = "%", Flag = "GlideSpeed", Callback = function(V) Aural.Dribbling.GlideSpeed = V end })
+
+-- // Shot Glide & Gather Glide  [Offense tab]
+do
+	local GlideSection = OffenseTab:CreateSection({ Title = "Shot & Gather Glide", Icon = Icons.Speed })
+	GlideSection:AddToggle({ Title = "Shot Glide", Description = "Carries your momentum forward during Shooting action", Flag = "ShotGlide", Default = Aural.Shooting.ShotGlide, Callback = function(V)
+		Aural.Shooting.ShotGlide = V
+	end })
+	GlideSection:AddSlider({ Title = "Shot Glide Speed", Description = "Top speed during the shot glide carry (studs/s)", Min = 2, Max = 30, Default = Aural.Shooting.ShotGlideSpeed, Suffix = " studs/s", Flag = "ShotGlideSpeed", Callback = function(V)
+		Aural.Shooting.ShotGlideSpeed = V
+	end })
+	GlideSection:AddSlider({ Title = "Shot Glide Duration", Description = "Max duration of the shot glide in ms", Min = 50, Max = 500, Default = Aural.Shooting.ShotGlideTime, Suffix = " ms", Flag = "ShotGlideTime", Callback = function(V)
+		Aural.Shooting.ShotGlideTime = V
+	end })
+	GlideSection:AddSlider({ Title = "Shot Glide Strength", Description = "How much the glide blends toward target speed (100 = full)", Min = 10, Max = 100, Default = Aural.Shooting.ShotGlideStrength, Suffix = "%", Flag = "ShotGlideStrength", Callback = function(V)
+		Aural.Shooting.ShotGlideStrength = V
+	end })
+	GlideSection:AddToggle({ Title = "Gather Glide", Description = "Carries your momentum forward during Gathering action", Flag = "GatherGlide", Default = Aural.Shooting.GatherGlide, Callback = function(V)
+		Aural.Shooting.GatherGlide = V
+	end })
+	GlideSection:AddSlider({ Title = "Gather Glide Speed", Description = "Top speed during the gather glide carry (studs/s)", Min = 2, Max = 30, Default = Aural.Shooting.GatherGlideSpeed, Suffix = " studs/s", Flag = "GatherGlideSpeed", Callback = function(V)
+		Aural.Shooting.GatherGlideSpeed = V
+	end })
+	GlideSection:AddSlider({ Title = "Gather Glide Duration", Description = "Max duration of the gather glide in ms", Min = 50, Max = 600, Default = Aural.Shooting.GatherGlideTime, Suffix = " ms", Flag = "GatherGlideTime", Callback = function(V)
+		Aural.Shooting.GatherGlideTime = V
+	end })
+	GlideSection:AddSlider({ Title = "Gather Glide Strength", Description = "How much the glide blends toward target speed (100 = full)", Min = 10, Max = 100, Default = Aural.Shooting.GatherGlideStrength, Suffix = "%", Flag = "GatherGlideStrength", Callback = function(V)
+		Aural.Shooting.GatherGlideStrength = V
+	end })
+end
 
 	local Ankle = OffenseTab:CreateSection({ Title = "Auto Ankle Breaker", Icon = Icons.Ankle })
 	local AnkleToggle = Ankle:AddToggle({ Title = "Auto Ankle Breaker", Description = "Fires an escape move when a defender closes in", Flag = "AutoAnkleBreaker", Default = Aural.Dribbling.AutoAnkleBreaker, Callback = function(V) Aural.Dribbling.AutoAnkleBreaker = V end })
@@ -8056,6 +12122,26 @@ do
 	Guard:AddSlider({ Title = "Guard Strength", Description = "How aggressively it corrects your position", Min = 10, Max = 100, Default = Aural.Defense.GuardStrength, Suffix = "%", Flag = "GuardStrength", Callback = function(V) Aural.Defense.GuardStrength = V end })
 	Guard:AddSlider({ Title = "Guard Range", Description = "Max distance from your man before guard kicks in", Min = 10, Max = 80, Default = Aural.Defense.GuardRange, Suffix = " studs", Flag = "GuardRange", Callback = function(V) Aural.Defense.GuardRange = V end })
 	GuardStatus = Guard:AddLabel("guarding: none")
+end
+
+-- // Auto Steal  [Defense tab]
+do
+	local Steal = DefenseTab:CreateSection({ Title = "Auto Steal", Icon = Icons.Target })
+	Steal:AddToggle({ Title = "Auto Steal", Description = "Automatically fires the steal input when in range of the ball handler", Flag = "AutoSteal", Default = Aural.Defense.AutoSteal, Callback = function(V)
+		Aural.Defense.AutoSteal = V
+	end })
+	Steal:AddSlider({ Title = "Steal Range", Description = "Max distance to trigger the steal attempt", Min = 2, Max = 20, Default = Aural.Defense.StealRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "StealRange", Callback = function(V)
+		Aural.Defense.StealRange = V
+	end })
+	Steal:AddToggle({ Title = "Only When Facing", Description = "Only steals when you are looking toward the ball handler", Flag = "StealFacing", Default = Aural.Defense.StealFacing, Callback = function(V)
+		Aural.Defense.StealFacing = V
+	end })
+	Steal:AddToggle({ Title = "Steal Always (Moving)", Description = "Attempts steal even when the handler is moving (checks predicted position)", Flag = "StealAlways", Default = Aural.Defense.StealAlways, Callback = function(V)
+		Aural.Defense.StealAlways = V
+	end })
+	Steal:AddToggle({ Title = "Avoid Fouls", Description = "Skips stealing when the handler is shooting, gathering, or facing away", Flag = "AvoidFouls", Default = Aural.Defense.AvoidFouls, Callback = function(V)
+		Aural.Defense.AvoidFouls = V
+	end })
 end
 
 -- // Ball Magnets
@@ -9528,6 +13614,20 @@ end
 do
 	local Guarding, Sprinting = false, false
 	local LastGuard = 0
+
+	-- Shot/Gather Glide state (ported from Reflex GlideState)
+	local GlideState = { Action = nil, Direction = nil, Speed = 0, Wrote = nil, Done = false, Entry = 0 }
+
+	-- Auto Steal state (ported from Reflex Defense steal state)
+	local StealLastHandler = nil
+	local StealInRange = nil
+	local StealInRangeAt = -math.huge
+	local StealReact = 0.12
+	local StealLastFire = -math.huge
+	local StealWait = 0
+	local StealStillFor = nil
+	local StealAnchor = nil
+	local StealStillSince = -math.huge
 	local SavedDelays = nil
 	local ShownTarget = false
 
@@ -9705,6 +13805,142 @@ do
 			StopGuard()
 		end
 
+		-- // Auto Steal (ported verbatim from Reflex Defense.steal() / stealOk())
+		do
+			if Aural.Defense.AutoSteal and CanMove and not HasBall(Character) then
+				local stealNow = Time
+
+				-- Find ball handler: iterate opponents, find who has the ball (sticky: favor last target)
+				local stealRange = Aural.Defense.StealRange or 8
+				local stealHandler = nil
+				local stealBest = math.huge
+				for _, Other in GetOthers(Character) do
+					if HasBall(Other.Model) and IsOpponent(Other.Model, Character, true) then
+						local dist = (Other.Root.Position - Root.Position).Magnitude
+						local adjusted = dist - (StealLastHandler == Other.Model and 2 or 0)
+						if adjusted < stealBest then
+							stealBest = adjusted
+							stealHandler = Other.Model
+						end
+					end
+				end
+
+				if stealHandler then
+					StealLastHandler = stealHandler
+					local handlerRoot = stealHandler:FindFirstChild("HumanoidRootPart")
+					if handlerRoot then
+						local distance = (handlerRoot.Position - Root.Position).Magnitude
+						if distance <= stealRange then
+							-- React time: wait a short random window before attempting
+							if StealInRange ~= stealHandler then
+								StealInRange = stealHandler
+								StealInRangeAt = stealNow
+								StealReact = 0.12 + math.random() * (0.25 - 0.12)
+							end
+							if stealNow - StealInRangeAt >= StealReact then
+								-- Ball in hands check: must actually hold the ball (not mid-air)
+								local inHands = HasBall(stealHandler)
+								if inHands then
+									local handlerAction = stealHandler:GetAttribute("Action")
+									local isBot = game:GetService("Players"):FindFirstChild(stealHandler.Name) == nil
+									local BOT_BUSY = { Shooting = true, Dunking = true, Layup = true, ContactLayup = true, Gathering = true, Passing = true, AwaitingPass = true, CatchingPass = true, MovingShot = true }
+									local skipBot = isBot and type(handlerAction) == "string" and BOT_BUSY[handlerAction]
+									if not skipBot then
+										local shouldSteal = false
+										if isBot then
+											shouldSteal = true
+										else
+											-- Still check: is handler standing still long enough?
+											local spot = Flat(handlerRoot.Position)
+											if StealStillFor ~= stealHandler or not StealAnchor then
+												StealStillFor = stealHandler
+												StealAnchor = spot
+												StealStillSince = stealNow
+											end
+											if (spot - StealAnchor).Magnitude > 0.35 then
+												StealAnchor = spot
+												StealStillSince = stealNow
+											end
+											local motion = Flat(handlerRoot.AssemblyLinearVelocity)
+											local speed = motion.Magnitude
+											if speed >= 2 then
+												StealStillSince = stealNow
+												if Aural.Defense.StealAlways then
+													local validAction = handlerAction == "" or handlerAction == nil or handlerAction == "Dribbling"
+													if validAction then
+														local predicted = Flat(handlerRoot.Position + motion * 0.18 - Root.Position)
+														local reach = predicted.Magnitude
+														if reach <= stealRange * 0.9 then
+															if reach <= 0.5 or Flat(Root.CFrame.LookVector):Dot(predicted / reach) >= 0.45 then
+																if motion:Dot(predicted / math.max(reach, 0.001)) <= 10 then
+																	shouldSteal = true
+																end
+															end
+														end
+													end
+												end
+											else
+												if handlerAction == "" or handlerAction == nil then
+													if stealNow - StealStillSince >= 0.35 then
+														shouldSteal = true
+													end
+												else
+													StealStillSince = stealNow
+												end
+											end
+										end
+
+										if shouldSteal then
+											-- stealOk checks
+											local myAction = Character:GetAttribute("Action")
+											local myCanMove = CanMove == true
+											local dead = Character:GetAttribute("Dead") == true
+											if (myAction == "" or myAction == nil) and myCanMove and not dead then
+												if stealNow - (StealLastFire or -math.huge) >= (StealWait or 0) then
+													-- stealOk: facing + avoid fouls checks
+													local toHandler = Flat(handlerRoot.Position - Root.Position)
+													local length2 = toHandler.Magnitude
+													local ok = true
+													if length2 >= 0.5 then
+														local dir = toHandler / length2
+														if Aural.Defense.StealFacing then
+															local facing = Flat(Root.CFrame.LookVector):Dot(dir)
+															if facing < 0.35 then ok = false end
+														end
+														if ok and Aural.Defense.AvoidFouls then
+															local ha = handlerAction
+															if ha == "Shooting" or ha == "Gathering" or ha == "Layup" or ha == "Dunking" then
+																ok = false
+															end
+															if ok and Flat(handlerRoot.CFrame.LookVector):Dot(dir) > 0.6 then
+																ok = false
+															end
+														end
+													end
+													if ok then
+														StealLastFire = stealNow
+														StealWait = 1.0 + math.random() * (1.4 - 1.0)
+														pcall(function()
+															Fire(GetRemote("InputService", "Steal"), {})
+														end)
+													end
+												end
+											end
+										end
+									end
+								end
+							end
+						end
+					else
+						StealInRange = nil
+					end
+				else
+					StealLastHandler = nil
+					StealInRange = nil
+				end
+			end
+		end
+
 		-- // Dribble Glide
 		-- The game eases the proxy toward the move's velocity every frame, so changing that velocity would compound.
 		-- Instead the proxy is carried a little further along the way it is already moving.
@@ -9714,6 +13950,184 @@ do
 				Proxy.CFrame += Moving.Unit * (Aural.Dribbling.GlideSpeed / 100 * 16) * DeltaTime
 			end
 			return
+		end
+
+		-- // Shot Glide & Gather Glide (ported verbatim from Reflex Glide.physics())
+		do
+			local GlideFlagMap = { Gathering = "GatherGlide", Shooting = "ShotGlide" }
+			local GlideFlag = type(Action) == "string" and GlideFlagMap[Action]
+
+			if not GlideFlag and Proxy then
+				local vel = Proxy.AssemblyLinearVelocity
+				local planar = Vector3.new(vel.X, 0, vel.Z)
+				if planar.Magnitude > 2 then
+					GlideState.Ran = planar.Unit
+					GlideState.RanAt = Time
+					GlideState.RanSpeed = planar.Magnitude
+				end
+			end
+
+			local glideOn = GlideFlag and Aural.Shooting[GlideFlag] == true
+			if not glideOn or CanMove == true or Character:GetAttribute("Stunned") == true then
+				if GlideState.Action ~= nil then
+					-- letGo: restore server velocity if we wrote it and nothing changed it
+					if GlideState.Wrote and Velocity and not CanMove then
+						local ServerVel = Character:GetAttribute("ServerVelocity")
+						local sv = typeof(ServerVel) == "Vector3" and Vector3.new(ServerVel.X, 0, ServerVel.Z) or Vector3.zero
+						pcall(function()
+							if (Velocity.Velocity - GlideState.Wrote).Magnitude < 0.05 then
+								Velocity.Velocity = Vector3.new(sv.X, Velocity.Velocity.Y, sv.Z)
+							end
+						end)
+					end
+					GlideState.Wrote = nil
+					GlideState.PinnedAt = nil
+				end
+				GlideState.Action = nil
+				GlideState.Done = false
+			else
+				local now = Time
+				local dt = math.min(now - (GlideState.Last or now), 0.1)
+				GlideState.Last = now
+
+				if GlideState.Action ~= Action then
+					-- letGo previous action
+					if GlideState.Action ~= nil and GlideState.Wrote and Velocity then
+						local ServerVel = Character:GetAttribute("ServerVelocity")
+						local sv = typeof(ServerVel) == "Vector3" and Vector3.new(ServerVel.X, 0, ServerVel.Z) or Vector3.zero
+						pcall(function()
+							if (Velocity.Velocity - GlideState.Wrote).Magnitude < 0.05 then
+								Velocity.Velocity = Vector3.new(sv.X, Velocity.Velocity.Y, sv.Z)
+							end
+						end)
+					end
+					GlideState.Wrote = nil
+					GlideState.PinnedAt = nil
+
+					GlideState.Action = Action
+					GlideState.Since = now
+					GlideState.Done = false
+					local vel = Proxy.AssemblyLinearVelocity
+					local planar = Vector3.new(vel.X, 0, vel.Z)
+					GlideState.Speed = planar.Magnitude
+					GlideState.Entry = math.min(planar.Magnitude, 27)
+					GlideState.Direction = planar.Magnitude > 1 and planar.Unit or nil
+					if planar.Magnitude < 2 and GlideState.RanAt and now - GlideState.RanAt < 0.7 then
+						GlideState.Speed = GlideState.RanSpeed
+						GlideState.Entry = math.min(GlideState.RanSpeed, 27)
+						GlideState.Direction = GlideState.Ran
+					end
+				end
+
+				if not GlideState.Done then
+					local elapsed = now - (GlideState.Since or now)
+					local flagTime = GlideFlag .. "Time"
+					local length = math.max((tonumber(Aural.Shooting[flagTime]) or 400) / 1000, 0.35)
+
+					if elapsed > math.min(length * 1.75, 1.2) then
+						GlideState.Done = true
+						-- letGo
+						if GlideState.Wrote and Velocity then
+							local ServerVel = Character:GetAttribute("ServerVelocity")
+							local sv = typeof(ServerVel) == "Vector3" and Vector3.new(ServerVel.X, 0, ServerVel.Z) or Vector3.zero
+							pcall(function()
+								if (Velocity.Velocity - GlideState.Wrote).Magnitude < 0.05 then
+									Velocity.Velocity = Vector3.new(sv.X, Velocity.Velocity.Y, sv.Z)
+								end
+							end)
+							GlideState.Wrote = nil
+							GlideState.PinnedAt = nil
+						end
+					else
+						local heading = GetMoveDirection()
+						if heading and heading.Magnitude < 0.01 then heading = nil end
+						local direction = heading or GlideState.Direction
+
+						if direction then
+							local flagSpeed = GlideFlag .. "Speed"
+							local limit = Aural.Shooting[flagSpeed] or 10
+
+							if Action == "Gathering" then
+								local Goal = GetGoal(Character)
+								local dist = Goal and Flat(Goal - Proxy.Position).Magnitude
+								if dist and dist < 13 then
+									GlideState.Done = true
+									if GlideState.Wrote and Velocity then
+										local ServerVel = Character:GetAttribute("ServerVelocity")
+										local sv = typeof(ServerVel) == "Vector3" and Vector3.new(ServerVel.X, 0, ServerVel.Z) or Vector3.zero
+										pcall(function()
+											if (Velocity.Velocity - GlideState.Wrote).Magnitude < 0.05 then
+												Velocity.Velocity = Vector3.new(sv.X, Velocity.Velocity.Y, sv.Z)
+											end
+										end)
+										GlideState.Wrote = nil
+										GlideState.PinnedAt = nil
+									end
+								end
+							end
+
+							if Action == "Shooting" then
+								limit = math.min(limit, 8)
+								if elapsed > 0.3 then
+									GlideState.Done = true
+									if GlideState.Wrote and Velocity then
+										local ServerVel = Character:GetAttribute("ServerVelocity")
+										local sv = typeof(ServerVel) == "Vector3" and Vector3.new(ServerVel.X, 0, ServerVel.Z) or Vector3.zero
+										pcall(function()
+											if (Velocity.Velocity - GlideState.Wrote).Magnitude < 0.05 then
+												Velocity.Velocity = Vector3.new(sv.X, Velocity.Velocity.Y, sv.Z)
+											end
+										end)
+										GlideState.Wrote = nil
+										GlideState.PinnedAt = nil
+									end
+								end
+							end
+
+							if not GlideState.Done then
+								if not heading then
+									GlideState.Speed = GlideState.Speed * math.exp(-3 * dt)
+								end
+								local entry = GlideState.Entry or limit
+								local cap = limit + math.max(entry - limit, 0) * math.exp(-10 * elapsed)
+								local speed = math.min(GlideState.Speed, cap)
+								if elapsed > length then
+									speed = speed * math.clamp(1 - (elapsed - length) / (length * 0.75), 0, 1)
+								end
+								if speed >= 2 then
+									-- pinned detection: if we wrote but velocity didn't take, bail
+									if GlideState.Wrote and Vector3.new(Proxy.AssemblyLinearVelocity.X, 0, Proxy.AssemblyLinearVelocity.Z).Magnitude < 1.5 and speed > 6 then
+										GlideState.PinnedAt = GlideState.PinnedAt or now
+										if now - GlideState.PinnedAt > 0.15 then
+											GlideState.Done = true
+											GlideState.Wrote = nil
+											GlideState.PinnedAt = nil
+										end
+									else
+										GlideState.PinnedAt = nil
+									end
+									if not GlideState.Done then
+										local flagStrength = GlideFlag .. "Strength"
+										local strength = math.clamp((tonumber(Aural.Shooting[flagStrength]) or 100) / 100, 0, 1)
+										local blend = 0.5 + 0.5 * strength
+										local game0 = Velocity.Velocity
+										if GlideState.Wrote and (game0 - GlideState.Wrote).Magnitude < 0.05 then
+											local ServerVel = Character:GetAttribute("ServerVelocity")
+											game0 = typeof(ServerVel) == "Vector3" and Vector3.new(ServerVel.X, 0, ServerVel.Z) or Vector3.zero
+											game0 = Vector3.new(game0.X, Velocity.Velocity.Y, game0.Z)
+										end
+										local goal = direction * math.min(speed, 27)
+										local wanted = Vector3.new(game0.X, 0, game0.Z):Lerp(goal, blend)
+										local written = Vector3.new(wanted.X, game0.Y, wanted.Z)
+										Velocity.Velocity = written
+										GlideState.Wrote = written
+									end
+								end
+							end
+						end
+					end
+				end
+			end
 		end
 
 		-- // Speed Boost
