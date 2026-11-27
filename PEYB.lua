@@ -2,7 +2,6 @@
 local Aural = {
 	Shooting = {
 		PerfectTiming = true,
-		AutoCalibrate = true,
 		PingCompensation = true,
 		PingMultiplier = 100,
 		ReleasePoint = 97,
@@ -28,6 +27,15 @@ local Aural = {
 		AutoAnkleBreaker = false,
 		AnkleBreakRange = 8,
 		AnkleBreakerMove = "Crossover",
+
+		ComboMoves = { "Crossover", "Tween", "Snatch Back" },
+		ComboDelay = 0.2,
+		ComboDirection = "Move Input",
+		ComboRepeats = 1,
+		ComboRandom = false,
+		ComboSwitchEnd = false,
+		ComboStopOnLose = true,
+		ComboOnlyDribbling = true,
 	},
 
 	Defense = {
@@ -587,6 +595,13 @@ function Icons.aural(b)
 	b.line(7.8, 16.2, 16.2, 16.2, 3.2, b.accent, 1)
 	b.line(12, 3.2, 3.2, 21.4, 4.4, nil, 2)
 	b.line(12, 3.2, 20.8, 21.4, 4.4, nil, 2)
+end
+
+function Icons.heart(b)
+	b.arc(8.2, 9.4, 4.3, 180, 360)
+	b.arc(15.8, 9.4, 4.3, 0, -180)
+	b.line(3.9, 9.6, 12, 20.4)
+	b.line(20.1, 9.6, 12, 20.4)
 end
 
 function AuralV2.RegisterIcon(name, drawFunction)
@@ -7816,15 +7831,15 @@ local ShootingTab = Window:CreateCategory(""):CreateTab({ Title = "Shooting",  I
 local OffenseTab  = Window:CreateCategory(""):CreateTab({ Title = "Offense",   Icon = Icons.Dribble })
 local DefenseTab  = Window:CreateCategory(""):CreateTab({ Title = "Defense",   Icon = Icons.Shield })
 local CharacterTab= Window:CreateCategory(""):CreateTab({ Title = "Character", Icon = Icons.Person })
+local PetsTab     = Window:CreateCategory(""):CreateTab({ Title = "Pets",      Icon = "heart" })
 local VisualsTab  = Window:CreateCategory(""):CreateTab({ Title = "Visuals",   Icon = Icons.Sun })
 local SettingsTab = Window:CreateCategory(""):CreateTab({ Title = "Settings",  Icon = Icons.Settings })
 
 -- Forward-declared labels and lists used in logic below
-local PingLabel, CalibrationLabel, LastShotLabel
+local PingLabel
 local SpectateList, GuardStatus
 
 local function SetCurrentMeter(...) end
-local function ResetCalibration() end
 local function SetDebounce(...) end
 local function ApplyEffects() end
 local function RefreshCosmetics() end
@@ -7902,37 +7917,42 @@ pcall(function()
 	end
 end)
 
+-- Forward declarations: the Dribble Combos controls call these before the dribble module below defines them.
+local PlayDribbleCombo = function() end
+local ComboLabel
+
 -- ╔══════════════════════════════╗
--- ║  OFFENSE TAB                 ║
+-- ║  SHOOTING TAB                ║
 -- ╚══════════════════════════════╝
 
--- // Perfect Timing  [Shooting tab]
+-- // Auto Time / Auto Green  [Shooting tab]
 do
-	local Timing = ShootingTab:CreateSection({ Title = "Perfect Timing", Icon = Icons.Timer })
-	local PerfTimingToggle = Timing:AddToggle({ Title = "Perfect Timing", Description = "Releases every shot you hold at the top of the meter", Flag = "PerfectTiming", Default = Aural.Shooting.PerfectTiming, Callback = function(V) Aural.Shooting.PerfectTiming = V end })
-	Timing:AddKeybind({ Title = "Perfect Timing Keybind", Flag = "PerfectTimingKey", Callback = function()
+	local Timing = ShootingTab:CreateSection({ Title = "Auto Time", Icon = Icons.Timer })
+	local PerfTimingToggle = Timing:AddToggle({ Title = "Auto Time", Description = "Releases every shot at the top of the meter", Flag = "PerfectTiming", Default = Aural.Shooting.PerfectTiming, Callback = function(V) Aural.Shooting.PerfectTiming = V end })
+	Timing:AddKeybind({ Title = "Auto Time keybind", Flag = "PerfectTimingKey", Callback = function()
 		local newVal = PerfTimingToggle and not PerfTimingToggle:Get() or not Aural.Shooting.PerfectTiming
 		if PerfTimingToggle then pcall(function() PerfTimingToggle:Set(newVal) end) end
 		Aural.Shooting.PerfectTiming = newVal
+		Notify("Auto Time", newVal and "On" or "Off")
 	end })
-	Timing:AddToggle({ Title = "Auto Green", Description = "Learns the exact meter point that grades Perfect and stops the meter on it", Flag = "AutoGreen", Default = Aural.Shooting.AutoGreen, Callback = function(V) Aural.Shooting.AutoGreen = V end })
+	local AutoGreenToggle = Timing:AddToggle({ Title = "Auto Green", Description = "Jump with the ball and it shoots for you, then releases at the Release Point (green)", Flag = "AutoGreen", Default = Aural.Shooting.AutoGreen, Callback = function(V) Aural.Shooting.AutoGreen = V end })
+	Timing:AddKeybind({ Title = "Auto Green keybind", Flag = "AutoGreenKey", Callback = function()
+		local newVal = AutoGreenToggle and not AutoGreenToggle:Get() or not Aural.Shooting.AutoGreen
+		if AutoGreenToggle then pcall(function() AutoGreenToggle:Set(newVal) end) end
+		Aural.Shooting.AutoGreen = newVal
+		Notify("Auto Green", newVal and "On" or "Off")
+	end })
 	Timing:AddSlider({ Title = "Release Point", Description = "How full the meter is when the release lands", Min = 90, Max = 100, Default = Aural.Shooting.ReleasePoint, Step = 0.5, Decimals = 1, Suffix = "%", Flag = "ReleasePoint", Callback = function(V) Aural.Shooting.ReleasePoint = V end })
-	Timing:AddSlider({ Title = "Timing Offset", Description = "Manual nudge; positive releases later", Min = -100, Max = 100, Default = -5, Suffix = "ms", Flag = "TimingOffset", Callback = function(V) Aural.Shooting.TimingOffset = V end })
 	Timing:AddToggle({ Title = "Auto Align", Description = "Squares up directly facing the hoop to eliminate drift and angle penalties", Flag = "AutoAlign", Default = Aural.Shooting.AutoAlign, Callback = function(V) Aural.Shooting.AutoAlign = V end })
 	Timing:AddToggle({ Title = "Distance Scaling", Description = "Dynamically scales meter timing and optimal arc for 3s and deep shots", Flag = "DistanceScaling", Default = Aural.Shooting.DistanceScaling, Callback = function(V) Aural.Shooting.DistanceScaling = V end })
 
-	local Calibrate = ShootingTab:CreateSection({ Title = "Auto Calibrate", Icon = Icons.Calibrate })
-	Calibrate:AddToggle({ Title = "Auto Calibrate", Description = "Learns your timing from where the meter stops", Flag = "AutoCalibrate", Default = Aural.Shooting.AutoCalibrate, Callback = function(V) Aural.Shooting.AutoCalibrate = V end })
-	CalibrationLabel = Calibrate:AddLabel("calibration: +0ms")
-	LastShotLabel = Calibrate:AddLabel("last shot: none")
-	Calibrate:AddButton({ Title = "Reset calibration", Callback = function() ResetCalibration() end })
-
-	local Ping = ShootingTab:CreateSection({ Title = "Ping", Icon = Icons.Ping })
+	local Ping = ShootingTab:CreateSection({ Title = "Consistency", Icon = Icons.Ping })
 	PingLabel = Ping:AddLabel("ping: 0ms")
-	Ping:AddToggle({ Title = "Ping Compensation", Description = "Sends the release one round trip early so it lands on time", Flag = "PingCompensation", Default = Aural.Shooting.PingCompensation, Callback = function(V) Aural.Shooting.PingCompensation = V end })
-	Ping:AddSlider({ Title = "Compensation Amount", Description = "Share of your ping to send early", Min = 0, Max = 200, Default = Aural.Shooting.PingMultiplier, Suffix = "%", Flag = "PingMultiplier", Callback = function(V) Aural.Shooting.PingMultiplier = V end })
+	Ping:AddToggle({ Title = "Ping Compensation", Description = "Releases early by your ping so the Release Point is the real meter fill on any server", Flag = "PingCompensation", Default = Aural.Shooting.PingCompensation, Callback = function(V) Aural.Shooting.PingCompensation = V end })
+	Ping:AddSlider({ Title = "Latency Compensation", Description = "How much of your ping to compensate for (100% = full ping)", Min = 0, Max = 150, Default = Aural.Shooting.PingMultiplier, Suffix = "%", Flag = "PingMultiplier", Callback = function(V) Aural.Shooting.PingMultiplier = V end })
+	Ping:AddSlider({ Title = "Timing Offset", Description = "Fine-tune: negative releases earlier, positive later", Min = -60, Max = 60, Default = Aural.Shooting.TimingOffset, Suffix = "ms", Flag = "TimingOffset", Callback = function(V) Aural.Shooting.TimingOffset = V end })
 
-	local Meter = ShootingTab:CreateSection({ Title = "Meter", Icon = Icons.Meter })
+	local Meter = ShootingTab:CreateSection({ Title = "Shot Meter", Icon = Icons.Meter })
 	Meter:AddDropdown({ Title = "Change Meter", Description = "Switches your shot meter type", Options = MeterTypes, Flag = "MeterType", Callback = function(V)
 		if V then
 			SetCurrentMeter(V)
@@ -7984,6 +8004,21 @@ do
 	end })
 	Ankle:AddSlider({ Title = "Ankle Break Range", Description = "How close a defender has to be", Min = 3, Max = 20, Default = Aural.Dribbling.AnkleBreakRange, Step = 0.5, Decimals = 1, Suffix = " studs", Flag = "AnkleBreakRange", Callback = function(V) Aural.Dribbling.AnkleBreakRange = V end })
 	Ankle:AddDropdown({ Title = "Move", Options = MoveNames, Default = Aural.Dribbling.AnkleBreakerMove, Flag = "AnkleBreakerMove", Callback = function(V) Aural.Dribbling.AnkleBreakerMove = V or "Crossover" end })
+
+	local Combos = OffenseTab:CreateSection({ Title = "Dribble Combos", Icon = Icons.Combos })
+	Combos:AddDropdown({ Title = "Moves", Description = "Every selected move plays in order", Options = MoveNames, Multi = true, Default = Aural.Dribbling.ComboMoves, Flag = "ComboMoves", Callback = function(V)
+		Aural.Dribbling.ComboMoves = type(V) == "table" and V or {}
+	end })
+	Combos:AddKeybind({ Title = "Play Combo Keybind", Description = "Runs the whole selection once", Flag = "ComboKey", Callback = function() PlayDribbleCombo() end })
+	Combos:AddSlider({ Title = "Delay Between Moves", Description = "Raise this if the game eats a move", Min = 0.05, Max = 1, Default = Aural.Dribbling.ComboDelay, Step = 0.01, Decimals = 2, Suffix = "s", Flag = "ComboDelay", Callback = function(V) Aural.Dribbling.ComboDelay = V end })
+	Combos:AddDropdown({ Title = "Direction", Description = "Where the combo carries you", Options = { "Move Input", "Camera", "Toward Hoop", "Away From Defender" }, Default = Aural.Dribbling.ComboDirection, Flag = "ComboDirection", Callback = function(V) Aural.Dribbling.ComboDirection = V or "Move Input" end })
+	Combos:AddSlider({ Title = "Repeats", Description = "How many times the whole sequence plays", Min = 1, Max = 5, Default = Aural.Dribbling.ComboRepeats, Step = 1, Flag = "ComboRepeats", Callback = function(V) Aural.Dribbling.ComboRepeats = V end })
+	Combos:AddToggle({ Title = "Random Order", Description = "Shuffles the selection every time", Flag = "ComboRandom", Default = Aural.Dribbling.ComboRandom, Callback = function(V) Aural.Dribbling.ComboRandom = V end })
+	Combos:AddToggle({ Title = "End With Switch Hand", Description = "Finishes on a hand switch", Flag = "ComboSwitchEnd", Default = Aural.Dribbling.ComboSwitchEnd, Callback = function(V) Aural.Dribbling.ComboSwitchEnd = V end })
+	Combos:AddToggle({ Title = "Stop If Ball Lost", Flag = "ComboStopOnLose", Default = Aural.Dribbling.ComboStopOnLose, Callback = function(V) Aural.Dribbling.ComboStopOnLose = V end })
+	Combos:AddToggle({ Title = "Only While Dribbling", Description = "Aborts if you get pulled into another action", Flag = "ComboOnlyDribbling", Default = Aural.Dribbling.ComboOnlyDribbling, Callback = function(V) Aural.Dribbling.ComboOnlyDribbling = V end })
+	ComboLabel = Combos:AddLabel("last combo: none")
+	Combos:AddButton({ Title = "Play Combo Once", Callback = function() PlayDribbleCombo() end })
 
 end
 
@@ -8168,6 +8203,625 @@ do
 	Celebrate:AddSlider({ Title = "Celebration Delay", Description = "How long after the green before the animation fires", Min = 0, Max = 1, Default = Aural.Effects.CelebrateDelay, Step = 0.05, Decimals = 2, Suffix = "s", Flag = "CelebrateDelay", Callback = function(V) Aural.Effects.CelebrateDelay = V end })
 end
 
+-- // Pets
+-- Client-side companions: only you can see them. They trail you, dance / do emotes
+-- and type chat bubbles to you. All characters are original designs built from parts.
+do
+	local ok, err = pcall(function()
+		local RunSvc = game:GetService("RunService")
+		local sin, cos, abs, rad, pi = math.sin, math.cos, math.abs, math.rad, math.pi
+		local function Ang(x, y, z) return CFrame.Angles(x or 0, y or 0, z or 0) end
+		local function RGB(r, g, b) return Color3.fromRGB(r, g, b) end
+		local V3 = Vector3.new
+
+		local P = {
+			Enabled = false,
+			Slots = { "Blobby", "None", "None" },
+			Scale = 1,
+			Distance = 6,
+			AutoEmote = true,
+			Chat = true,
+			ChatEvery = 14,
+			EmoteName = "Dance",
+			List = {},
+		}
+		local Folder = Instance.new("Folder")
+		Folder.Name = "ArurHubPets"
+		Folder.Parent = workspace
+
+		-- ═════════════ PET DESIGNS (all original) ═════════════
+		-- add(shape, size, color, cframe, opts)   shape: "ball" | "block" | "cyl"
+		-- opts: tag = "head" | "armL" | "armR" | "tail", pivot = joint position, mat, tr
+		local function eyes(add, y, z, gap, sz, pupil, eyeColor, pv)
+			for _, sx in ipairs({ -1, 1 }) do
+				add("ball", V3(sz, sz * 1.15, sz * 0.5), eyeColor or RGB(255, 255, 255), CFrame.new(sx * gap, y, z), { tag = "head", pivot = pv })
+				add("ball", V3(pupil, pupil * 1.2, pupil * 0.5), RGB(20, 20, 24), CFrame.new(sx * gap, y, z - sz * 0.18), { tag = "head", pivot = pv })
+			end
+		end
+
+		local Defs = {}
+
+		Defs.Blobby = {
+			Name = "Blobby", Accent = RGB(120, 230, 140), Top = 2.6, Float = 0,
+			Lines = {
+				"Boing! Boing! Watch me bounce, %s!",
+				"I'm made of 100%% jelly and 100%% hype.",
+				"Splish splosh, that's a bucket!",
+				"I wobble when I'm happy. Wobbling now.",
+				"Can jelly play point guard? Asking for me.",
+			},
+			Build = function(add)
+				add("ball", V3(2.5, 2.1, 2.5), RGB(110, 225, 130), CFrame.new(0, 1.15, 0), { tag = "head", pivot = V3(0, 0.3, 0) })
+				add("ball", V3(1.6, 0.9, 1.6), RGB(160, 245, 175), CFrame.new(0, 1.55, -0.55), { tag = "head", pivot = V3(0, 0.3, 0), tr = 0.35 })
+				eyes(add, 1.45, -1.05, 0.5, 0.62, 0.3, nil, V3(0, 0.3, 0))
+				add("block", V3(0.7, 0.14, 0.1), RGB(40, 90, 55), CFrame.new(0, 0.95, -1.14), { tag = "head", pivot = V3(0, 0.3, 0) })
+				add("cyl", V3(0.5, 0.18, 0.18), RGB(60, 170, 90), CFrame.new(0, 2.4, 0) * Ang(0, 0, pi / 2), { tag = "head", pivot = V3(0, 0.3, 0) })
+				add("ball", V3(0.55, 0.3, 0.55), RGB(60, 170, 90), CFrame.new(0.2, 2.65, 0), { tag = "head", pivot = V3(0, 0.3, 0) })
+				add("ball", V3(0.6, 0.6, 0.6), RGB(95, 205, 115), CFrame.new(1.35, 1.1, 0), { tag = "armR", pivot = V3(1.1, 1.1, 0) })
+				add("ball", V3(0.6, 0.6, 0.6), RGB(95, 205, 115), CFrame.new(-1.35, 1.1, 0), { tag = "armL", pivot = V3(-1.1, 1.1, 0) })
+				add("ball", V3(0.8, 0.4, 0.9), RGB(80, 190, 105), CFrame.new(0.55, 0.2, -0.1))
+				add("ball", V3(0.8, 0.4, 0.9), RGB(80, 190, 105), CFrame.new(-0.55, 0.2, -0.1))
+			end,
+		}
+
+		Defs.Whiskers = {
+			Name = "Whiskers", Accent = RGB(255, 170, 90), Top = 3.5, Float = 0,
+			Lines = {
+				"Meow-ve it, %s! Dribble like you mean it.",
+				"I knocked the ball off the table. Sorry. Not sorry.",
+				"Purrfect form on that last shot.",
+				"Nine lives, zero turnovers.",
+				"Feed me a pass and I'll feed you a bucket.",
+			},
+			Build = function(add)
+				local pv = V3(0, 1.7, 0)
+				add("ball", V3(1.9, 1.8, 1.9), RGB(250, 160, 80), CFrame.new(0, 1.0, 0))
+				add("ball", V3(1.2, 1.0, 0.5), RGB(255, 235, 210), CFrame.new(0, 0.95, -0.8))
+				add("ball", V3(1.8, 1.6, 1.8), RGB(250, 160, 80), CFrame.new(0, 2.3, -0.1), { tag = "head", pivot = pv })
+				for _, sx in ipairs({ -1, 1 }) do
+					add("block", V3(0.55, 0.75, 0.22), RGB(235, 130, 60), CFrame.new(sx * 0.62, 3.2, -0.1) * Ang(0, 0, -sx * 0.35), { tag = "head", pivot = pv })
+					add("block", V3(0.28, 0.4, 0.1), RGB(255, 170, 190), CFrame.new(sx * 0.62, 3.15, -0.2) * Ang(0, 0, -sx * 0.35), { tag = "head", pivot = pv })
+				end
+				eyes(add, 2.4, -0.82, 0.42, 0.5, 0.26, RGB(190, 255, 120), pv)
+				add("ball", V3(0.28, 0.2, 0.2), RGB(255, 130, 150), CFrame.new(0, 2.15, -0.92), { tag = "head", pivot = pv })
+				for _, sx in ipairs({ -1, 1 }) do
+					for k = -1, 1, 2 do
+						add("block", V3(0.7, 0.04, 0.04), RGB(255, 255, 255), CFrame.new(sx * 0.75, 2.1 + k * 0.08, -0.85) * Ang(0, sx * 0.2, k * 0.15), { tag = "head", pivot = pv })
+					end
+				end
+				add("block", V3(0.3, 1.7, 0.3), RGB(235, 130, 60), CFrame.new(0, 1.7, 0.95) * Ang(0.5, 0, 0), { tag = "tail", pivot = V3(0, 0.8, 0.8) })
+				add("ball", V3(0.5, 0.5, 0.5), RGB(250, 160, 80), CFrame.new(1.0, 1.0, -0.4), { tag = "armR", pivot = V3(0.9, 1.5, -0.3) })
+				add("ball", V3(0.5, 0.5, 0.5), RGB(250, 160, 80), CFrame.new(-1.0, 1.0, -0.4), { tag = "armL", pivot = V3(-0.9, 1.5, -0.3) })
+				add("ball", V3(0.7, 0.35, 0.9), RGB(235, 130, 60), CFrame.new(0.5, 0.18, -0.15))
+				add("ball", V3(0.7, 0.35, 0.9), RGB(235, 130, 60), CFrame.new(-0.5, 0.18, -0.15))
+			end,
+		}
+
+		Defs.Bolt = {
+			Name = "Bolt", Accent = RGB(90, 220, 240), Top = 4.1, Float = 0,
+			Lines = {
+				"BEEP. Shot accuracy: excellent, %s.",
+				"Calculating the best pass... done: to me.",
+				"My battery is 98%% and my vibes are 100%%.",
+				"Initiating victory dance.exe",
+				"Error 404: missed shot not found.",
+			},
+			Build = function(add)
+				local pv = V3(0, 1.95, 0)
+				add("block", V3(1.9, 1.8, 1.4), RGB(150, 165, 185), CFrame.new(0, 1.3, 0), { mat = Enum.Material.Metal })
+				add("block", V3(1.0, 0.6, 0.12), RGB(40, 50, 65), CFrame.new(0, 1.3, -0.72))
+				add("block", V3(0.4, 0.12, 0.12), RGB(90, 220, 240), CFrame.new(0, 1.3, -0.78), { mat = Enum.Material.Neon })
+				add("block", V3(1.6, 1.25, 1.35), RGB(175, 190, 210), CFrame.new(0, 2.65, 0), { tag = "head", pivot = pv, mat = Enum.Material.Metal })
+				add("block", V3(1.2, 0.55, 0.1), RGB(25, 30, 40), CFrame.new(0, 2.7, -0.7), { tag = "head", pivot = pv })
+				for _, sx in ipairs({ -1, 1 }) do
+					add("block", V3(0.26, 0.26, 0.1), RGB(90, 235, 255), CFrame.new(sx * 0.32, 2.7, -0.76), { tag = "head", pivot = pv, mat = Enum.Material.Neon })
+				end
+				add("cyl", V3(0.6, 0.1, 0.1), RGB(110, 120, 140), CFrame.new(0, 3.55, 0) * Ang(0, 0, pi / 2), { tag = "head", pivot = pv })
+				add("ball", V3(0.32, 0.32, 0.32), RGB(255, 90, 90), CFrame.new(0, 3.95, 0), { tag = "head", pivot = pv, mat = Enum.Material.Neon })
+				add("block", V3(0.45, 1.2, 0.45), RGB(120, 135, 155), CFrame.new(1.3, 1.25, 0), { tag = "armR", pivot = V3(1.2, 1.85, 0), mat = Enum.Material.Metal })
+				add("block", V3(0.45, 1.2, 0.45), RGB(120, 135, 155), CFrame.new(-1.3, 1.25, 0), { tag = "armL", pivot = V3(-1.2, 1.85, 0), mat = Enum.Material.Metal })
+				add("block", V3(0.6, 0.7, 0.6), RGB(100, 112, 130), CFrame.new(0.45, 0.35, 0))
+				add("block", V3(0.6, 0.7, 0.6), RGB(100, 112, 130), CFrame.new(-0.45, 0.35, 0))
+			end,
+		}
+
+		Defs.Hoops = {
+			Name = "Hoops", Accent = RGB(255, 140, 50), Top = 2.9, Float = 0,
+			Lines = {
+				"I'm a basketball with legs. Living the dream, %s.",
+				"Swish! That's my favorite sound.",
+				"Don't bounce me, I bounce myself!",
+				"Fun fact: I am 100%% inflated with confidence.",
+				"Triple-double? More like triple-DANCE.",
+			},
+			Build = function(add)
+				local pv = V3(0, 0.6, 0)
+				add("ball", V3(2.5, 2.5, 2.5), RGB(238, 125, 40), CFrame.new(0, 1.55, 0), { tag = "head", pivot = pv })
+				add("cyl", V3(0.32, 2.05, 2.05), RGB(255, 255, 255), CFrame.new(0, 2.35, 0) * Ang(0, 0, pi / 2), { tag = "head", pivot = pv })
+				eyes(add, 1.7, -1.1, 0.5, 0.6, 0.3, nil, pv)
+				add("block", V3(0.8, 0.14, 0.1), RGB(60, 25, 10), CFrame.new(0, 1.15, -1.18), { tag = "head", pivot = pv })
+				add("ball", V3(0.6, 0.6, 0.6), RGB(238, 125, 40), CFrame.new(1.45, 1.4, 0), { tag = "armR", pivot = V3(1.2, 1.4, 0) })
+				add("ball", V3(0.6, 0.6, 0.6), RGB(238, 125, 40), CFrame.new(-1.45, 1.4, 0), { tag = "armL", pivot = V3(-1.2, 1.4, 0) })
+				add("block", V3(0.75, 0.35, 1.0), RGB(255, 255, 255), CFrame.new(0.5, 0.18, -0.15))
+				add("block", V3(0.75, 0.35, 1.0), RGB(255, 255, 255), CFrame.new(-0.5, 0.18, -0.15))
+			end,
+		}
+
+		Defs.Pip = {
+			Name = "Pip", Accent = RGB(120, 160, 255), Top = 3.1, Float = 0,
+			Lines = {
+				"Waddle waddle! Hi %s!",
+				"It's cold out here but my dribble is hot.",
+				"I slid on my belly to get here. Worth it.",
+				"Penguins can't fly, but we can sure dunk. In theory.",
+				"Fish for a bucket, %s!",
+			},
+			Build = function(add)
+				add("ball", V3(1.9, 2.5, 1.7), RGB(40, 52, 90), CFrame.new(0, 1.6, 0), { tag = "head", pivot = V3(0, 0.5, 0) })
+				add("ball", V3(1.35, 1.9, 0.6), RGB(245, 245, 250), CFrame.new(0, 1.5, -0.6), { tag = "head", pivot = V3(0, 0.5, 0) })
+				eyes(add, 2.4, -0.78, 0.38, 0.46, 0.24, nil, V3(0, 0.5, 0))
+				add("block", V3(0.5, 0.22, 0.5), RGB(255, 170, 50), CFrame.new(0, 2.05, -0.95), { tag = "head", pivot = V3(0, 0.5, 0) })
+				add("block", V3(0.28, 1.2, 0.7), RGB(30, 40, 75), CFrame.new(1.05, 1.5, 0) * Ang(0, 0, -0.15), { tag = "armR", pivot = V3(0.95, 2.1, 0) })
+				add("block", V3(0.28, 1.2, 0.7), RGB(30, 40, 75), CFrame.new(-1.05, 1.5, 0) * Ang(0, 0, 0.15), { tag = "armL", pivot = V3(-0.95, 2.1, 0) })
+				add("block", V3(0.65, 0.16, 0.9), RGB(255, 170, 50), CFrame.new(0.45, 0.1, -0.2))
+				add("block", V3(0.65, 0.16, 0.9), RGB(255, 170, 50), CFrame.new(-0.45, 0.1, -0.2))
+			end,
+		}
+
+		Defs.Ghosty = {
+			Name = "Ghosty", Accent = RGB(200, 190, 255), Top = 3.4, Float = 1.1,
+			Lines = {
+				"Boo! Just kidding, I'm here to cheer, %s.",
+				"I can phase through defenders. Don't tell the refs.",
+				"Spooky good shot!",
+				"I haunt the rim. Nothing gets by me.",
+				"Whooo's got the best jumper? You do!",
+			},
+			Build = function(add)
+				add("ball", V3(2.1, 2.7, 2.0), RGB(240, 238, 255), CFrame.new(0, 1.9, 0), { tag = "head", pivot = V3(0, 0.4, 0), tr = 0.12 })
+				for i, sx in ipairs({ -0.7, 0, 0.7 }) do
+					add("ball", V3(0.85, 0.85, 0.85), RGB(240, 238, 255), CFrame.new(sx, 0.65 + (i == 2 and -0.1 or 0.05), 0), { tag = "tail", pivot = V3(0, 1.2, 0), tr = 0.12 })
+				end
+				for _, sx in ipairs({ -1, 1 }) do
+					add("ball", V3(0.4, 0.6, 0.2), RGB(25, 20, 40), CFrame.new(sx * 0.48, 2.15, -0.98), { tag = "head", pivot = V3(0, 0.4, 0) })
+				end
+				add("ball", V3(0.45, 0.55, 0.15), RGB(25, 20, 40), CFrame.new(0, 1.5, -1.0), { tag = "head", pivot = V3(0, 0.4, 0) })
+				add("ball", V3(0.6, 0.55, 0.55), RGB(240, 238, 255), CFrame.new(1.3, 1.6, 0), { tag = "armR", pivot = V3(1.0, 1.7, 0), tr = 0.12 })
+				add("ball", V3(0.6, 0.55, 0.55), RGB(240, 238, 255), CFrame.new(-1.3, 1.6, 0), { tag = "armL", pivot = V3(-1.0, 1.7, 0), tr = 0.12 })
+			end,
+		}
+
+		local PetNames = { "Blobby", "Whiskers", "Bolt", "Hoops", "Pip", "Ghosty" }
+		local SlotOptions = { "None", table.unpack(PetNames) }
+
+		local GenericLines = {
+			"Pass it here, %s, I'm wide open!",
+			"Buckets! Buckets! Buckets!",
+			"You've got the touch today, %s.",
+			"Defense! Defense! Clap clap clap-clap-clap.",
+			"Remember to hydrate, champ.",
+			"That's a green if I've ever seen one.",
+			"Run the fast break!",
+			"Whatever happens, I'm your biggest fan.",
+		}
+
+		-- ═════════════ EMOTES ═════════════
+		-- fn(t, a) -> body CFrame offset, { armL, armR, head, tail rotations }
+		local Emotes = {
+			Dance = { dur = 4, fn = function(t)
+				local b = t * 7
+				return CFrame.new(sin(b * 0.5) * 0.7, abs(sin(b)) * 0.9, 0) * Ang(0, sin(b * 0.5) * 0.7, sin(b * 0.5) * 0.22),
+					{ armR = Ang(0, 0, rad(130) + sin(b * 2) * 0.5), armL = Ang(0, 0, -rad(130) - sin(b * 2 + 1) * 0.5),
+					  head = Ang(0, 0, sin(b * 0.5) * 0.35), tail = Ang(0, sin(b * 2) * 0.8, 0) }
+			end },
+			Wave = { dur = 3, fn = function(t)
+				return CFrame.new(0, abs(sin(t * 3)) * 0.15, 0),
+					{ armR = Ang(0, 0, rad(150) + sin(t * 14) * 0.45), head = Ang(0, 0, sin(t * 3) * 0.12), tail = Ang(0, sin(t * 9) * 0.5, 0) }
+			end },
+			Spin = { dur = 1.6, fn = function(t, a)
+				return CFrame.new(0, sin(a * pi) * 1.8, 0) * Ang(0, a * pi * 4, 0),
+					{ armR = Ang(0, 0, rad(80)), armL = Ang(0, 0, -rad(80)) }
+			end },
+			Backflip = { dur = 1.4, fn = function(t, a)
+				return CFrame.new(0, sin(a * pi) * 3.2, 0) * Ang(-a * pi * 2, 0, 0),
+					{ armR = Ang(0, 0, rad(160)), armL = Ang(0, 0, -rad(160)) }
+			end },
+			Cheer = { dur = 3, fn = function(t)
+				local b = t * 8
+				return CFrame.new(0, abs(sin(b)) * 1.5, 0),
+					{ armR = Ang(0, 0, rad(165) + sin(b) * 0.2), armL = Ang(0, 0, -rad(165) - sin(b) * 0.2), head = Ang(-0.2, 0, 0) }
+			end },
+			Sway = { dur = 3.5, fn = function(t)
+				local b = t * 3
+				return CFrame.new(sin(b) * 0.8, 0, 0) * Ang(0, 0, sin(b) * 0.3),
+					{ armR = Ang(0, 0, rad(40) + sin(b) * 0.5), armL = Ang(0, 0, -rad(40) + sin(b) * 0.5),
+					  head = Ang(0, 0, -sin(b) * 0.3), tail = Ang(0, sin(b * 2) * 0.6, 0) }
+			end },
+			Floss = { dur = 4, fn = function(t)
+				local s = sin(t * 10)
+				return CFrame.new(-s * 0.5, abs(s) * 0.1, 0) * Ang(0, 0, -s * 0.05),
+					{ armR = Ang(0, rad(60) * s, rad(35)), armL = Ang(0, rad(60) * s, -rad(35)), head = Ang(0, 0, s * 0.1) }
+			end },
+		}
+		local EmoteNames = { "Dance", "Wave", "Spin", "Backflip", "Cheer", "Sway", "Floss" }
+
+		local function rnd(a, b) return a + math.random() * (b - a) end
+		local function pick(list) return list[math.random(1, #list)] end
+
+		-- ═════════════ BUILDING ═════════════
+		local function newPet(def)
+			local S = P.Scale
+			local model = Instance.new("Model")
+			model.Name = def.Name
+			local pet = {
+				def = def, model = model, parts = {}, pos = nil, yaw = 0, y = nil,
+				emote = nil, emoteT0 = 0, emoteName = nil,
+				nextEmote = os.clock() + rnd(4, 9), nextChat = os.clock() + rnd(3, 6),
+				seed = math.random() * 100, token = 0, dead = false, moving = 0,
+			}
+			local function add(shape, size, color, cf, o)
+				o = o or {}
+				local p = Instance.new("Part")
+				p.Size = size * S
+				p.Color = color
+				p.Material = o.mat or Enum.Material.SmoothPlastic
+				p.Transparency = o.tr or 0
+				p.Anchored = true
+				p.CanCollide = false
+				p.CanQuery = false
+				p.CanTouch = false
+				if shape == "ball" then
+					local m = Instance.new("SpecialMesh")
+					m.MeshType = Enum.MeshType.Sphere
+					m.Parent = p
+				elseif shape == "cyl" then
+					p.Shape = Enum.PartType.Cylinder
+				end
+				p.Parent = model
+				local rel = CFrame.new(cf.Position * S) * (cf - cf.Position)
+				table.insert(pet.parts, { part = p, cf = rel, tag = o.tag, pivot = (o.pivot or Vector3.zero) * S })
+				return p
+			end
+			def.Build(add)
+			local anchor = add("block", V3(0.2, 0.2, 0.2), RGB(255, 255, 255), CFrame.new(0, def.Top + 0.3, 0), { tr = 1 })
+			pet.anchor = anchor
+			return pet
+		end
+
+		local function clearPets()
+			for _, pet in ipairs(P.List) do pet.dead = true end
+			table.clear(P.List)
+			Folder:ClearAllChildren()
+		end
+
+		local function rebuild()
+			clearPets()
+			if not P.Enabled then return end
+			for _, name in ipairs(P.Slots) do
+				local def = Defs[name]
+				if def then
+					local pet = newPet(def)
+					pet.model.Parent = Folder
+					table.insert(P.List, pet)
+				end
+			end
+		end
+
+		local rebuildToken = 0
+		local function queueRebuild()
+			rebuildToken += 1
+			local t = rebuildToken
+			task.delay(0.3, function()
+				if t == rebuildToken then pcall(rebuild) end
+			end)
+		end
+
+		-- ═════════════ CHAT BUBBLES ═════════════
+		local function say(pet, text)
+			if pet.dead or not pet.anchor then return end
+			pet.token += 1
+			local token = pet.token
+			local old = pet.anchor:FindFirstChild("PetBubble")
+			if old then old:Destroy() end
+
+			local acc = pet.def.Accent
+			local gui = Instance.new("BillboardGui")
+			gui.Name = "PetBubble"
+			gui.Adornee = pet.anchor
+			gui.Size = UDim2.fromOffset(240, 110)
+			gui.StudsOffset = Vector3.new(0, 1.4, 0)
+			gui.AlwaysOnTop = true
+			gui.MaxDistance = 90
+			gui.LightInfluence = 0
+			gui.Parent = pet.anchor
+
+			local frame = Instance.new("Frame")
+			frame.AnchorPoint = Vector2.new(0.5, 1)
+			frame.Position = UDim2.fromScale(0.5, 1)
+			frame.Size = UDim2.fromOffset(0, 0)
+			frame.AutomaticSize = Enum.AutomaticSize.XY
+			frame.BackgroundColor3 = RGB(20, 20, 26)
+			frame.BackgroundTransparency = 0.08
+			frame.BorderSizePixel = 0
+			frame.Parent = gui
+			local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 12); c.Parent = frame
+			local st = Instance.new("UIStroke"); st.Color = acc; st.Thickness = 1.5; st.Parent = frame
+			local pad = Instance.new("UIPadding")
+			pad.PaddingTop = UDim.new(0, 7); pad.PaddingBottom = UDim.new(0, 7)
+			pad.PaddingLeft = UDim.new(0, 10); pad.PaddingRight = UDim.new(0, 10)
+			pad.Parent = frame
+
+			local label = Instance.new("TextLabel")
+			label.BackgroundTransparency = 1
+			label.Size = UDim2.fromOffset(0, 0)
+			label.AutomaticSize = Enum.AutomaticSize.XY
+			label.TextWrapped = true
+			label.RichText = true
+			label.Font = Enum.Font.GothamMedium
+			label.TextSize = 15
+			label.TextColor3 = RGB(240, 240, 245)
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.Parent = frame
+			local lim = Instance.new("UISizeConstraint"); lim.MaxSize = Vector2.new(210, math.huge); lim.Parent = label
+
+			local header = string.format('<font color="rgb(%d,%d,%d)"><b>%s</b></font>  ', math.floor(acc.R * 255 + 0.5), math.floor(acc.G * 255 + 0.5), math.floor(acc.B * 255 + 0.5), pet.def.Name)
+			local nameLen = utf8.len(pet.def.Name) + 2
+			local total = utf8.len(text) or #text
+
+			task.spawn(function()
+				-- "typing..." dots first, then the text types out
+				label.Text = header .. "..."
+				task.wait(rnd(0.45, 0.9))
+				if pet.dead or token ~= pet.token then return end
+				label.Text = header .. text
+				label.MaxVisibleGraphemes = nameLen
+				for i = 1, total do
+					if pet.dead or token ~= pet.token then return end
+					label.MaxVisibleGraphemes = nameLen + i
+					task.wait(0.035)
+				end
+				task.wait(2.2 + total * 0.05)
+				if pet.dead or token ~= pet.token then return end
+				gui:Destroy()
+			end)
+		end
+
+		local function petSay(pet, text)
+			text = text or pick(math.random() < 0.65 and pet.def.Lines or GenericLines)
+			local name = LocalPlayer.DisplayName or LocalPlayer.Name
+			text = text:gsub("%%s", function() return name end):gsub("%%%%", "%%")
+			say(pet, text)
+		end
+
+		local function playEmote(pet, name)
+			if name == nil or name == "Random" then name = pick(EmoteNames) end
+			local e = Emotes[name]
+			if not e then return end
+			pet.emote, pet.emoteName, pet.emoteT0 = e, name, os.clock()
+		end
+
+		-- ═════════════ FOLLOW + ANIMATION LOOP ═════════════
+		local function playerRoot()
+			local ch = GetCharacter()
+			local r = ch and GetRoot(ch)
+			if r then return r end
+			local proxy = workspace:FindFirstChild("ProxyCharacter")
+			if proxy and proxy:IsA("BasePart") then return proxy end
+			local lc = LocalPlayer.Character
+			return lc and lc:FindFirstChild("HumanoidRootPart")
+		end
+
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		local lastFilter, lastRoot, idleFor = 0, nil, 0
+
+		Connect(RunSvc.RenderStepped, function(dt)
+			if not P.Enabled or #P.List == 0 then return end
+			local root = playerRoot()
+			if not root then return end
+			local now = os.clock()
+			local rp = root.Position
+
+			if now - lastFilter > 1 then
+				lastFilter = now
+				local filter = { Folder }
+				local c1, c2, c3 = LocalPlayer.Character, GetCharacter(), workspace:FindFirstChild("ProxyCharacter")
+				if c1 then table.insert(filter, c1) end
+				if c2 then table.insert(filter, c2) end
+				if c3 then table.insert(filter, c3) end
+				rayParams.FilterDescendantsInstances = filter
+			end
+
+			local speed = lastRoot and (Vector3.new(rp.X - lastRoot.X, 0, rp.Z - lastRoot.Z).Magnitude / math.max(dt, 1e-3)) or 0
+			lastRoot = rp
+			if speed > 1.5 then idleFor = 0 else idleFor += dt end
+
+			local D = P.Distance * math.max(P.Scale, 0.8)
+			for i, pet in ipairs(P.List) do
+				if not pet.pos then
+					local a = i * 2.2
+					pet.pos = rp + Vector3.new(sin(a), 0, cos(a)) * D
+				end
+
+				-- follow: trail you at a set distance, don't crowd the other pets
+				local flat = Vector3.new(pet.pos.X - rp.X, 0, pet.pos.Z - rp.Z)
+				local dist = flat.Magnitude
+				local target = pet.pos
+				if dist > D then
+					target = Vector3.new(rp.X, pet.pos.Y, rp.Z) + flat.Unit * D
+				end
+				for j, other in ipairs(P.List) do
+					if j ~= i and other.pos then
+						local sep = Vector3.new(pet.pos.X - other.pos.X, 0, pet.pos.Z - other.pos.Z)
+						local m = sep.Magnitude
+						if m < 3.2 * P.Scale then
+							target += (m > 0.01 and sep.Unit or Vector3.new(1, 0, 0)) * (3.2 * P.Scale - m) * 0.5
+						end
+					end
+				end
+				if dist > 70 then pet.pos = target end
+				local rate = 1 - math.exp(-dt * (dist > D * 2 and 9 or 4))
+				local newPos = pet.pos:Lerp(target, rate)
+				local vel = Vector3.new(newPos.X - pet.pos.X, 0, newPos.Z - pet.pos.Z)
+				local mv = vel.Magnitude / math.max(dt, 1e-3)
+				pet.moving += ((mv > 1.2 and 1 or 0) - pet.moving) * math.min(1, dt * 8)
+				pet.pos = newPos
+
+				-- face where it's going, or look at you when it stops
+				local want
+				if mv > 1.2 then
+					want = vel.Unit
+				else
+					local toP = Vector3.new(rp.X - pet.pos.X, 0, rp.Z - pet.pos.Z)
+					want = toP.Magnitude > 0.1 and toP.Unit or nil
+				end
+				if want then
+					local ty = math.atan2(-want.X, -want.Z)
+					local diff = ((ty - pet.yaw + pi) % (2 * pi)) - pi
+					pet.yaw += diff * (1 - math.exp(-dt * 8))
+				end
+
+				-- ground height
+				local hit = workspace:Raycast(Vector3.new(pet.pos.X, rp.Y + 2, pet.pos.Z), Vector3.new(0, -40, 0), rayParams)
+				local gy = hit and hit.Position.Y or (rp.Y - 3)
+				pet.y = pet.y and (pet.y + (gy - pet.y) * (1 - math.exp(-dt * 12))) or gy
+
+				-- emote scheduling
+				if pet.emote and now - pet.emoteT0 > pet.emote.dur then pet.emote = nil end
+				if P.AutoEmote and not pet.emote and now > pet.nextEmote and idleFor > 1.2 then
+					playEmote(pet, nil)
+					pet.nextEmote = now + rnd(7, 15)
+				end
+				if P.Chat and not pet.bubbleBusy and now > pet.nextChat then
+					petSay(pet)
+					if not pet.emote and math.random() < 0.4 then playEmote(pet, "Wave") end
+					pet.nextChat = now + P.ChatEvery * rnd(0.7, 1.3)
+				end
+
+				-- pose
+				local t = now + pet.seed
+				local body, rots
+				if pet.emote then
+					local et = now - pet.emoteT0
+					body, rots = pet.emote.fn(et, math.clamp(et / pet.emote.dur, 0, 1))
+				else
+					local m = pet.moving
+					body = CFrame.new(0, abs(sin(t * 9)) * 0.3 * m + sin(t * 2.2) * 0.08 * (1 - m), 0) * Ang(0, 0, sin(t * 9) * 0.1 * m)
+					rots = {
+						armR = Ang(0, 0, rad(10) + sin(t * 9) * 0.5 * m + sin(t * 2) * 0.06),
+						armL = Ang(0, 0, -rad(10) - sin(t * 9 + pi) * 0.5 * m - sin(t * 2 + 1) * 0.06),
+						head = Ang(sin(t * 1.3) * 0.04, 0, 0),
+						tail = Ang(0, sin(t * 4) * 0.4, 0),
+					}
+				end
+				local cy = pet.def.Top * 0.5 * P.Scale
+				local hover = pet.def.Float * P.Scale + (pet.def.Float > 0 and sin(t * 2) * 0.25 or 0)
+				local base = CFrame.new(pet.pos.X, pet.y + hover, pet.pos.Z) * Ang(0, pet.yaw, 0)
+					* CFrame.new(0, cy, 0) * body * CFrame.new(0, -cy, 0)
+
+				for _, e in ipairs(pet.parts) do
+					local cf = e.cf
+					local r = e.tag and rots[e.tag]
+					if r then cf = CFrame.new(e.pivot) * r * CFrame.new(-e.pivot) * cf end
+					e.part.CFrame = base * cf
+				end
+			end
+		end)
+
+		-- Pets cheer when a green goes off (any player's green effect)
+		task.spawn(function()
+			local t0 = os.clock()
+			while Running and not Remotes.RunGreenEffect and os.clock() - t0 < 90 do task.wait(1) end
+			local r = Remotes.RunGreenEffect
+			if r and Running then
+				Connect(r.OnClientEvent, function()
+					if not P.Enabled then return end
+					for _, pet in ipairs(P.List) do
+						playEmote(pet, "Cheer")
+						if P.Chat and math.random() < 0.5 then petSay(pet, "GREEN! Let's go, %s!") end
+					end
+				end)
+			end
+		end)
+
+		table.insert(Connections, { Disconnect = function()
+			pcall(clearPets)
+			pcall(function() Folder:Destroy() end)
+		end })
+
+		-- ═════════════ MENU ═════════════
+		PetsTab:CreateSection("Companions")
+		PetsTab:CreateToggle({
+			Name = "Enable pets", Desc = "Pets follow you, dance and chat. Only you can see them.",
+			Flag = "pb_pets", CurrentValue = P.Enabled,
+			Callback = function(v) P.Enabled = v == true; queueRebuild() end,
+		})
+		for i = 1, 3 do
+			PetsTab:CreateDropdown({
+				Name = "Pet " .. i, Options = SlotOptions, CurrentValue = P.Slots[i], Flag = "pb_pet_slot" .. i,
+				Callback = function(v)
+					if type(v) == "table" then v = v[1] end
+					if v == nil then return end
+					P.Slots[i] = v
+					queueRebuild()
+				end,
+			})
+		end
+
+		PetsTab:CreateSection("Behavior")
+		PetsTab:CreateSlider({
+			Name = "Pet size", Range = { 0.5, 2.5 }, Increment = 0.1, Suffix = "x",
+			CurrentValue = P.Scale, Flag = "pb_pet_size",
+			Callback = function(v) P.Scale = tonumber(v) or 1; queueRebuild() end,
+		})
+		PetsTab:CreateSlider({
+			Name = "Follow distance", Range = { 3, 15 }, Increment = 1, Suffix = " studs",
+			CurrentValue = P.Distance, Flag = "pb_pet_dist",
+			Callback = function(v) P.Distance = tonumber(v) or 6 end,
+		})
+		PetsTab:CreateToggle({
+			Name = "Auto emotes", Desc = "Pets dance and do emotes on their own while you stand still.",
+			Flag = "pb_pet_autoemote", CurrentValue = P.AutoEmote,
+			Callback = function(v) P.AutoEmote = v == true end,
+		})
+		PetsTab:CreateToggle({
+			Name = "Pet chat", Desc = "Pets type little messages to you above their heads.",
+			Flag = "pb_pet_chat", CurrentValue = P.Chat,
+			Callback = function(v) P.Chat = v == true end,
+		})
+		PetsTab:CreateSlider({
+			Name = "Chat every", Range = { 5, 40 }, Increment = 1, Suffix = "s",
+			CurrentValue = P.ChatEvery, Flag = "pb_pet_chatevery",
+			Callback = function(v) P.ChatEvery = tonumber(v) or 14 end,
+		})
+
+		PetsTab:CreateSection("Emotes")
+		local EmoteOptions = { "Random", table.unpack(EmoteNames) }
+		PetsTab:CreateDropdown({
+			Name = "Emote", Options = EmoteOptions, CurrentValue = "Dance", Flag = "pb_pet_emote",
+			Callback = function(v)
+				if type(v) == "table" then v = v[1] end
+				if v then P.EmoteName = v end
+			end,
+		})
+		PetsTab:CreateButton({
+			Name = "Play emote", Desc = "Every pet does the selected emote",
+			Callback = function() for _, pet in ipairs(P.List) do playEmote(pet, P.EmoteName) end end,
+		})
+		PetsTab:CreateButton({
+			Name = "Dance party", Desc = "Everyone dances at once",
+			Callback = function() for _, pet in ipairs(P.List) do playEmote(pet, "Dance") end end,
+		})
+		PetsTab:CreateButton({
+			Name = "Say something", Desc = "Makes your pets type a message right now",
+			Callback = function() for _, pet in ipairs(P.List) do petSay(pet) end end,
+		})
+	end)
+	if not ok then
+		Notify("Pets", "Pets failed: " .. tostring(err):sub(1, 110))
+	end
+end
+
 -- ╔══════════════════════════════╗
 -- ║  SETTINGS TAB                ║
 -- ╚══════════════════════════════╝
@@ -8200,7 +8854,7 @@ end
 pcall(function() Window:LoadAutoConfig() end)
 
 
--- // Shot Tracking & Perfect Timing
+-- // Shot Tracking & Auto Time
 do
 	-- Progress (0 to 1) from the meter offset the server writes on your character.
 	local MeterMaps = {
@@ -8219,38 +8873,15 @@ do
 		Meter = "Vertical",
 		Samples = {},
 		Slope = nil,
-		Intercept = nil,
-		PredictedReleaseTime = nil,
 		Released = false,
-		ReleasedAt = 0,
-		LastBeforeRelease = 0,
+		Id = 0,
+		Scheduled = false,
 		Final = nil,
-		Ours = false,
 		Auto = false,
 		Fadeaway = false,
 		Distance = 22,
-		Generation = 0,
 	}
 	local AutoPending = 0
-	local Calibration = 0
-	-- Auto Green: meter point (0 to 1) that grades Perfect, learned per meter type from shot feedback.
-	local GreenTargets = {}
-	-- Meters whose server green window is the meter position where the green ends (from the game's Config.Meters).
-	local DirectGreen = {} -- disabled: the server green value is not confirmed to be a meter position, it released far too early
-	local GreenOffsets = {} -- per-meter nudge learned from shot feedback, on top of the real green edge
-	local GreenMargin = 0.012 -- aim just inside the top edge of the green
-
-	local function CleanEdge(Value)
-		Value = tonumber(Value)
-		if Value and Value > 0.3 and Value <= 1.2 then
-			return Value
-		end
-		return nil
-	end
-
-	local function UsesRealGreen()
-		return Aural.Shooting.AutoGreen and DirectGreen[Shot.Meter] == true and type(Shot.GreenEdge) == "number"
-	end
 	local LastAutoShot = 0
 	local DunkHold, DunkSeen, LastDunk = nil, false, 0
 	local DunkLastPos, DunkLastTime = nil, 0
@@ -8262,13 +8893,6 @@ do
 		if MeterType then
 			Shot.Meter = MeterType
 		end
-	end
-
-	ResetCalibration = function()
-		Calibration = 0
-		GreenTargets = {}
-		GreenOffsets = {}
-		CalibrationLabel:Update("calibration: +0ms")
 	end
 
 	-- Distance-based meter fill scaling: in Hoopz, 3-pointers and deep shots have slower meter fill speeds
@@ -8287,26 +8911,6 @@ do
 		else
 			return 0.464 + math.min((Distance - 34) * 0.003, 0.035)
 		end
-	end
-
-	-- On 3-pointers, the release point must be clean and high to clear the front iron
-	local function GetEffectiveTarget(Distance)
-		local BaseTarget = Aural.Shooting.ReleasePoint / 100
-		if UsesRealGreen() then
-			-- Real green edge from the server, aimed just inside it, plus what feedback taught us.
-			return math.clamp(Shot.GreenEdge - GreenMargin + (GreenOffsets[Shot.Meter] or 0), 0.5, 1.1)
-		end
-		if Aural.Shooting.AutoGreen and GreenTargets[Shot.Meter] then
-			BaseTarget = GreenTargets[Shot.Meter]
-		end
-		if not Aural.Shooting.DistanceScaling or not Distance then
-			return BaseTarget
-		end
-		if Distance >= 21.5 then
-			local ArcBoost = math.clamp((Distance - 21.5) * 0.0006, 0.001, 0.005)
-			return math.min(BaseTarget + ArcBoost, 0.985)
-		end
-		return BaseTarget
 	end
 
 	-- Auto align: square up the proxy character facing directly toward the basket for clean, centered releases
@@ -8337,11 +8941,13 @@ do
 		return SmoothedPing or Raw or 0.05
 	end
 
-	local function GetLead()
-		if not Aural.Shooting.PingCompensation then
-			return 0
+	-- How many seconds early the release is sent: timing offset + share of the ping.
+	local function CompSeconds()
+		local c = Aural.Shooting.TimingOffset / 1000
+		if Aural.Shooting.PingCompensation then
+			c += GetSmoothedPing() * (Aural.Shooting.PingMultiplier / 100)
 		end
-		return GetSmoothedPing() * (Aural.Shooting.PingMultiplier / 100)
+		return math.clamp(c, -0.1, 0.35)
 	end
 
 	local function Release()
@@ -8349,161 +8955,84 @@ do
 			return
 		end
 		Shot.Released = true
-		Shot.Ours = true
-		Shot.ReleasedAt = os.clock()
-		local Last = Shot.Samples[#Shot.Samples]
-		Shot.LastBeforeRelease = Last and Last[1] or Shot.Start
 		Fire(Remotes.Shoot, { Shoot = false })
 	end
 
-	-- Robust linear regression through meter samples with progressive single-sample estimation
-	local function Fit()
-		local Count = #Shot.Samples
-		if Count == 0 then
-			return nil, nil
-		end
-		if Count == 1 then
-			local Sample = Shot.Samples[1]
-			local Dt = Sample[1] - Shot.Start
-			if Dt > 0.03 and Sample[2] > 0.02 then
-				local EstSlope = Sample[2] / Dt
-				if EstSlope >= 0.5 and EstSlope <= 8.0 then
-					return EstSlope, 0
-				end
-			end
-			return nil, nil
-		end
+	-- Every meter type reports its fill through the same meterOffset attribute, just on a
+	-- different axis. Raw offsets are stored and the axis is worked out per shot, so any
+	-- meter (known or new, e.g. Funnel) is timed from its own data. If there is no usable
+	-- data it falls back to the fixed fill time instead of releasing late.
+	local RawAxes = {
+		{ "-Y", function(x, y) return -y end },
+		{ "Y",  function(x, y) return  y end },
+		{ "X",  function(x, y) return  x end },
+		{ "-X", function(x, y) return -x end },
+	}
 
-		local SumX, SumY, SumXX, SumXY = 0, 0, 0, 0
-		for Index, Sample in Shot.Samples do
-			local X = Sample[1] - Shot.Start
-			SumX += X
-			SumY += Sample[2]
-			SumXX += X * X
-			SumXY += X * Sample[2]
+	local function FitWith(Fn)
+		-- only the newest samples: follows meters that speed up or slow down near the top
+		local All   = Shot.Samples
+		local First = math.max(1, #All - 7)
+		local N, SX, SY, SXX, SXY, SYY = 0, 0, 0, 0, 0, 0
+		for i = First, #All do
+			local S = All[i]
+			local X = S[1] - Shot.Start
+			local Y = Fn(S[2], S[3])
+			N += 1; SX += X; SY += Y; SXX += X*X; SXY += X*Y; SYY += Y*Y
 		end
-		local Denominator = Count * SumXX - SumX * SumX
-		if math.abs(Denominator) < 1e-7 then
-			local First, Last = Shot.Samples[1], Shot.Samples[Count]
-			local Dt = Last[1] - First[1]
-			if Dt > 0.02 then
-				local EstSlope = (Last[2] - First[2]) / Dt
-				if EstSlope >= 0.5 and EstSlope <= 8.0 then
-					return EstSlope, First[2] - EstSlope * (First[1] - Shot.Start)
-				end
-			end
-			return nil, nil
-		end
-		local Slope = (Count * SumXY - SumX * SumY) / Denominator
-		if Slope < 0.5 or Slope > 10.0 then
-			return nil, nil
-		end
-		local Intercept = (SumY - Slope * SumX) / Count
-		return Slope, Intercept
+		local D = N * SXX - SX * SX
+		if N < 3 or D <= 0 then return nil end
+		local Slope = (N * SXY - SX * SY) / D
+		local Var = N * SYY - SY * SY
+		local R2 = Var > 1e-9 and ((N * SXY - SX * SY) ^ 2) / (D * Var) or 0
+		return Slope, (SY - Slope * SX) / N, R2
 	end
 
 	local function GetReleaseTime()
-		local Target = GetEffectiveTarget(Shot.Distance)
-		local Shift = (Aural.Shooting.TimingOffset / 1000) + Calibration - GetLead()
+		local Target  = (Aural.Shooting.AutoGreen and 98 or Aural.Shooting.ReleasePoint) / 100
+		local Comp    = CompSeconds() + (Shot.Fadeaway and 0.008 or 0)
+		local Default = Shot.Start + GetDistanceFillTime(Shot.Distance) * Target - Comp
+		if #Shot.Samples < 3 then return Default end
 
-		-- Adaptive moving/fadeaway compensation
-		if Shot.Fadeaway then
-			Shift = Shift - 0.008
-		end
-
-		if MeterMaps[Shot.Meter] then
-			local Slope, Intercept = Fit()
-			if Slope and Slope >= 0.5 then
+		-- 1) the known mapping for this meter type
+		local Known = MeterMaps[Shot.Meter]
+		if Known then
+			local Slope, Intercept, R2 = FitWith(function(x, y) return Known(Vector2.new(x, y)) end)
+			if Slope and Slope >= 0.5 and Slope <= 12 and R2 > 0.85 then
 				Shot.Slope = Slope
-				Shot.Intercept = Intercept
-				return Shot.Start + ((Target - Intercept) / Slope) + Shift
+				-- release early by the ping (Ping Compensation / Timing Offset sliders)
+				return Shot.Start + (Target - Intercept) / Slope - Comp
 			end
 		end
 
-		-- Distance-aware progressive fallback: If regression hasn't stabilized yet or meter isn't mapped,
-		-- fall back to calibrated distance-fill timing so 3s release with dead-on accuracy.
-		local FillTime = GetDistanceFillTime(Shot.Distance)
-		return Shot.Start + (FillTime * Target) + Shift
+		-- 2) unknown meter (or a known one that moves differently): find the axis that fills
+		local BestRT, BestR2
+		for _, Axis in ipairs(RawAxes) do
+			local Slope, Intercept, R2 = FitWith(Axis[2])
+			if Slope and Slope >= 0.8 and Slope <= 8 and R2 > 0.9 then
+				local RT   = Shot.Start + (Target - Intercept) / Slope - Comp
+				local Full = RT - Shot.Start
+				if Full > 0.1 and Full < 1.0 and (not BestR2 or R2 > BestR2) then
+					BestRT, BestR2 = RT, R2
+					Shot.Slope = Slope
+				end
+			end
+		end
+
+		-- 3) nothing usable: time it from the shot start
+		return BestRT or Default
 	end
 
-	-- Single dedicated high-precision worker loop per shot: eliminates race conditions and micro-spins for sub-millisecond accuracy
-	local function StartReleaseWorker(Generation)
-		task.spawn(function()
-			-- Coarse wait until ~20ms out
-			while Shot.Active and not Shot.Released and Shot.Generation == Generation do
-				local Target = Shot.PredictedReleaseTime or (Shot.Start + 0.38)
-				local Remaining = Target - os.clock()
-				if Remaining <= 0.022 then
-					break
-				end
-				task.wait(math.max(Remaining - 0.016, 0.005))
-			end
-
-			-- Fine synchronization with PreRender until ~2.5ms out
-			while Shot.Active and not Shot.Released and Shot.Generation == Generation do
-				local Target = Shot.PredictedReleaseTime or (Shot.Start + 0.38)
-				local Now = os.clock()
-				if Now >= Target then
-					Release()
-					return
-				end
-				if Target - Now > 0.0025 then
-					RunService.PreRender:Wait()
-				else
-					break
-				end
-			end
-
-			-- Microsecond spin lock for the final 0 to 2.5ms window
-			while Shot.Active and not Shot.Released and Shot.Generation == Generation do
-				local Target = Shot.PredictedReleaseTime or (Shot.Start + 0.38)
-				if os.clock() >= Target then
-					Release()
-					break
-				end
-			end
-		end)
-	end
-
-	local function UpdatePrediction()
-		if not Shot.Active or Shot.Released then
-			return
-		end
-		local TargetTime = GetReleaseTime()
-		if not TargetTime then
-			return
-		end
-
-		Shot.PredictedReleaseTime = TargetTime
-
-		-- Auto Green: stop as soon as the live meter reading (plus ping lead) reaches the green point.
-		local Latest = Shot.Samples[#Shot.Samples]
-		if Aural.Shooting.AutoGreen and Latest and Shot.Slope and Shot.Slope > 0 then
-			if Latest[2] + Shot.Slope * GetLead() >= GetEffectiveTarget(Shot.Distance) then
-				Release()
-				return
-			end
-		end
-
-		if os.clock() >= TargetTime then
-			Release()
-			return
-		end
-	end
-
-	local function BeginShot(MeterType, GreenEdge)
-		Shot.Generation += 1
+	local function BeginShot(MeterType)
+		Shot.Id += 1
 		Shot.Active = true
 		Shot.Start = os.clock()
 		Shot.Meter = MeterType or Shot.Meter
 		Shot.Samples = {}
-		Shot.GreenEdge = CleanEdge(GreenEdge)
 		Shot.Slope = nil
-		Shot.Intercept = nil
-		Shot.PredictedReleaseTime = nil
+		Shot.Scheduled = false
 		Shot.Released = false
 		Shot.Final = nil
-		Shot.Ours = false
 		Shot.Auto = (os.clock() - AutoPending < 0.6) or (DunkHold ~= nil and os.clock() - DunkHold < 2.5)
 		AutoPending = 0
 
@@ -8519,62 +9048,6 @@ do
 			Shot.Distance = 22
 			Shot.Fadeaway = false
 		end
-
-		UpdatePrediction()
-		StartReleaseWorker(Shot.Generation)
-	end
-
-	local function Learn(Grade, Value)
-		if not Aural.Shooting.AutoCalibrate or not Shot.Ours or not Grade then
-			return
-		end
-		local Index = table.find(Grades, Grade) or 5
-		if Index == 5 then
-			-- Perfect green: perfectly timed, lock calibration in permanently
-			return
-		end
-
-		local Measured = MeterMaps[Shot.Meter] ~= nil and #Shot.Samples > 0 and Shot.Slope and Shot.Slope > 0
-		local Stalled = Measured and (Shot.ReleasedAt - Shot.LastBeforeRelease > 0.07)
-		local Error = 0
-		local Target = GetEffectiveTarget(Shot.Distance)
-
-		-- Direct numerical server feedback support if the server reported an exact percentage or delta
-		local NumVal = tonumber(Value)
-		if NumVal and NumVal > 10 then
-			NumVal = NumVal / 100
-		end
-		if NumVal and NumVal >= 0.5 and NumVal <= 1.5 and Shot.Slope and Shot.Slope > 0 then
-			Error = (Target - NumVal) / Shot.Slope
-		elseif Measured and Shot.Final then
-			Error = (Target - Shot.Final) / Shot.Slope
-		end
-
-		local Change = 0
-		if Index < 4 then
-			Change = math.max(Error, 0.005 * (4 - Index))
-		elseif Index > 5 then
-			Change = math.min(Stalled and -0.010 or Error, -0.005 * (Index - 5))
-		elseif Index == 4 then
-			Change = Stalled and -0.008 or math.max(Error, 0.003)
-		end
-		Change = math.clamp(Change * 0.5, -0.015, 0.015)
-		if Aural.Shooting.AutoGreen then
-			-- Auto Green: move the meter point itself toward the green instead of shifting time.
-			if UsesRealGreen() then
-				local RealSlope = (Shot.Slope and Shot.Slope > 0) and Shot.Slope or (1 / GetDistanceFillTime(Shot.Distance))
-				GreenOffsets[Shot.Meter] = math.clamp((GreenOffsets[Shot.Meter] or 0) + Change * RealSlope, -0.05, 0.02)
-				CalibrationLabel:Update(string.format("green edge %.1f%%, offset %+.1f%%", Shot.GreenEdge * 100, GreenOffsets[Shot.Meter] * 100))
-				return
-			end
-			local Slope = (Shot.Slope and Shot.Slope > 0) and Shot.Slope or (1 / GetDistanceFillTime(Shot.Distance))
-			local Current = GreenTargets[Shot.Meter] or (Aural.Shooting.ReleasePoint / 100)
-			GreenTargets[Shot.Meter] = math.clamp(Current + Change * Slope, 0.85, 1.08)
-			CalibrationLabel:Update(string.format("green point: %.1f%%", GreenTargets[Shot.Meter] * 100))
-			return
-		end
-		Calibration = math.clamp(Calibration + Change, -0.15, 0.15)
-		CalibrationLabel:Update(string.format("calibration: %+dms", math.round(Calibration * 1000)))
 	end
 
 	local function Bind(Character)
@@ -8612,9 +9085,8 @@ do
 			if not Shot.Released then
 				local Prev = Shot.Samples[#Shot.Samples]
 				-- Monotonic check: meter should not jump backwards by more than 0.08
-				if not Prev or Progress >= (Prev[2] - 0.08) then
-					table.insert(Shot.Samples, { Now, Progress })
-					UpdatePrediction()
+				if not Prev or Progress >= (Prev[4] - 0.08) then
+					table.insert(Shot.Samples, { Now, Offset.X, Offset.Y, Progress })
 				end
 			end
 		end))
@@ -8637,13 +9109,11 @@ do
 		end
 	end)
 
-	Connect(Remotes.MeterRegister.OnClientEvent, function(Model, MeterType, GreenWindow)
+	Connect(Remotes.MeterRegister.OnClientEvent, function(Model, MeterType)
 		if Model == Bound and (not Shot.Active or os.clock() - Shot.Start > 0.3) then
-			BeginShot(MeterType, GreenWindow)
+			BeginShot(MeterType)
 		elseif Model == Bound then
 			Shot.Meter = MeterType or Shot.Meter
-			Shot.GreenEdge = CleanEdge(GreenWindow) or Shot.GreenEdge
-			UpdatePrediction()
 		end
 	end)
 
@@ -8653,23 +9123,32 @@ do
 		end
 	end)
 
-	Connect(Remotes.UpdateGreenWindow.OnClientEvent, function(Model, Window)
-		local Edge = CleanEdge(Window)
-		if Model == Bound and Edge then
-			Shot.GreenEdge = Edge
-			UpdatePrediction()
-		end
-	end)
-
-	Connect(Remotes.ShowFeedback.OnClientEvent, function(Model, Value, GradeIndex)
-		if Model ~= Bound then
-			return
-		end
-		local Grade = Grades[tonumber(GradeIndex) or 0]
-		task.delay(0.1, function()
-			Learn(Grade, Value)
-			LastShotLabel:Update(string.format("last shot: %s%s", Grade or "?", Shot.Final and string.format(" (%d%%)", math.round(Shot.Final * 100)) or ""))
+	-- Auto Green: when you jump holding the ball it starts the shot for you,
+	-- and the release logic above lets go at the Release Point (green).
+	local function AutoShoot()
+		if not Running or not Aural.Shooting.AutoGreen then return end
+		if os.clock() - LastAutoShot < 0.8 then return end
+		local Character = GetCharacter()
+		if not Character or not HasBall(Character) then return end
+		if (Character:GetAttribute("Action") or "") ~= "" then return end
+		LastAutoShot = os.clock()
+		AutoPending = os.clock()
+		AlignToBasket(Character)
+		task.defer(function()
+			if not HasBall(Character) then return end
+			Fire(Remotes.Shoot, { Shoot = true, Input = "E" })
+			-- safety: let go if the game never started the shot
+			task.delay(1.6, function()
+				if not (Shot.Active and not Shot.Released) then
+					Fire(Remotes.Shoot, { Shoot = false })
+				end
+			end)
 		end)
+	end
+	Connect(UserInputService.JumpRequest, AutoShoot)
+	Connect(UserInputService.InputBegan, function(Input, GameProcessed)
+		if GameProcessed then return end
+		if Input.KeyCode == Enum.KeyCode.Space or Input.KeyCode == Enum.KeyCode.ButtonA then AutoShoot() end
 	end)
 
 	local function CheckShot()
@@ -8681,16 +9160,24 @@ do
 			return
 		end
 
-		if Shot.Active and not Shot.Released and (Aural.Shooting.PerfectTiming or Shot.Auto) then
+		if Shot.Active and not Shot.Released and (Aural.Shooting.PerfectTiming or Aural.Shooting.AutoGreen or Shot.Auto) then
 			-- Keep facing the basket during shot for crisp square-up
 			AlignToBasket(Character)
 
 			if Character:GetAttribute("ReleasedShot") == true and os.clock() - Shot.Start > 0.1 then
 				Shot.Released = true
 			else
-				local ReleaseTime = Shot.PredictedReleaseTime or GetReleaseTime()
-				if (ReleaseTime and os.clock() >= ReleaseTime) or os.clock() - Shot.Start > 1.2 then
+				local ReleaseTime = GetReleaseTime()
+				local Now = os.clock()
+				if (ReleaseTime and Now >= ReleaseTime) or Now - Shot.Start > 1.2 then
 					Release()
+				elseif ReleaseTime and ReleaseTime - Now < 0.03 and not Shot.Scheduled then
+					-- release at the exact moment instead of waiting for the next frame
+					Shot.Scheduled = true
+					local Id = Shot.Id
+					task.delay(math.max(0, ReleaseTime - Now), function()
+						if Shot.Id == Id and Shot.Active and not Shot.Released then Release() end
+					end)
 				end
 			end
 		end
@@ -8698,9 +9185,6 @@ do
 			Shot.Active = false
 		end
 	end
-
-	-- Sub-frame precision: check before render so the release is dispatched ahead of graphics rendering
-	Connect(RunService.PreRender, CheckShot)
 
 	Connect(RunService.Heartbeat, function()
 		CheckShot()
@@ -8713,7 +9197,7 @@ do
 			if Action == "Dunking" then
 				DunkSeen = true
 			end
-			-- a meter that started after we pressed is this dunk's: the Perfect Timing worker predicts the green and releases it
+			-- a meter that started after we pressed is this dunk's: the release logic predicts the green and lets go
 			local MeterRunning = Shot.Active and Shot.Start >= DunkHold - 0.05
 			local Done = false
 			if not Character or not Aural.Shooting.AutoDunk then
@@ -8752,8 +9236,8 @@ do
 						Vel = Delta
 					end
 				end
-				local Running = Vel.Magnitude > 3 and Vel.Unit:Dot(ToGoal.Unit) > 0.4
-				if ToGoal.Magnitude <= Aural.Shooting.DunkRange and (Running or (Character:GetAttribute("Sprinting") == true and Vel.Magnitude < 0.5)) then
+				local Running_ = Vel.Magnitude > 3 and Vel.Unit:Dot(ToGoal.Unit) > 0.4
+				if ToGoal.Magnitude <= Aural.Shooting.DunkRange and (Running_ or (Character:GetAttribute("Sprinting") == true and Vel.Magnitude < 0.5)) then
 					DunkHold, DunkSeen = os.clock(), false
 					AutoPending = os.clock()
 					AlignToBasket(Character)
@@ -8790,7 +9274,7 @@ do
 
 	task.spawn(function()
 		while Running do
-			PingLabel:Update(string.format("ping: %dms", math.round(GetSmoothedPing() * 1000)))
+			PingLabel:Update(string.format("ping: %d ms | releasing %d ms early", math.round(GetSmoothedPing() * 1000), math.round(CompSeconds() * 1000)))
 			task.wait(1)
 		end
 	end)
@@ -8886,6 +9370,110 @@ do
 		LastAnkle = os.clock()
 		DoMove(Aural.Dribbling.AnkleBreakerMove, (Side + Away * 0.35).Unit)
 	end)
+
+	local ComboRunning = false
+
+	local function ComboDirection(Character)
+		local Mode = Aural.Dribbling.ComboDirection
+		if Mode == "Camera" then
+			local Look = Flat(workspace.CurrentCamera.CFrame.LookVector)
+			if Look.Magnitude > 0.01 then
+				return Look.Unit
+			end
+		elseif Mode == "Toward Hoop" then
+			local Root, Goal = GetRoot(Character), GetGoal(Character)
+			if Root and Goal then
+				local Toward = Flat(Goal - Root.Position)
+				if Toward.Magnitude > 0.5 then
+					return Toward.Unit
+				end
+			end
+		elseif Mode == "Away From Defender" then
+			local Root = GetRoot(Character)
+			if Root then
+				local Closest, ClosestDistance = nil, 30
+				for Index, Other in GetOthers(Character) do
+					local Distance = (Other.Root.Position - Root.Position).Magnitude
+					if Distance < ClosestDistance then
+						Closest, ClosestDistance = Other, Distance
+					end
+				end
+				if Closest then
+					local Away = Flat(Root.Position - Closest.Root.Position)
+					if Away.Magnitude > 0.5 then
+						return Away.Unit
+					end
+				end
+			end
+		end
+		-- No keys held (or a look straight down) leaves GetMoveDirection empty, and a move with no
+		-- direction does nothing, so fall back to where the character is facing.
+		local Fallback = GetMoveDirection()
+		if Fallback.Magnitude > 0.01 then
+			return Fallback
+		end
+		local Root = GetRoot(Character)
+		local Look = Root and Flat(Root.CFrame.LookVector) or Vector3.zero
+		return Look.Magnitude > 0.01 and Look.Unit or Vector3.zero
+	end
+
+	-- Runs the selected moves back to back. The delay is the only thing that keeps the game from eating
+	-- moves, so it is a slider rather than a constant.
+	PlayDribbleCombo = function()
+		if ComboRunning then
+			return
+		end
+		local Moves = Aural.Dribbling.ComboMoves
+		if type(Moves) ~= "table" or #Moves == 0 then
+			Notify("Dribble Combos", "Select at least one move first.")
+			return
+		end
+		local Character = GetCharacter()
+		if not HasBall(Character) then
+			Notify("Dribble Combos", "You need the ball.")
+			return
+		end
+		ComboRunning = true
+		task.spawn(function()
+			local Order = table.clone(Moves)
+			if Aural.Dribbling.ComboRandom then
+				for Index = #Order, 2, -1 do
+					local Swap = math.random(Index)
+					Order[Index], Order[Swap] = Order[Swap], Order[Index]
+				end
+			end
+			if Aural.Dribbling.ComboSwitchEnd then
+				table.insert(Order, "Switch Hand")
+			end
+			local Repeats = math.max(1, math.floor(Aural.Dribbling.ComboRepeats or 1))
+			local Played = 0
+			for Repeat = 1, Repeats do
+				for Index, Move in Order do
+					if not Running or not ComboRunning then
+						ComboRunning = false
+						return
+					end
+					local Current = GetCharacter()
+					if Current ~= Character or (Aural.Dribbling.ComboStopOnLose and not HasBall(Current)) then
+						ComboRunning = false
+						return
+					end
+					local Action = Current and Current:GetAttribute("Action")
+					if Aural.Dribbling.ComboOnlyDribbling and Action ~= "" and Action ~= "Dribbling" and Action ~= "TripleThreat" then
+						ComboRunning = false
+						return
+					end
+					DoMove(Move, ComboDirection(Current))
+					Played += 1
+					if ComboLabel then
+						ComboLabel:Update(string.format("last combo: %s #%d", Move, Played))
+					end
+					task.wait(Aural.Dribbling.ComboDelay)
+				end
+			end
+			ComboRunning = false
+		end)
+	end
 end
 
 -- // Auto Block
@@ -9330,359 +9918,246 @@ do
 		Object.Transparency = 1
 	end
 
+	local function Unhide(State, Object)
+		if not State.Hidden[Object] then
+			return
+		end
+		State.Hidden[Object] = nil
+		local Entry = HiddenBy[Object]
+		if Entry then
+			Entry.Owners -= 1
+			if Entry.Owners <= 0 then
+				HiddenBy[Object] = nil
+				if Object.Parent then
+					Object.Transparency = Entry.Transparency
+				end
+			end
+		end
+	end
+
+	local TypeMatch = {
+		Hats = { "Hat" },
+		Hair = { "Hair" },
+		FacialHair = { "Beard", "Mustache", "Facial", "Eyebrow" },
+		Glasses = { "Glass", "Visor", "Shades" },
+		Chain = { "Chain", "Necklace", "Pendant" },
+		Backpack = { "Backpack", "Bag" },
+	}
+
+	local function Matches(Object, Type)
+		local Words = TypeMatch[Type]
+		if not Words then
+			return false
+		end
+		local Name = string.lower(Object.Name)
+		for Index, Word in Words do
+			if string.find(Name, string.lower(Word), 1, true) then
+				return true
+			end
+		end
+		return false
+	end
+
 	local function Clear(Type)
 		local State = Applied[Type]
 		if not State then
 			return
 		end
-		for Index, Object in State.Objects do
-			Object:Destroy()
-		end
-		for Object in State.Hidden do
-			local Entry = HiddenBy[Object]
-			if Entry then
-				Entry.Owners -= 1
-				if Entry.Owners <= 0 then
-					HiddenBy[Object] = nil
-					if Object.Parent then
-						Object.Transparency = Entry.Transparency
-					end
-				end
-			end
-		end
 		Applied[Type] = nil
-	end
-
-	local function Weld(Part0, Part1, C0, C1)
-		local Joint = Instance.new("Weld")
-		Joint.Name = "AttachmentWeld"
-		Joint.Part0 = Part0
-		Joint.Part1 = Part1
-		Joint.C0 = C0
-		Joint.C1 = C1
-		Joint.Parent = Part1
-		return Joint
-	end
-
-	local function HideOwn(Character, State, Type)
-		local Folder = Character:FindFirstChild("Accessories")
-		if Type == "Shoes" then
-			for Index, Side in { "LeftShoe", "RightShoe" } do
-				local Shoe = Character:FindFirstChild(Side)
-				if Shoe then
-					Hide(State, Shoe)
-				end
-			end
-		elseif Folder then
-			for Index, Object in Folder:GetChildren() do
-				if Object:GetAttribute("Type") == Type and not Object:GetAttribute("Aural") then
-					Hide(State, Object)
-				end
+		for Object in State.Hidden do
+			Unhide(State, Object)
+		end
+		for Index, Object in State.Objects do
+			if Object.Parent then
+				Object:Destroy()
 			end
 		end
 	end
 
-	local function ApplyAccessory(Character, Type, Name)
-		local Source = Accessories[Type]:FindFirstChild(Name, true)
-		local Part = Character:FindFirstChild(AttachParts[Type])
-		local Folder = Character:FindFirstChild("Accessories")
-		local Attachment = Source and Source:FindFirstChildOfClass("Attachment")
-		if not (Part and Folder and Attachment) then
+	local function ClearAll()
+		for Type in Applied do
+			Clear(Type)
+		end
+	end
+
+	local function FindSource(Type, Name)
+		local Folder = Accessories and Accessories:FindFirstChild(Type)
+		if not Folder then
 			return nil
 		end
-		local Rig = Part:FindFirstChild(Attachment.Name)
-		if not Rig then
-			for Index, Object in Character:GetDescendants() do
-				if Object:IsA("Attachment") and Object.Name == Attachment.Name and Object.Parent:IsA("BasePart") and not Object.Parent:IsDescendantOf(Folder) then
-					Rig = Object
-					break
-				end
+		for Index, Item in Folder:GetDescendants() do
+			if Item:IsA("BasePart") and Item.Name == Name and Item:FindFirstChildOfClass("Attachment") then
+				return Item
 			end
 		end
-		if not Rig then
-			return nil
+		return nil
+	end
+
+	local function AnchorFor(Character, Type)
+		local Name = AttachParts[Type] or "Head"
+		return Character:FindFirstChild(Name)
+			or Character:FindFirstChild("UpperTorso")
+			or Character:FindFirstChild("Torso")
+			or Character:FindFirstChild("HumanoidRootPart")
+	end
+
+	local function Attach(Character, Type, Source, State)
+		local Anchor = AnchorFor(Character, Type)
+		local Attachment = Source:FindFirstChildOfClass("Attachment")
+		if not Anchor or not Attachment then
+			return
 		end
-		local Clone = Source:Clone()
-		Clone:SetAttribute("Aural", true)
-		Clone:SetAttribute("Type", Type)
-		Prepare(Clone)
-		local Joint = Weld(Rig.Parent, Clone, Rig.CFrame, Clone:FindFirstChildOfClass("Attachment").CFrame)
+		local Copy = Source:Clone()
+		Copy.Name = "Aural_" .. Type
+		Prepare(Copy)
+		Copy.Parent = Character
+		local Weld = Instance.new("Motor6D")
+		Weld.Name = "Aural_" .. Type
+		Weld.Part0 = Anchor
+		Weld.Part1 = Copy
+		Weld.C0 = Attachment.CFrame
+		Weld.Parent = Anchor
 		if not Unscaled[Type] then
-			Scale(Character, Clone, Joint, Joint.C1)
+			Scale(Character, Copy, Weld, Attachment.CFrame)
 		end
-		Clone.Parent = Folder
-		return { Clone }
+		table.insert(State.Objects, Copy)
 	end
 
-	local function ApplyShoes(Character, Key)
-		local Variant = ShoeLookup[Key]
-		if not Variant then
-			return nil
+	local function ApplyType(Character, Type, Name)
+		Clear(Type)
+		if not Character or not Name or Name == "None" then
+			return
 		end
-		local Objects = {}
-		for Index, Side in { "Left", "Right" } do
-			local Source = Variant:FindFirstChild(Side .. "Shoe")
-			local Foot = Character:FindFirstChild(Side .. "Foot")
-			local Ankle = Foot and Foot:FindFirstChild(Side .. "AnkleRigAttachment")
-			local Rig = Source and Source:FindFirstChild("RigAttachment")
-			if Ankle and Rig then
-				local Clone = Source:Clone()
-				Clone.Name = "Aural" .. Side .. "Shoe"
-				Prepare(Clone)
-				local Joint = Weld(Foot, Clone, Ankle.CFrame, Clone.RigAttachment.CFrame)
-				Scale(Character, Clone, Joint, Joint.C1)
-				Clone.Parent = Character
-				table.insert(Objects, Clone)
-			end
-		end
-		return Objects
-	end
+		local State = { Hidden = {}, Objects = {} }
+		Applied[Type] = State
 
-	-- The game's ApplyMascot and UpdateMascotScale: each mascot piece is welded to the matching body part at its
-	-- rest pose, worked out through the Motor6D chain back to the root, then scaled to the body.
-	local function ApplyMascot(Character, Name, State)
-		local Source = Accessories.Mascots:FindFirstChild(Name)
-		local MascotRoot = Source and Source:FindFirstChild("HumanoidRootPart")
-		local Root = Character:FindFirstChild("HumanoidRootPart")
-		if not (MascotRoot and Root) then
-			return nil
-		end
-		local Width, Height, Depth, HeadScale = GetScales(Character)
-		local Vertical = Height / 1.135
-		local Neck = nil
-		local UpperTorso = Character:FindFirstChild("UpperTorso")
-		local NeckAttachment = UpperTorso and (UpperTorso:FindFirstChild("NeckRigAttachment") or UpperTorso:FindFirstChild("NeckAttachment"))
-		if NeckAttachment then
-			Neck = Root.CFrame:PointToObjectSpace(NeckAttachment.WorldPosition)
-		end
-
-		local Objects = {}
-		for Index, Piece in Source:GetChildren() do
-			local Original = Piece:IsA("BasePart") and Piece ~= MascotRoot and Character:FindFirstChild(Piece.Name)
-			if Original and Original:IsA("BasePart") then
-				local BaseOffset = MascotRoot.CFrame:ToObjectSpace(Piece.CFrame)
-				local Position = BaseOffset.Position
-				local IsHead = Piece.Name == "Head"
-				local Target, Size
-				if IsHead and Neck then
-					Target = Neck + (Position - Vector3.new(Neck.X / Width, Neck.Y / Vertical, Neck.Z / Depth)) * HeadScale
-					Size = Vector3.new(HeadScale, HeadScale, HeadScale)
-				else
-					Target = Vector3.new(Position.X * Width, Position.Y * Vertical, Position.Z * Depth)
-					Size = Vector3.new(Width, Vertical, Depth)
-				end
-
-				local Chain = CFrame.identity
-				local Current = Original
-				while Current ~= Root do
-					local Motor = Current:FindFirstChildOfClass("Motor6D")
-					if not (Motor and Motor.Part0 and Motor.Part1 == Current) then
-						break
+		-- Hide whatever the game already put on you of this type.
+		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+		for Index, Object in (Humanoid and Humanoid:GetAccessories() or Character:GetChildren()) do
+			if Object:IsA("Accessory") and Matches(Object, Type) then
+				for Index2, Part in Object:GetDescendants() do
+					if Part:IsA("BasePart") then
+						Hide(State, Part)
 					end
-					Chain = Motor.C0 * Motor.C1:Inverse() * Chain
-					Current = Motor.Part0
 				end
-
-				local Clone = Piece:Clone()
-				Clone.Name = Piece.Name .. "_AuralMascot"
-				Prepare(Clone)
-				Clone.Size = Piece.Size * Size
-				local Mesh = Clone:FindFirstChildOfClass("SpecialMesh")
-				if Mesh then
-					Mesh.Scale = Mesh.Scale * Size
-				end
-				Weld(Original, Clone, Chain:Inverse() * CFrame.new(Target) * (BaseOffset - Position), CFrame.identity)
-				Clone.Parent = Original.Parent
-				Hide(State, Original)
-				table.insert(Objects, Clone)
 			end
 		end
 
-		-- Like the game, a mascot hides the face pieces, shoes and every accessory.
-		for Index, PartName in { "Nose", "LeftEar", "RightEar", "LeftShoe", "RightShoe", "AuralLeftShoe", "AuralRightShoe" } do
-			local Part = Character:FindFirstChild(PartName)
-			if Part then
+		local Source = FindSource(Type, Name)
+		if Source then
+			Attach(Character, Type, Source, State)
+		end
+	end
+
+	-- Shoes are variants under Accessories.Shoes; every part of the variant is welded to the matching foot.
+	local function ApplyShoes(Character, Name)
+		Clear("Shoes")
+		if not Character or not Name or Name == "None" then
+			return
+		end
+		local Variant = ShoeLookup[Name]
+		if not Variant then
+			return
+		end
+		local State = { Hidden = {}, Objects = {} }
+		Applied.Shoes = State
+		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+		for Index, Object in (Humanoid and Humanoid:GetAccessories() or Character:GetChildren()) do
+			if Object:IsA("Accessory") and Matches(Object, "Shoes") then
+				for Index2, Part in Object:GetDescendants() do
+					if Part:IsA("BasePart") then
+						Hide(State, Part)
+					end
+				end
+			end
+		end
+		for Index, Source in Variant:GetChildren() do
+			if Source:IsA("BasePart") then
+				local Side = string.find(string.lower(Source.Name), "left", 1, true) and "Left" or "Right"
+				local Foot = Character:FindFirstChild(Side .. "Foot")
+					or Character:FindFirstChild(Side .. "Leg")
+					or Character:FindFirstChild("HumanoidRootPart")
+				local Attachment = Source:FindFirstChildOfClass("Attachment")
+				if Foot and Attachment then
+					local Copy = Source:Clone()
+					Copy.Name = "Aural_Shoe"
+					Prepare(Copy)
+					Copy.Parent = Character
+					local Weld = Instance.new("Motor6D")
+					Weld.Part0 = Foot
+					Weld.Part1 = Copy
+					Weld.C0 = Attachment.CFrame
+					Weld.Parent = Foot
+					table.insert(State.Objects, Copy)
+				end
+			end
+		end
+	end
+
+	-- A mascot hides the whole body and wears a replacement instead.
+	local function ApplyMascot(Character, Name)
+		Clear("Mascot")
+		if not Character or not Name or Name == "None" then
+			return
+		end
+		local Model = Accessories and Accessories:FindFirstChild("Mascots") and Accessories.Mascots:FindFirstChild(Name)
+		if not Model then
+			return
+		end
+		local State = { Hidden = {}, Objects = {} }
+		Applied.Mascot = State
+		local Root = Character:FindFirstChild("HumanoidRootPart")
+		for Index, Part in Character:GetDescendants() do
+			if Part:IsA("BasePart") and Part ~= Root then
 				Hide(State, Part)
 			end
 		end
-		local Folder = Character:FindFirstChild("Accessories")
-		if Folder then
-			for Index, Object in Folder:GetChildren() do
-				Hide(State, Object)
-			end
-		end
-		return Objects
-	end
-
-	local function Ensure(Character, Type)
-		local Choice = Aural.Cosmetics[Type]
-		local State = Applied[Type]
-		if not Choice or Choice == "None" then
-			Clear(Type)
-			return
-		end
-		if State and State.Character == Character and State.Choice == Choice then
-			for Index, Object in State.Objects do
-				if not Object.Parent then
-					State = nil
-					break
+		for Index, Part in Model:GetDescendants() do
+			if Part:IsA("BasePart") then
+				local Copy = Part:Clone()
+				Copy.Name = "Aural_Mascot"
+				Prepare(Copy)
+				Copy.Parent = Character
+				if Root then
+					local Weld = Instance.new("Motor6D")
+					Weld.Part0 = Root
+					Weld.Part1 = Copy
+					Weld.C0 = Root.CFrame:ToObjectSpace(Part.CFrame)
+					Weld.Parent = Root
 				end
+				table.insert(State.Objects, Copy)
 			end
-		else
-			State = nil
 		end
-		if State then
-			-- The game re-dresses the character now and then; keep its replaced pieces hidden.
-			if Type == "Mascot" then
-				local Folder = Character:FindFirstChild("Accessories")
-				if Folder then
-					for Index, Object in Folder:GetChildren() do
-						Hide(State, Object)
-					end
-				end
-			else
-				HideOwn(Character, State, Type)
-			end
-			return
-		end
-
-		Clear(Type)
-		State = { Character = Character, Choice = Choice, Objects = {}, Hidden = {} }
-		local Objects
-		if Type == "Shoes" then
-			Objects = ApplyShoes(Character, Choice)
-		elseif Type == "Mascot" then
-			Objects = ApplyMascot(Character, Choice, State)
-		else
-			Objects = ApplyAccessory(Character, Type, Choice)
-		end
-		State.Objects = Objects or {}
-		if Type ~= "Mascot" then
-			HideOwn(Character, State, Type)
-		end
-		Applied[Type] = State
 	end
-
-	local Order = { "Hats", "Hair", "FacialHair", "Glasses", "Chain", "Backpack", "Shoes", "Mascot" }
 
 	RefreshCosmetics = function()
 		local Character = GetCharacter()
-		if not Character or not Accessories then
+		if not Character then
 			return
 		end
-		for Index, Type in Order do
-			local Ok, Problem = pcall(Ensure, Character, Type)
-			if not Ok then
-				Applied[Type] = nil
-			end
+		for Index, Type in AccessoryTypes do
+			ApplyType(Character, Type, Aural.Cosmetics[Type])
 		end
+		ApplyShoes(Character, Aural.Cosmetics.Shoes)
+		ApplyMascot(Character, Aural.Cosmetics.Mascot)
 	end
 
-	task.spawn(function()
-		while Running do
-			RefreshCosmetics()
-			task.wait(1)
+	local LastCosmeticCharacter = nil
+	Connect(RunService.Heartbeat, function()
+		local Character = GetCharacter()
+		if Character ~= LastCosmeticCharacter then
+			LastCosmeticCharacter = Character
+			ClearAll()
+			if Character then
+				RefreshCosmetics()
+			end
 		end
 	end)
 
 	table.insert(Connections, { Disconnect = function()
-		for Index, Type in Order do
-			Clear(Type)
-		end
+		ClearAll()
 	end })
 end
 
--- // Goal Effect & Green Celebration
--- The game finds a green's rim and trail effects by name in Assets.Models.GreenEffects each time one plays, so every
--- entry is swapped for a copy of the chosen effect. Only this client's copy of the assets changes.
-do
-	local Swapped = {}
-
-	local function Restore()
-		for Index = #Swapped, 1, -1 do
-			local Entry = Swapped[Index]
-			Entry.Copy:Destroy()
-			if Entry.Original then
-				Entry.Original.Parent = Entry.Folder
-			end
-		end
-		table.clear(Swapped)
-	end
-
-	local function Swap(Kind, Choice)
-		local Folder = EffectAssets:FindFirstChild(Kind)
-		local Source = Folder and Folder:FindFirstChild(Choice)
-		if not Source then
-			return
-		end
-		for Index, Entry in Folder:GetChildren() do
-			if Entry ~= Source then
-				local Copy = Source:Clone()
-				Copy.Name = Entry.Name
-				Entry.Parent = nil
-				Copy.Parent = Folder
-				table.insert(Swapped, { Folder = Folder, Original = Entry, Copy = Copy })
-			end
-		end
-	end
-
-	ApplyEffects = function()
-		Restore()
-		if not Aural.Effects.GoalEffect then
-			return
-		end
-		Swap("Goal", Aural.Effects.GoalEffectName)
-		if Aural.Effects.IncludeTrail then
-			Swap("Trail", Aural.Effects.GoalEffectName)
-		end
-	end
-
-	-- An equipped effect with no assets of its own would show nothing, so it gets a copy for next time.
-	Connect(Remotes.RunGreenEffect.OnClientEvent, function(Model, Ball, Goal, Time, Name)
-		if not Aural.Effects.GoalEffect or type(Name) ~= "string" then
-			return
-		end
-		for Index, Kind in { "Goal", "Trail" } do
-			local Folder = EffectAssets:FindFirstChild(Kind)
-			local Source = Folder and Folder:FindFirstChild(Aural.Effects.GoalEffectName)
-			if Source and not Folder:FindFirstChild(Name) and (Kind == "Goal" or Aural.Effects.IncludeTrail) then
-				local Copy = Source:Clone()
-				Copy.Name = Name
-				Copy.Parent = Folder
-				table.insert(Swapped, { Folder = Folder, Copy = Copy })
-			end
-		end
-	end)
-
-	Connect(Remotes.GreenCelebration.OnClientEvent, function(Kind)
-		if not Aural.Effects.AutoCelebrate then
-			return
-		end
-		local Package = Aural.Effects.Celebration2
-		if type(Kind) == "string" and string.find(Kind, "Finisher", 1, true) then
-			Package = Aural.Effects.Finisher
-		elseif type(Kind) == "string" and string.find(Kind, "3PT", 1, true) then
-			Package = Aural.Effects.Celebration3
-		end
-		task.delay(Aural.Effects.CelebrateDelay, function()
-			if Running and Package then
-				Fire(Remotes.GreenAnimation, Package)
-			end
-		end)
-	end)
-
-	table.insert(Connections, { Disconnect = Restore })
-end
-
--- // Unload
-Library.OnUnload = function()
-	Running = false
-	for Index, Connection in Connections do
-		pcall(function()
-			Connection:Disconnect()
-		end)
-	end
-	table.clear(Connections)
-end
-
-Notify("Aural", "Loaded. Press F5 to toggle the menu.")
+-- // Ready
+Notify("ArurHub", "Ready. Press RightShift to toggle.")
