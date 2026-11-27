@@ -111,9 +111,6 @@ local Aural = {
 			ManDefense = false,
 			AutoSteal = false,
 			AntiAfk = false,
-			WalkInput = true,
-			WalkAccel = 90,
-			LeadTime = 200,
 			SidelineMargin = 4,
 			FinishWith = "Mix",
 			RimGathers = {},
@@ -13526,60 +13523,11 @@ task.spawn(function()
 			end)
 		end
 
-		-- // Walk Input
-		-- The game's own WASD handler tells the server your heading with InputService.MoveDirection, and the server reads
-		-- it for animations, dribble direction and gathers. Driving only the proxy moved you without the server ever seeing
-		-- a walk, so this sends the same remote the keys would and ramps the speed up like a walk instead of snapping it on.
-		local WalkService = RemoteServices:FindFirstChild("InputService")
-		local WalkRemote = WalkService and WalkService:FindFirstChild("MoveDirection")
-		local WalkSent, WalkAt, DriveAt = Vector3.zero, 0, 0
-
-		local function KeysDown()
-			if UserInputService:GetFocusedTextBox() then
-				return false
-			end
-			return UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.D)
-		end
-
-		local function SendWalk(Direction, Force)
-			if not WalkRemote or not (Force or (Plus.Play.WalkInput and not KeysDown())) then
-				return
-			end
-			local Now = os.clock()
-			Direction = Flat(Direction)
-			if Direction.Magnitude < 0.05 then
-				if WalkSent.Magnitude > 0.05 then
-					WalkSent, WalkAt = Vector3.zero, Now
-					Fire(WalkRemote, Vector3.zero)
-				end
-				return
-			end
-			Direction = Direction.Unit
-			if WalkSent.Magnitude < 0.05 or Direction:Dot(WalkSent) < 0.97 or Now - WalkAt > 1 then
-				WalkSent, WalkAt = Direction, Now
-				Fire(WalkRemote, Direction)
-			end
-		end
-		Ext.SendWalk = SendWalk
-
 		local function Drive(Proxy, Velocity, Gyro, Target, Speed, Face)
 			Target = ClampCourt(Target)
-			local Now = os.clock()
-			local Delta = math.clamp(Now - DriveAt, 1 / 240, 0.1)
-			DriveAt = Now
 			local Offset = Flat(Target - Proxy.Position)
 			local Distance = Offset.Magnitude
-			local Wanted = Distance > 0.5 and Offset.Unit * math.min(Speed, Distance * 6 + 2) or Vector3.zero
-			if Plus.Play.WalkInput then
-				local Current = Flat(Velocity.Velocity)
-				local Change = Wanted - Current
-				local Step = Plus.Play.WalkAccel * Delta
-				if Change.Magnitude > Step then
-					Wanted = Current + Change.Unit * Step
-				end
-				SendWalk(Distance > 0.5 and Offset or Vector3.zero)
-			end
-			Velocity.Velocity = Wanted + Vector3.new(0, Velocity.Velocity.Y, 0)
+			Velocity.Velocity = (Distance > 0.5 and Offset.Unit * math.min(Speed, Distance * 6 + 2) or Vector3.zero) + Vector3.new(0, Velocity.Velocity.Y, 0)
 			local Look = Face and Flat(Face - Proxy.Position) or Offset
 			if Gyro and Look.Magnitude > 0.1 then
 				Gyro.CFrame = CFrame.lookAt(Proxy.Position, Proxy.Position + Look)
@@ -13589,7 +13537,6 @@ task.spawn(function()
 
 		local function Hover(Proxy, Velocity)
 			Velocity.Velocity = Vector3.new(0, Velocity.Velocity.Y, 0)
-			SendWalk(Vector3.zero)
 		end
 
 		local function JumpAt(Toward)
@@ -13844,7 +13791,6 @@ task.spawn(function()
 			Play.PostSince = nil
 			SetHold(false)
 			SetSprint(false)
-			SendWalk(Vector3.zero)
 		end
 
 		local function ChoosePlan(Root, Goal, Opps, Forward, Right)
@@ -14032,28 +13978,6 @@ task.spawn(function()
 			end
 		end
 
-		-- Smoothed flat velocity worked out from position samples, so a guard can lead somebody who is moving
-		local Tracked = setmetatable({}, { __mode = "k" })
-		local function TheirVelocity(TargetRoot)
-			local Now = os.clock()
-			local Position = TargetRoot.Position
-			local Entry = Tracked[TargetRoot]
-			if not Entry or Now - Entry.At > 0.5 then
-				Tracked[TargetRoot] = { At = Now, Position = Position, Velocity = Vector3.zero }
-				return Vector3.zero
-			end
-			local Elapsed = Now - Entry.At
-			if Elapsed > 0.015 then
-				local Raw = Flat(Position - Entry.Position) / Elapsed
-				if Raw.Magnitude > 32 then
-					Raw = Vector3.zero
-				end
-				Entry.Velocity = Entry.Velocity:Lerp(Raw, 0.35)
-				Entry.At, Entry.Position = Now, Position
-			end
-			return Entry.Velocity
-		end
-
 		local function PlayWithoutBall(Character, Root, Proxy, Velocity, Gyro, Action, Handler)
 			local Settings = Plus.Play
 			local Now = os.clock()
@@ -14089,14 +14013,7 @@ task.spawn(function()
 				local Hoop = GetGoal(Handler) or Root.Position
 				local ToHoop = Flat(Hoop - Target.Root.Position)
 				ToHoop = ToHoop.Magnitude > 0.1 and ToHoop.Unit or Vector3.zero
-				local Lead = Vector3.zero
-				if Settings.LeadTime > 0 then
-					Lead = TheirVelocity(Target.Root) * (Settings.LeadTime / 1000)
-					if Lead.Magnitude > 6 then
-						Lead = Lead.Unit * 6
-					end
-				end
-				local Spot = Target.Root.Position + Lead + ToHoop * Aural.Defense.GuardDistance
+				local Spot = Target.Root.Position + ToHoop * Aural.Defense.GuardDistance
 				local Distance = Drive(Proxy, Velocity, Gyro, Spot, TopSpeed(true), Target.Root.Position)
 				SetSprint(Distance > 10)
 				SetHold(Distance < 14)
@@ -14872,13 +14789,6 @@ task.spawn(function()
 			end })
 			Main:AddToggle({ Title = "Run Outside Games", Description = "Also plays when you are not in a game", Flag = "PlayAnyTime", Default = Plus.Play.AnyTime, Callback = function(V) Plus.Play.AnyTime = V end })
 			Main:AddToggle({ Title = "Anti AFK", Description = "Stops the idle kick", Flag = "PlayAntiAfk", Default = Plus.Play.AntiAfk, Callback = function(V) Plus.Play.AntiAfk = V end })
-			Main:AddToggle({ Title = "Walk Input", Description = "Sends real walk input as it moves", Flag = "PlayWalkInput", Default = Plus.Play.WalkInput, Callback = function(V)
-				Plus.Play.WalkInput = V
-				if not V and Ext.SendWalk then
-					Ext.SendWalk(Vector3.zero, true)
-				end
-			end })
-			Main:AddSlider({ Title = "Walk Acceleration", Description = "Higher = snappier starts", Min = 30, Max = 250, Default = Plus.Play.WalkAccel, Suffix = " studs/s2", Flag = "PlayWalkAccel", Callback = function(V) Plus.Play.WalkAccel = V end })
 			Main:AddSlider({ Title = "Sideline Margin", Description = "Stays this far inside", Min = 0, Max = 12, Default = Plus.Play.SidelineMargin, Suffix = " studs", Flag = "PlaySidelineMargin", Callback = function(V) Plus.Play.SidelineMargin = V end })
 
 			local Rim = Page:CreateSection({ Title = "Rim Running", Icon = Icons.Move })
@@ -14900,7 +14810,6 @@ task.spawn(function()
 			local Defense = Page:CreateSection({ Title = "Defense", Icon = Icons.Shield })
 			Defense:AddToggle({ Title = "Auto Defense", Description = "Guards the ball handler", Flag = "PlayAutoDefense", Default = Plus.Play.AutoDefense, Callback = function(V) Plus.Play.AutoDefense = V end })
 			Defense:AddToggle({ Title = "Man Defense", Description = "Sticks with your man", Flag = "PlayManDefense", Default = Plus.Play.ManDefense, Callback = function(V) Plus.Play.ManDefense = V end })
-			Defense:AddSlider({ Title = "Lead Time", Description = "Guards where they are heading", Min = 0, Max = 500, Default = Plus.Play.LeadTime, Step = 10, Suffix = "ms", Flag = "PlayLeadTime", Callback = function(V) Plus.Play.LeadTime = V end })
 			Defense:AddToggle({ Title = "Auto Steal", Description = "Goes for the steal when you're close", Flag = "PlayAutoSteal", Default = Plus.Play.AutoSteal, Callback = function(V) Plus.Play.AutoSteal = V end })
 			Defense:AddToggle({ Title = "Anti Steal", Description = "Pulls ball from reachers", Flag = "PlayAntiSteal", Default = Plus.Play.AntiSteal, Callback = function(V) Plus.Play.AntiSteal = V end })
 
@@ -15056,7 +14965,7 @@ task.spawn(function()
 
 			-- // Anti AFK
 			Connect(LocalPlayer.Idled, function()
-				if Plus.Play.AntiAfk or Plus.Farm.Enabled then
+				if Plus.Play.AntiAfk then
 					pcall(function()
 						VirtualUser:CaptureController()
 						VirtualUser:ClickButton2(Vector2.zero)
@@ -15286,24 +15195,14 @@ task.spawn(function()
 				end
 				StopFarmPlay()
 				if game.PlaceId == Places.BlacktopMatchmaking then
-					if Farm.PickedMode ~= Settings.Mode then
-						Farm.PickedMode = nil
-						Farm.PickedRegion = nil
-					end
 					if Now - Farm.LastPress > 2 then
 						Farm.LastPress = Now
-						-- mode and region are picked once: pressing "any region" again every pass would flip it back off
-						if not Farm.PickedMode and PressButton("^%s*" .. string.lower(Settings.Mode) .. "%s*$") then
-							Farm.PickedMode = Settings.Mode
+						PressButton("^%s*" .. string.lower(Settings.Mode) .. "%s*$")
+						if Settings.AnyRegion then
+							PressButton("any region")
 						end
-						if Settings.AnyRegion and not Farm.PickedRegion and PressButton("any region") then
-							Farm.PickedRegion = true
-						end
-						if Farm.PickedMode and (not Settings.AnyRegion or Farm.PickedRegion) then
-							if PressButton("^%s*ready%s*u?p?%s*$") or PressButton("^%s*queue%s*$") or PressButton("^%s*find match%s*$") then
-								-- give the queue time to start before pressing anything again
-								Farm.LastPress = Now + 6
-							end
+						if not PressButton("^%s*ready%s*u?p?%s*$") and not PressButton("^%s*queue%s*$") then
+							PressButton("^%s*find match%s*$")
 						end
 					end
 					return "queueing " .. Settings.Mode
@@ -16280,16 +16179,8 @@ do
 		end
 	end
 
-	local GuardWalking = false
-
 	local function StopGuard()
 		ShowTarget(nil)
-		if GuardWalking then
-			GuardWalking = false
-			if Ext.SendWalk then
-				Ext.SendWalk(Vector3.zero)
-			end
-		end
 		if Guarding then
 			Guarding = false
 			Fire(Remotes.HoldG, { HoldingG = false })
@@ -16445,10 +16336,6 @@ do
 				end
 			end
 			Velocity.Velocity = Wanted + Vector3.new(0, Current.Y, 0)
-			if Ext.SendWalk then
-				GuardWalking = true
-				Ext.SendWalk(Wanted)
-			end
 			Ext.GuardState.Spot = Proxy.Position + Offset
 			Ext.GuardState.At = os.clock()
 			Ext.GuardAdjust(Velocity, Target, Offset)
